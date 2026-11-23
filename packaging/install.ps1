@@ -43,4 +43,4 @@ foreach ($browser in @('Google\Chrome', 'Microsoft\Edge')) {
   Set-Item -Path $key -Value $manifestPath
 }
 Write-Host "Đã cài Native Agent tại $exe"
-Write-Host 'Khởi động lại Chrome/Edge nếu đang mở; thử Ping từ popup.'
+Write-Host 'Tải lại extension trong trình duyệt đã cài, sau đó thử Ping từ popup.'

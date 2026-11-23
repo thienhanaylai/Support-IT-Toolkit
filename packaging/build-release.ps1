@@ -41,11 +41,14 @@ try {
   } finally { Pop-Location }
 
   Copy-Item -Path (Join-Path $repo 'extension\dist\*') -Destination (Join-Path $staging 'extension') -Recurse -Force
-  $agentScript = Join-Path $PSScriptRoot 'install.ps1'
-  $scriptBytes = [System.IO.File]::ReadAllBytes($agentScript)
-  if ($scriptBytes.Length -lt 3 -or $scriptBytes[0] -ne 239 -or $scriptBytes[1] -ne 187 -or $scriptBytes[2] -ne 191) {
-    throw 'install.ps1 must use UTF-8 with BOM so Windows PowerShell 5.1 reads Vietnamese correctly.'
+  foreach ($name in @('setup.ps1', 'install.ps1')) {
+    $scriptBytes = [System.IO.File]::ReadAllBytes((Join-Path $PSScriptRoot $name))
+    if ($scriptBytes.Length -lt 6 -or $scriptBytes[0] -ne 239 -or $scriptBytes[1] -ne 187 -or $scriptBytes[2] -ne 191 -or
+        ($scriptBytes[3] -eq 239 -and $scriptBytes[4] -eq 187 -and $scriptBytes[5] -eq 191)) {
+      throw "$name must use exactly one UTF-8 BOM so Windows PowerShell 5.1 reads Vietnamese correctly."
+    }
   }
+  $agentScript = Join-Path $PSScriptRoot 'install.ps1'
   Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Install.cmd') -Destination $staging
   Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'setup.ps1') -Destination $staging
   Copy-Item -LiteralPath $agentScript -Destination (Join-Path $staging 'install-agent.ps1')
