@@ -1,0 +1,87 @@
+# IT Support Toolkit
+
+Extension Chrome/Edge Manifest V3 + Windows Local Agent (Go). Bản hiện tại là **MVP thử nghiệm**, chạy local-first, không có backend, tài khoản hoặc telemetry.
+
+## Yêu cầu
+
+- Windows 10/11, Chrome hoặc Edge; Node.js 20+, npm; Go 1.22+ nếu muốn tự build Agent.
+- Extension ID dạng 32 chữ `a`–`p` lấy tại `chrome://extensions` hoặc `edge://extensions` sau khi bật **Developer mode**.
+- Không cần quyền Administrator (đăng ký Native Messaging trong HKCU).
+
+## Cài đặt từ mã nguồn
+
+```powershell
+cd extension
+npm ci
+npm run build
+```
+
+Mở `chrome://extensions` (hoặc `edge://extensions`) → bật **Developer mode** → **Load unpacked** → chọn thư mục `extension/dist` vừa tạo. Sao chép Extension ID hiển thị. Sau đó từ thư mục gốc:
+
+```powershell
+.\packaging\install.ps1 -ExtensionIds @('id_cua_extension_32_ky_tu')
+```
+
+Nếu đã có file exe build sẵn, dùng `-AgentBinary 'C:\path\it-support-host.exe'` thay Go. Để dùng cả Chrome và Edge, truyền cả hai ID: `-ExtensionIds @('id_chrome', 'id_edge')`. Mỗi lần ID thay đổi phải chạy lại installer. Nếu PowerShell chặn script, chạy với `powershell -ExecutionPolicy Bypass -File .\packaging\install.ps1 -ExtensionIds id...` khi bạn tin tưởng mã nguồn. Khởi động lại trình duyệt nếu cần.
+
+Khi cập nhật mã Agent (ví dụ thêm **Quét Port**), tải lại extension **và chạy lại lệnh `install.ps1` với cùng Extension ID** để thay file `.exe` đã cài. Chỉ build extension sẽ không nâng cấp Agent trên máy.
+
+Gỡ Agent và registry:
+
+```powershell
+.\packaging\uninstall.ps1
+```
+
+Gỡ extension từ trang quản lý extensions; lịch sử trên trình duyệt được quản lý trong side panel hoặc xóa dữ liệu extension. Script gỡ không xóa file ngoài thư mục Agent được tạo.
+
+## Dùng thử
+
+Nhấn icon extension để mở popup. Với công cụ cần domain/IP, nhập địa chỉ rồi nhấn **Kiểm tra**; **Mạng LAN**, **IP Public** và **Thông tin VM** chạy ngay khi nhấn chọn. **Ping** chọn 1–5 lần (mặc định 4), **Traceroute** chọn tối đa 1–30 hop (mặc định 20). **Quét Port** cho phép chọn 20 cổng TCP phổ biến hoặc nhập tối đa 32 cổng/dải nhỏ, hiển thị mở/đóng/timeout; chạy từ chính máy bạn với tối đa 6 kết nối song song, tối đa 2 giây/cổng. Nếu Agent cũ báo `action không được hỗ trợ`, chạy lại `packaging/install.ps1` với Extension ID hiện tại để cập nhật Agent. Chỉ kiểm tra target mà bạn được phép kiểm tra. MXToolbox, WHOIS/RDAP và IP Public có thể xin quyền truy cập host trước khi gửi truy vấn. Có thể chọn văn bản trên trang rồi dùng menu chuột phải **Kiểm tra bằng IT Support Toolkit**. Nhấn một mục **Gần đây** hoặc trong danh sách lịch sử để mở lại kết quả. **Ping** chỉ hiển thị đầu ra lệnh (không hiện JSON); **Sao chép dòng lệnh** lấy nguyên văn đầu ra của Agent. Các kết quả VM, MXToolbox, WHOIS/RDAP và Quét Port được sao chép dạng văn bản; **IP Public** chỉ sao chép địa chỉ IP. Trang lịch sử (`sidepanel.html`) không có thanh header thương hiệu, lưu tối đa 50 kết quả và xuất báo cáo HTML: các mục mặc định thu gọn, bấm từng mục mới xem chi tiết (dữ liệu được escape). Giao diện tự theo theme sáng/tối của hệ thống; đầu ra lệnh hiển thị nền đen chữ trắng. Options chỉnh timeout 500–10000 ms và lưu lịch sử. Công cụ HTTP / Redirect đã được bỏ; các kết quả cũ trong lịch sử vẫn được giữ lại.
+
+### Thông tin VM từ Portal
+
+Mở **tab đang đăng nhập** tại `https://portal.longvan.vn/computing-manager/manager/computing/computing_detail.xhtml?...`, bấm biểu tượng extension rồi bấm **Thông tin VM**. Extension chỉ thực thi đoạn đọc DOM khi bạn bấm nút, chỉ trên chính đường dẫn Portal này; không gọi API, không đọc mật khẩu hoặc form ẩn. Kết quả gồm Link VM, Tên computing, Nhóm ảo hóa, Nhóm, Tên VM, VMID, VMP, Host, ResourcePool. Giá trị trống trên trang vẫn để trống; nếu trang đổi cấu trúc hoặc chưa đăng nhập sẽ báo lỗi. Thông tin VM được lưu trong lịch sử cục bộ nếu tùy chọn lưu lịch sử bật.
+
+File HTML Portal mẫu tại thư mục gốc chỉ dùng để xác nhận cấu trúc và **không được đóng gói vào extension**; `.gitignore` loại trừ bản lưu Portal để tránh vô tình commit thông tin nội bộ.
+
+### MXToolbox và WHOIS
+
+- **MXToolbox:** dùng [API chính thức](https://mxtoolbox.com/api/api-reference) cho DNS, A, AAAA, MX, TXT, SPF, DMARC, SOA. Chỉ hiển thị loại tra cứu/domain, DNS server, thời gian và các trường Type, Domain Name, IP Address, TTL của bản ghi (nếu API cung cấp). Nhập API key (UUID) trong Cài đặt. API key lưu tại `chrome.storage.local` **không mã hóa**, chỉ gửi trong header tới MXToolbox khi bạn chạy công cụ; không ghi vào lịch sử hoặc báo cáo. API có hạn mức theo tài khoản. Không có key chỉ được thử lệnh DNS với `example.com` qua endpoint demo của MXToolbox.
+- **WHOIS/RDAP:** tự tách tên miền đăng ký khỏi host bằng Public Suffix List (ví dụ `portal.longvan.vn` → `longvan.vn`, `www.example.co.uk` → `example.co.uk`). `.com`/`.net` gọi trực tiếp registry RDAP; các TLD khác tra [danh mục bootstrap IANA](https://data.iana.org/rdap/dns.json). Riêng **`.vn` không có RDAP công khai trong danh mục IANA**: nhập **BKNS WHOIS API key của bạn** trong Cài đặt để tra qua [API BKNS](https://whois.bkns.vn/en/docs) có dữ liệu `.vn` từ VNNIC. Key lưu cục bộ **không mã hóa**, chỉ gửi đến `whois.bkns.vn` khi bạn yêu cầu tra `.vn`; không ghi vào lịch sử/báo cáo. Không nhúng key demo dùng chung. Không có key thì tra thủ công qua [VNNIC](https://vnnic.vn/whois-information) (có thể cần CAPTCHA). Chỉ giữ tên miền, nhà đăng ký, tình trạng, trạng thái, DNSSEC, nameserver, các mốc thời gian; **không lưu dữ liệu registrant hay phản hồi WHOIS thô**. Sẽ xin quyền host khi cần.
+
+| Công cụ | Nguồn | Ghi chú |
+|---|---|---|
+| Ping, traceroute, TCP port, Quét Port, TLS, LAN | Windows Local Agent | Traceroute dùng `tracert -d`, ping dùng `ping`; Quét Port chỉ thử kết nối TCP, không quét UDP; Ping hiển thị kết quả lệnh thay vì JSON. |
+| IP Public | ipify | Truy vấn gửi ra dịch vụ bên ngoài. |
+| MXToolbox / WHOIS | API MXToolbox / RDAP registry / BKNS (.vn) | Truy vấn gửi ra ngoài. MXToolbox cần API key cho domain bất kỳ; `.vn` cần BKNS API key để tra tự động. |
+| Thông tin VM | Tab Portal đang mở | Đọc đúng chín trường trong DOM khi người dùng bấm nút; không cần Agent. |
+
+SSL/TLS **cơ bản** được kiểm tra bởi Agent từ máy người dùng; browser API không cho extension đọc certificate chain của trang tùy ý. TLS result bao gồm xác minh chain/hostname, thời hạn và TLS version. IP LAN lấy từ Go network interfaces; gateway và DNS có trong trường `ipconfig` (văn bản theo ngôn ngữ Windows), chưa được tách thành trường cấu trúc.
+
+### Khắc phục lỗi Agent
+
+1. Kiểm tra `ExtensionIds` đã truyền đúng ID của bản extension vừa cài và chưa đổi sau khi rebuild/load.
+2. Kiểm tra file `%LOCALAPPDATA%\ITSupportToolkit\com.itsupport.toolkit.json` và `it-support-host.exe`.
+3. Kiểm tra registry `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.itsupport.toolkit` hoặc đường tương ứng `Microsoft\Edge`.
+4. Đóng/mở lại browser rồi thử `TCP Port` tới host mà bạn có quyền kiểm tra. Agent chạy dưới tài khoản Windows hiện tại, không phải service.
+5. Nếu không có Go, cài Go 1.22+ hoặc build exe ở máy khác rồi dùng `-AgentBinary`.
+
+## Bảo mật và giới hạn
+
+Extension không còn cung cấp hai công cụ DNS hệ điều hành và DNS công cộng; Agent vẫn nhận action `dns_lookup` cũ để tương thích với bản extension đã cài trước đó. Agent nhận các action `ping`, `traceroute`, `tcp_check`, `port_scan`, `dns_lookup`, `tls_check`, `local_interfaces`; validate host/port/timeout; giới hạn số ping, số hop, số cổng quét, kích thước message. `ping`, `tracert`, `ipconfig` chỉ được gọi với tham số cố định qua `exec.CommandContext`, không dùng shell. Native Messaging dùng `allowed_origins` giới hạn theo Extension ID, không mở cổng TCP. Không nhận yêu cầu từ content script hoặc website. Không xử lý/upload private key và không có nơi nhập private key. Lịch sử có thể chứa thông tin mạng nội bộ: hãy tắt lưu lịch sử khi cần. Chỉ kiểm tra mạng mà bạn được phép.
+
+**Chưa nằm trong MVP này:** chuyển đổi/ghép PFX, P12, JKS, so khớp private key; giao diện side panel tích hợp browser toolbar; installer có chữ ký, CI và E2E thực trên Chrome/Edge/Windows. Cần kiểm chứng thêm các tình huống proxy/VPN/IPv6, ngôn ngữ Windows và firewall trước khi phát hành sản phẩm.
+
+## Phát triển và kiểm thử
+
+```powershell
+cd extension
+npm ci
+npm run test
+npm run build
+cd ..\native-agent
+go test ./...
+go build -o bin\it-support-host.exe ./cmd/host
+```
+
+Mã Agent giao tiếp theo [Native Messaging](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging): mỗi JSON object có prefix 4 byte little-endian, stdout chỉ dành cho giao thức, lỗi chẩn đoán in stderr. Ví dụ: `{"action":"ping","target":"8.8.8.8","count":4,"timeoutMs":1000}`.
