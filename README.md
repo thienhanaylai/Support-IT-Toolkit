@@ -2,13 +2,13 @@
 
 Extension Chrome/Edge Manifest V3 + Windows Local Agent (Go). Bản hiện tại là **MVP thử nghiệm**, chạy local-first, không có backend, tài khoản hoặc telemetry.
 
-## Gói cài một lần (Windows x64)
+## Bản phát hành Windows x64
 
-**Gói một file:** mở [`release/ITSupportToolkit-Windows.exe`](release/ITSupportToolkit-Windows.exe), không cần giải nén. Trình cài tự chép extension tới vị trí cố định, cài Agent và đăng ký Native Messaging trong HKCU; máy cài không cần Node.js/Go hay quyền Administrator. Lần cài đầu, chọn **Chrome** hoặc **Edge** để chỉ mở trang quản lý của trình duyệt đó (cũng có thể chọn không mở), bật **Developer mode** → **Load unpacked** thư mục `%LOCALAPPDATA%\ITSupportToolkit\extension` → dán Extension ID vào cửa sổ cài. Có thể đăng ký cả Chrome và Edge bằng hai ID cách nhau dấu phẩy. Gói ZIP cài tay có tại [`release/ITSupportToolkit-Windows.zip`](release/ITSupportToolkit-Windows.zip), chứa `readme.txt` và `Install.cmd`.
+**Tải [ITSupportToolkit-Windows.zip (v0.1.0)](https://github.com/thienhanaylai/Support-IT-Toolkit/releases/download/v0.1.0/ITSupportToolkit-Windows.zip)** từ GitHub Releases. Giải nén toàn bộ ZIP, đọc `readme.txt` và chạy `Install.cmd`. Trình cài chép extension tới vị trí cố định, cài Agent và đăng ký Native Messaging trong HKCU; máy cài không cần Node.js/Go hay quyền Administrator. Lần cài đầu, chọn **Chrome** hoặc **Edge** để chỉ mở trang quản lý của trình duyệt đó (cũng có thể chọn không mở), bật **Developer mode** → **Load unpacked** thư mục `%LOCALAPPDATA%\ITSupportToolkit\extension` → dán Extension ID vào cửa sổ cài. Có thể đăng ký cả Chrome và Edge bằng hai ID cách nhau dấu phẩy.
 
-**Giới hạn của trình duyệt:** File EXE một click để **khởi động trình cài**, không thể tự động bật extension unpacked trong Chrome/Edge lần đầu trên máy cá nhân. Thao tác **Load unpacked** và nhập ID chỉ cần một lần; lần nâng cấp sau mở EXE mới để dùng lại ID đã đăng ký, rồi tải lại extension. Không di chuyển thư mục extension đã cài. Nếu bản cũ nằm ở thư mục khác, chuyển sang bản mới sẽ tạo ID khác và **không tự chuyển lịch sử/API key**; có thể gỡ bản cũ sau khi kiểm tra bản mới. Xem [`packaging/INSTALL.md`](packaging/INSTALL.md).
+**Giới hạn của trình duyệt:** Không thể tự động bật extension unpacked trong Chrome/Edge lần đầu trên máy cá nhân. Thao tác **Load unpacked** chỉ cần một lần; khi nâng cấp hãy chạy `Install.cmd` từ ZIP mới, xác nhận ID được gợi ý và tải lại extension. Không di chuyển thư mục extension đã cài. Nếu bản cũ nằm ở thư mục khác, chuyển sang bản mới sẽ tạo ID khác và **không tự chuyển lịch sử/API key**; có thể gỡ bản cũ sau khi kiểm tra bản mới. Xem [`packaging/INSTALL.md`](packaging/INSTALL.md).
 
-**Để nộp lên Microsoft Edge Add-ons**, dùng ZIP riêng [`release/ITSupportToolkit-Edge-Store.zip`](release/ITSupportToolkit-Edge-Store.zip), **không dùng gói Windows**. Xem cấu trúc, cách build và lưu ý Agent tại [`packaging/EDGE_STORE.md`](packaging/EDGE_STORE.md).
+**Để nộp lên Microsoft Edge Add-ons**, tự build ZIP riêng theo [`packaging/EDGE_STORE.md`](packaging/EDGE_STORE.md), **không dùng gói Windows**. ZIP Add-ons và file EXE không được đính kèm trong GitHub Release này.
 
 Muốn tự tạo lại EXE một file và ZIP từ mã nguồn (máy build cần Node.js/npm và Go):
 
