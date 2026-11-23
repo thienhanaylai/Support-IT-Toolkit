@@ -1,14 +1,16 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ArrowRight, Clock3, Globe2, HardDrive, MailSearch, Monitor, Network, Radio, ScanSearch, Search, Server, Settings2, ShieldCheck, UserRoundSearch, Zap } from 'lucide-react'
 import { HistoryItem } from '../components/HistoryItem'
 import { Result } from '../components/Result'
-import { labels, runCheck, toolRequiresAgent, type Tool } from '../services/checks'
-import { getHistory, type CheckRecord } from '../services/storage'
+import { labels, toolRequiresAgent, type Tool } from '../services/checks'
+import { getHistory, getSettings, type CheckRecord } from '../services/storage'
 import { commonPorts, parseScanPorts } from '../services/scanPorts'
-import { domainOnly, type MXCommand } from '../services/domainLookup'
+import { domainOnly, registrationDomain, type MXCommand } from '../services/domainLookup'
+import { longVanWhoisURL } from '../services/longVanWhois'
+import { grantHost } from '../services/hostAccess'
 import { parseInput } from '../services/validation'
-import type { NativeProgress } from '../services/nativeHost'
+import { draftKey, jobKey, type CheckJob, type PopupDraft } from '../services/work'
 import '../style.css'
 
 const tools: { id: Tool; icon: React.ReactNode; detail: string }[] = [
@@ -36,27 +38,75 @@ function App() {
   const [customPorts, setCustomPorts] = useState('22,80,443,8080')
   const [mxCommand, setMxCommand] = useState<MXCommand>('dns')
   const [tool, setTool] = useState<Tool | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [progress, setProgress] = useState<NativeProgress[]>([])
+  const [ready, setReady] = useState(false)
+  const [starting, setStarting] = useState(false)
+  const [job, setJob] = useState<CheckJob | null>(null)
   const [error, setError] = useState('')
   const [record, setRecord] = useState<CheckRecord | null>(null)
   const [recent, setRecent] = useState<CheckRecord[]>([])
   const resultRef = useRef<HTMLDivElement>(null)
   const progressRef = useRef<HTMLPreElement>(null)
+  const busy = starting || job?.status === 'running'
+  const progress = job?.progress ?? []
 
   useEffect(() => {
-    chrome.storage.session.get('selectedTarget').then(({ selectedTarget }) => {
-      if (typeof selectedTarget === 'string' && selectedTarget) {
-        setInput(selectedTarget)
-        chrome.storage.session.remove('selectedTarget')
-      } else chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+    let mounted = true
+    const changed = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area !== 'session' || !changes[jobKey] || !mounted) return
+      const next = changes[jobKey].newValue as CheckJob | undefined
+      setJob(next ?? null)
+      if (next?.status === 'done' && next.record) {
+        setRecord(next.record)
+        setRecent((items) => [next.record!, ...items.filter((item) => item.id !== next.record!.id)].slice(0, 5))
+      }
+      if (next?.status === 'error' || next?.status === 'interrupted') setError(next.error ?? 'Kiểm tra bị gián đoạn')
+    }
+    chrome.storage.onChanged.addListener(changed)
+    void (async () => {
+      const [stored, response, history] = await Promise.all([
+        chrome.storage.session.get([draftKey, 'selectedTarget', 'displayedRecord']),
+        chrome.runtime.sendMessage({ type: 'toolkit:get-job' }) as Promise<{ job?: CheckJob; error?: string }>,
+        getHistory(),
+      ])
+      if (!mounted) return
+      const draft = stored[draftKey] as PopupDraft | undefined
+      if (draft) {
+        setInput(draft.input)
+        setPort(draft.port)
+        setPingCount(draft.pingCount)
+        setMaxHops(draft.maxHops)
+        setScanMode(draft.scanMode)
+        setCustomPorts(draft.customPorts)
+        setMxCommand(draft.mxCommand)
+        setTool(draft.tool)
+      }
+      if (typeof stored.selectedTarget === 'string' && stored.selectedTarget) {
+        setInput(stored.selectedTarget)
+        void chrome.storage.session.remove('selectedTarget')
+      } else if (!draft) {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+        if (!mounted) return
         if (tab?.url && /^https?:\/\//.test(tab.url)) {
           try { setInput(new URL(tab.url).hostname) } catch { /* no active website */ }
         }
-      })
-    })
-    getHistory().then((items) => setRecent(items.slice(0, 5)))
+      }
+      if (response.job) {
+        setJob((current) => current && current.id === response.job?.id && current.status !== 'running' ? current : response.job!)
+        if (response.job.status === 'running' || !draft?.tool) setTool(response.job.tool)
+        if (response.job.status === 'error' || response.job.status === 'interrupted') setError(response.job.error ?? '')
+      } else if (response.error) setError(response.error)
+      setRecord((current) => current ?? (stored.displayedRecord as CheckRecord | undefined) ?? response.job?.record ?? null)
+      setRecent((current) => [...current, ...history.filter((item) => !current.some((saved) => saved.id === item.id))].slice(0, 5))
+      setReady(true)
+    })().catch((cause) => { if (mounted) { setError(String(cause)); setReady(true) } })
+    return () => { mounted = false; chrome.storage.onChanged.removeListener(changed) }
   }, [])
+
+  useLayoutEffect(() => {
+    if (!ready) return
+    const draft: PopupDraft = { input, port, pingCount, maxHops, scanMode, customPorts, mxCommand, tool }
+    void chrome.storage.session.set({ [draftKey]: draft })
+  }, [ready, input, port, pingCount, maxHops, scanMode, customPorts, mxCommand, tool])
 
   useEffect(() => {
     if (busy || record || error) {
@@ -68,10 +118,11 @@ function App() {
   }, [progress])
 
   async function run(selectedTool: Tool | null = tool) {
-    if (busy) return
+    if (!ready || busy) return
     setError('')
     setRecord(null)
-    setProgress([])
+    setJob(null)
+    void chrome.storage.session.remove('displayedRecord')
     if (!selectedTool) {
       setError('Hãy chọn một công cụ trước khi kiểm tra')
       return
@@ -85,23 +136,37 @@ function App() {
       setError(e instanceof Error ? e.message : String(e))
       return
     }
-    setBusy(true)
+    setTool(selectedTool)
+    setStarting(true)
     try {
-      const item = await runCheck(selectedTool, input, port, scanPorts, mxCommand, pingCount, maxHops, (event) => {
-        setProgress((previous) => [...previous, event].slice(-100))
-      })
-      setRecord(item)
-      setRecent((prev) => [item, ...prev].slice(0, 5))
+      if (selectedTool === 'whois') await grantHost(longVanWhoisURL(registrationDomain(input)))
+      if (selectedTool === 'mxtoolbox') {
+        const settings = await getSettings()
+        await grantHost(settings.mxtoolboxApiKey.trim() ? 'https://api.mxtoolbox.com/' : 'https://mxtoolbox.com/')
+      }
+      if (selectedTool === 'public_ip') await grantHost('https://api.ipify.org/')
+      const [tab] = selectedTool === 'vm_info' ?
+        await chrome.tabs.query({ active: true, currentWindow: true }) : [undefined]
+      const response = await chrome.runtime.sendMessage({
+        type: 'toolkit:start-job',
+        request: { tool: selectedTool, input, port, scanPorts, mxCommand, pingCount, maxHops, tabId: tab?.id },
+      }) as { job?: CheckJob; error?: string }
+      if (response.error) throw new Error(response.error)
+      if (response.job) setJob((current) =>
+        current && current.id === response.job?.id && current.status !== 'running' ? current : response.job!)
     } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
-    finally { setBusy(false) }
+    finally { setStarting(false) }
   }
 
   function showRecord(item: CheckRecord) {
     if (busy) return
     setRecord(item)
     setError('')
+    void chrome.storage.session.set({ displayedRecord: item })
     requestAnimationFrame(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
+
+  if (!ready) return <main className="popup"><p role="status">Đang khôi phục phiên kiểm tra...</p></main>
 
   return <main className="popup">
     <header className="popup-header">

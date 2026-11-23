@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { extractVMInfoFromDOM, formatVMInfo, isPortalVMUrl } from './vmInfo'
+import { extractVMInfoFromDOM, formatVMInfo, getVMInfoFromTab, isPortalVMUrl } from './vmInfo'
 import { domainOnly, formatMXToolbox, mxToolboxLookup, registrationDomain } from './domainLookup'
 import { getCopyText } from './formatRecord'
 import { nativeRequest } from './nativeHost'
@@ -51,6 +51,17 @@ describe('Portal computing page', () => {
     expect(isPortalVMUrl('http://portal.longvan.vn/computing-manager/manager/computing/computing_detail.xhtml')).toBe(false)
     document.body.innerHTML = '<div class="card"><span>Thông tin</span></div>'
     expect(extractVMInfoFromDOM()).toBeNull()
+  })
+  it('reads the originally selected Portal tab even if browser focus changes after closing the popup', async () => {
+    const url = 'https://portal.longvan.vn/computing-manager/manager/computing/computing_detail.xhtml?id=1'
+    const query = vi.fn()
+    const get = vi.fn(async () => ({ id: 17, url }))
+    const executeScript = vi.fn(async () => [{ result: { ...extractVMInfoFromDOM(), linkVm: url } }])
+    vi.stubGlobal('chrome', { tabs: { query, get }, scripting: { executeScript } })
+    expect((await getVMInfoFromTab(17)).vmid).toBe('663312104')
+    expect(get).toHaveBeenCalledWith(17)
+    expect(query).not.toHaveBeenCalled()
+    expect(executeScript).toHaveBeenCalledWith(expect.objectContaining({ target: { tabId: 17 } }))
   })
 })
 

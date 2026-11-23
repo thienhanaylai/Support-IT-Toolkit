@@ -104,42 +104,15 @@ export async function longVanWhoisLookup(domain: string, timeoutMs: number, onPr
   const url = longVanWhoisURL(domain)
   onProgress?.('Đang xin quyền truy cập Long Vân...')
   await grantHost(url)
-  onProgress?.('Đang mở trang WHOIS Long Vân trong cửa sổ thu nhỏ...')
-  let windowId: number | undefined
+  onProgress?.('Đang mở tab nền WHOIS Long Vân...')
   let tabId: number | undefined
   try {
-    // Some browsers return a normal state even when a minimized window was requested.
-    // Retry minimizing it; only fall back to an inactive tab if that fails.
-    let opened: chrome.windows.Window | undefined
-    try {
-      opened = await chrome.windows.create({ url, focused: false, state: 'minimized' })
-    } catch {
-      // The browser may reject a minimized window altogether.
-    }
-    if (opened) {
-      if (opened.id === undefined) throw new Error('Không mở được cửa sổ WHOIS Long Vân.')
-      windowId = opened.id
-      if (opened.state !== 'minimized') {
-        let minimized = false
-        try {
-          minimized = (await chrome.windows.update(windowId, { state: 'minimized' })).state === 'minimized'
-        } catch {
-          // Fall back below, but do not leave this window open.
-        }
-        if (!minimized) {
-          await chrome.windows.remove(windowId)
-          windowId = undefined
-        }
-      }
-    }
-    if (windowId !== undefined) {
-      const [tab] = await chrome.tabs.query({ windowId })
-      tabId = tab?.id
-    } else {
-      onProgress?.('Không thể thu nhỏ cửa sổ; đang dùng tab nền để tra cứu WHOIS...')
-      const tab = await chrome.tabs.create({ url, active: false })
-      tabId = tab.id
-    }
+    const windows = (await chrome.windows.getAll({ windowTypes: ['normal'] }))
+      .filter((window) => window.type === 'normal')
+    const windowId = (windows.find((window) => window.focused) ?? windows[0])?.id
+    if (windowId === undefined) throw new Error('Cần mở một cửa sổ trình duyệt để tra cứu WHOIS.')
+    const tab = await chrome.tabs.create({ windowId, url, active: false })
+    tabId = tab.id
     if (tabId === undefined) throw new Error('Không mở được trang WHOIS Long Vân.')
     await waitForTab(tabId, Math.max(12000, timeoutMs))
     const current = await chrome.tabs.get(tabId)
@@ -161,9 +134,7 @@ export async function longVanWhoisLookup(domain: string, timeoutMs: number, onPr
       source: 'Trang WHOIS Long Vân (dữ liệu hiển thị)',
     }
   } finally {
-    if (windowId !== undefined) {
-      await chrome.windows.remove(windowId).catch(() => { /* window may already be closed */ })
-    } else if (tabId !== undefined) {
+    if (tabId !== undefined) {
       await chrome.tabs.remove(tabId).catch(() => { /* tab may already be closed */ })
     }
   }

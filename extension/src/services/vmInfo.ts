@@ -56,8 +56,9 @@ export function extractVMInfoFromDOM(): VMInfo | null {
   return info.computingName && info.vmid ? info : null
 }
 
-export async function getVMInfoFromTab(): Promise<VMInfo> {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+export async function getVMInfoFromTab(tabId?: number): Promise<VMInfo> {
+  const tab = tabId !== undefined ? await chrome.tabs.get(tabId) :
+    (await chrome.tabs.query({ active: true, currentWindow: true }))[0]
   if (!tab?.id || !tab.url || !isPortalVMUrl(tab.url)) {
     throw new Error('Hãy mở tab chi tiết computing trên portal.longvan.vn rồi nhấn Lấy thông tin VM')
   }

@@ -28,7 +28,7 @@ function App() {
       <label className="checkbox"><input type="checkbox" checked={settings.saveHistory} onChange={(e) => { setSaved(false); setSettings({ ...settings, saveHistory: e.target.checked }) }} /> Lưu lịch sử kiểm tra trên thiết bị</label>
       <button className="primary" type="submit">Lưu cài đặt</button>{saved && <p className="success">Đã lưu cài đặt.</p>}
     </form>
-    <p className="privacy">Không có telemetry. MXToolbox, IP Public và WHOIS Long Vân kết nối ra ngoài khi bạn yêu cầu. WHOIS mở trang Long Vân trong cửa sổ thu nhỏ, chỉ trích xuất thông tin kỹ thuật rồi tự đóng cửa sổ tạm.</p>
+    <p className="privacy">Không có telemetry. MXToolbox, IP Public và WHOIS Long Vân kết nối ra ngoài khi bạn yêu cầu. WHOIS mở tab nền không chuyển khỏi tab hiện tại, chỉ trích xuất thông tin kỹ thuật rồi tự đóng tab tạm. Tiến trình và kết quả hiện tại được giữ trong phiên trình duyệt khi bạn đóng popup; bật lưu lịch sử nếu muốn giữ kết quả sau khi khởi động lại trình duyệt.</p>
   </div></main>
 }
 createRoot(document.getElementById('root')!).render(<App />)

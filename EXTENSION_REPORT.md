@@ -1,7 +1,7 @@
 # Báo cáo IT Support Toolkit Extension
 
 **Ngày rà soát:** 23/11/2026  
-**Phiên bản manifest:** 0.1.0 (Chrome/Edge Manifest V3)  
+**Phiên bản manifest:** 0.1.2 (Chrome/Edge Manifest V3)
 **Phạm vi:** extension trong `extension/`, Windows Local Agent trong `native-agent/`.
 
 ## Extension hiện làm được gì?
@@ -15,7 +15,7 @@
 | Quét Port | Quét 20 cổng phổ biến hoặc danh sách tối đa 32 cổng; hiện từng cổng hoàn tất, tối đa 6 kết nối đồng thời, 2 giây mỗi cổng. | Local Agent; đã thử luồng nhiều thông báo và test Go với loopback. Máy dùng Agent cũ phải cài lại Agent để có tiến độ. |
 | SSL / TLS | Kiểm tra phiên bản TLS, chứng chỉ, thời hạn và kết quả xác minh chain/hostname. Giao diện tách trạng thái, ngày hiệu lực/hết hạn, chủ thể, nhà phát hành, SAN và thu gọn chuỗi chứng chỉ. | Local Agent; đã thử kết nối TLS tới tên miền công khai. Có test hiển thị dữ liệu hợp lệ/không hợp lệ, thiếu trường và escape văn bản. |
 | MXToolbox | Tra DNS/NS, A, AAAA, MX, TXT, SPF, DMARC, SOA; hiển thị loại tra cứu/domain, DNS server, thời gian và các trường Type, Domain Name, IP Address, TTL nếu có. | API MXToolbox; endpoint demo DNS `example.com` trả dữ liệu và có test lọc kết quả. Truy vấn domain khác cần API key riêng; **chưa thử với key của người dùng**. |
-| WHOIS | Tách tên miền đăng ký khỏi hostname, mở URL WHOIS Long Vân trong cửa sổ thu nhỏ rồi đọc kết quả đã hiển thị: nhà đăng ký, ngày, trạng thái, NS, DNSSEC; tự đóng cửa sổ. Hiển thị kết quả thành các mục dễ đọc. Không dùng RDAP/BKNS/VNNIC. | Đã xem trang Long Vân thật với `.app` và `.vn`, kiểm thử bộ đọc DOM bằng mẫu và kiểm tra không lưu chủ thể. Chưa thử đầu-cuối trong extension Chrome/Edge. |
+| WHOIS | Tách tên miền đăng ký khỏi hostname, mở URL WHOIS Long Vân trong tab nền không kích hoạt rồi đọc kết quả đã hiển thị: nhà đăng ký, ngày, trạng thái, NS, DNSSEC; tự đóng tab. Hiển thị kết quả thành các mục dễ đọc. Không dùng RDAP/BKNS/VNNIC. | Đã xem trang Long Vân thật với `.app` và `.vn`, kiểm thử bộ đọc DOM bằng mẫu và kiểm tra không lưu chủ thể. Chưa thử đầu-cuối trong extension Chrome/Edge. |
 | Mạng LAN | Lấy adapter mạng, địa chỉ và đầu ra `ipconfig`; ẩn JSON ở giao diện; nếu không có `ipconfig` thì hiện danh sách adapter dễ đọc. | Local Agent; đã thử trên Windows. |
 | IP Public | Lấy IP từ ipify; nút **Sao chép IP** chỉ sao chép IPv4/IPv6 hợp lệ. | Endpoint ipify công khai và test xử lý kết quả. |
 
@@ -23,6 +23,7 @@
 
 - Popup chia nhóm công cụ cần domain/IP và nhóm không cần ô nhập (VM, Mạng LAN, IP Public chạy ngay khi chọn). Popup có thể điền hostname từ tab đang mở hoặc văn bản chọn từ menu chuột phải.
 - Có giao diện sáng/tối theo hệ thống, trạng thái đang chạy/lỗi, nút sao chép theo loại kết quả và tối đa 5 mục gần đây trong popup. Cửa sổ mở từ menu chuột phải đủ rộng cho popup 660 px.
+- Tiến trình chạy trong service worker; `chrome.storage.session` giữ ô nhập, công cụ, tiến trình và kết quả khi đóng/mở lại popup. Nếu worker bị ngắt, báo trạng thái gián đoạn thay vì hiển thị đang chạy mãi; tắt lưu lịch sử vẫn không ghi kết quả phiên này xuống đĩa. Chưa kiểm tra đầu-cuối khi đóng/mở popup trong profile trình duyệt thật.
 - Lịch sử cục bộ lưu tối đa 50 kết quả khi bật tùy chọn; trang lịch sử cho phép xem lại, xóa sau xác nhận và xuất HTML. Báo cáo HTML **mặc định thu gọn** từng kết quả, bấm để mở chi tiết; nội dung được escape trước khi chèn vào HTML.
 - Cài đặt gồm timeout, lưu lịch sử và MXToolbox API key. Key nằm trong `chrome.storage.local` **không mã hóa**, không được đưa vào lịch sử/báo cáo. Key BKNS cũ, nếu có, không còn được sử dụng và có thể xóa trong Cài đặt.
 - VM chỉ đọc DOM của đường dẫn chi tiết Portal sau thao tác người dùng, không dùng content script thường trực. HTML Portal mẫu không được đóng gói vào extension.
@@ -32,10 +33,10 @@
 ## Kết quả rà soát
 
 - `npm run build`: **đạt**.
-- `npm run test`: **40/40 bài test đạt** (bao gồm luồng nhiều thông báo Native Messaging, menu chuột phải, WHOIS và giao diện SSL/TLS). WHOIS nay thử thu nhỏ lại nếu cửa sổ mới báo `normal`; khi không thể thu nhỏ, dùng tab nền không kích hoạt và đóng tab sau khi tra cứu.
+- `npm run test`: **44/44 bài test đạt** (bao gồm khôi phục popup, lưu tiến trình/kết quả của service worker, tab Portal ban đầu, luồng Native Messaging, menu chuột phải, WHOIS và giao diện SSL/TLS). WHOIS luôn dùng tab nền không kích hoạt trong cửa sổ trình duyệt bình thường và đóng tab sau khi tra cứu.
 - `npm audit --audit-level=moderate`: **0 lỗ hổng được báo** tại thời điểm rà soát.
 - `go test ./...`: **đạt**.
-- Kiểm tra ZIP sau khi đóng gói: **16/16 file extension khớp hash** với `extension/dist`, đủ bốn icon, manifest, installer và Agent Windows x64. File Agent lấy trực tiếp từ ZIP chạy thành công Ping, TCP Port, Quét Port và Mạng LAN với mục tiêu loopback; có thông báo tiến độ.
+- Kiểm tra ZIP sau khi đóng gói: **19/19 file extension khớp bản build** trong `extension/dist`, đủ bốn icon, manifest v0.1.2, installer và Agent Windows x64. File Agent lấy trực tiếp từ ZIP chạy thành công Ping, TCP Port, Quét Port và Mạng LAN với mục tiêu loopback; có thông báo tiến độ.
 - EXE một file nhúng nguyên vẹn ZIP hiện tại, `--verify` tự giải nén và kiểm tra đủ file bắt buộc; kiến trúc Windows x64. Luồng nâng cấp dùng lại Extension ID đã đăng ký được kiểm tra với thư mục và Agent giả lập cách ly, **không chạy bộ cài thật trên máy**.
 - Kiểm tra popup bằng trình duyệt với dữ liệu mô phỏng: rộng 660 px, 5 mục gần đây, WHOIS hiển thị theo mục, Mạng LAN vẫn cuộn được khi ẩn thanh cuộn. Đây không phải phiên extension được cài trong trình duyệt.
 - Các script PowerShell trong `packaging/` đã được kiểm tra cú pháp. Bộ cài Windows hiển thị tiếng Việt, hỏi chọn Chrome, Edge hoặc xem hướng dẫn cho cả hai; ba nhánh đã được thử bằng `packaging/test-setup.ps1` với Agent giả lập. Bộ cài không tự mở trình duyệt: thử trên profile tách biệt xác nhận Chrome/Edge chuyển địa chỉ nội bộ từ dòng lệnh thành New Tab. `setup.ps1` và `install.ps1` dùng đúng một UTF-8 BOM để Windows PowerShell 5.1 hiển thị tiếng Việt; manifest Native Messaging vẫn ghi UTF-8 không BOM. ZIP/EXE cài tay có `readme.txt` riêng; **chưa chạy installer thật** để tránh thay đổi registry hoặc extension đang dùng trên máy.
@@ -48,8 +49,8 @@
 ## Giới hạn / việc cần thử thêm
 
 1. Chưa chạy kiểm thử đầu-cuối của popup, quyền host, clipboard, xuất file và đọc tab Portal trên phiên Chrome/Edge đang đăng nhập. Chrome cài trên máy không cho tải extension unpacked qua cờ dòng lệnh trong phép thử headless; cần **Load unpacked thủ công** và kiểm tra trên trình duyệt thực tế.
-2. MXToolbox với domain bất kỳ vẫn cần API key. WHOIS phụ thuộc trang Long Vân và JavaScript của trang; HTML tải trực tiếp chưa có dữ liệu. Cửa sổ thu nhỏ có thể gặp CAPTCHA/giới hạn hoặc thay đổi bố cục; không tự vượt xác minh. Kết quả Long Vân là tổng hợp bên ngoài, cần đối chiếu nhà đăng ký/registry khi yêu cầu độ chính xác pháp lý.
-3. Quyền host `longvan.net` và quá trình mở/đóng cửa sổ thu nhỏ hoặc tab nền chưa được thử đầu-cuối trong Chrome/Edge thực tế. Nếu trình duyệt không thể thu nhỏ cửa sổ, extension thử tab nền; nếu việc tải trang bị trì hoãn hoặc trang chưa hiển thị đúng tên miền thì báo lỗi, không lưu kết quả.
+2. MXToolbox với domain bất kỳ vẫn cần API key. WHOIS phụ thuộc trang Long Vân và JavaScript của trang; HTML tải trực tiếp chưa có dữ liệu. Tab nền có thể gặp CAPTCHA/giới hạn hoặc thay đổi bố cục; không tự vượt xác minh. Kết quả Long Vân là tổng hợp bên ngoài, cần đối chiếu nhà đăng ký/registry khi yêu cầu độ chính xác pháp lý.
+3. Quyền host `longvan.net` và quá trình mở/đóng tab nền chưa được thử đầu-cuối trong Chrome/Edge thực tế. Nếu việc tải trang bị trì hoãn hoặc trang chưa hiển thị đúng tên miền thì báo lỗi, không lưu kết quả.
 4. Ping/Traceroute phụ thuộc ngôn ngữ Windows, DNS/VPN/firewall và thời gian chờ; kết quả thô của lệnh vẫn hiển thị để đối chiếu. Quét Port chỉ kiểm tra kết nối TCP, không xác định chính xác dịch vụ chạy trên cổng.
 5. Lịch sử, `ipconfig` và báo cáo HTML có thể chứa thông tin mạng nội bộ hoặc VM; nên tắt lưu lịch sử hoặc xóa lịch sử khi dùng trên máy chia sẻ. File HTML đã xuất cần được bảo quản riêng.
 6. Chưa chạy `go test -race`: môi trường thiếu trình biên dịch C/CGO; `go test ./...` vẫn đạt.

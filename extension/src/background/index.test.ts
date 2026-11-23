@@ -8,7 +8,8 @@ describe('context menu popup', () => {
     const set = vi.fn(async () => {})
     const create = vi.fn(async () => ({}))
     vi.stubGlobal('chrome', {
-      runtime: { onInstalled: { addListener: vi.fn() }, getURL: (file: string) => `chrome-extension://test/${file}` },
+      runtime: { onInstalled: { addListener: vi.fn() }, onMessage: { addListener: vi.fn() },
+        getURL: (file: string) => `chrome-extension://test/${file}` },
       contextMenus: { onClicked: { addListener: (fn: typeof onClicked) => { onClicked = fn } } },
       storage: { session: { set } },
       windows: { create },

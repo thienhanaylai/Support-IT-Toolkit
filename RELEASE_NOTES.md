@@ -1,9 +1,12 @@
-# IT Support Toolkit v0.1.1 — Windows x64
+# IT Support Toolkit v0.1.2 — Windows x64
 
-**Tải về:** `ITSupportToolkit-Windows.zip`. Bản phát hành này chỉ đính kèm ZIP cài Windows, **không** đính kèm gói Edge Add-ons hoặc EXE. Extension bên trong vẫn là Manifest V3 phiên bản 0.1.0; v0.1.1 là bản cập nhật bộ cài Windows.
+**Tải về:** `ITSupportToolkit-Windows.zip` (extension Manifest V3 v0.1.2). GitHub Release chỉ đính kèm ZIP cài Windows; **không** đính kèm gói Edge Add-ons hoặc EXE.
 
-**Thay đổi từ v0.1.0:** `Install.cmd` và hướng dẫn cài đặt hiển thị tiếng Việt; có các bước riêng cho Chrome và Edge. Bộ cài không tự khởi chạy trang extension vì Chrome/Edge chuyển địa chỉ nội bộ từ dòng lệnh thành tab New Tab; thay vào đó, hướng dẫn nhập chính xác địa chỉ trong thanh địa chỉ. Các script PowerShell dùng mã hóa phù hợp Windows PowerShell 5.1 để không lỗi dấu tiếng Việt.
+**Thay đổi từ v0.1.1:**
+- Tiến trình kiểm tra chạy trong service worker thay vì trong popup. Nếu vô tình đóng popup, mở lại để xem tiếp thông tin đã nhập, tiến trình và kết quả trong phiên trình duyệt. Bật lưu lịch sử nếu cần giữ kết quả sau khi khởi động lại trình duyệt; nếu worker bị ngắt, popup báo gián đoạn thay vì chạy mãi.
+- WHOIS Long Vân mở **tab nền không kích hoạt**, chỉ đọc các trường kỹ thuật rồi tự đóng tab tạm sau khi hoàn tất hoặc gặp lỗi; không chuyển bạn sang tab WHOIS, không dùng RDAP/API key và không lưu registrant.
+- Trình cài và `readme.txt` vẫn hướng dẫn tiếng Việt theo Chrome/Edge; do giới hạn trình duyệt, lần đầu vẫn cần tự vào `chrome://extensions/` hoặc `edge://extensions/`, bật Developer mode, chọn Load unpacked và nhập Extension ID.
 
-**Cài đặt:** giải nén toàn bộ ZIP, đọc `readme.txt` rồi chạy `Install.cmd`. Chọn Chrome hoặc Edge, tự nhập `chrome://extensions/` hoặc `edge://extensions/` vào thanh địa chỉ, bật Developer mode, Load unpacked thư mục extension do trình cài hiển thị và nhập Extension ID. Có thể nhập nhiều ID cách nhau bởi dấu phẩy. Chrome/Edge vẫn yêu cầu thao tác xác nhận Load unpacked lần đầu.
+**Cài đặt:** Giải nén toàn bộ ZIP, đọc `readme.txt`, chạy `Install.cmd`. Sau khi nâng cấp, tải lại extension trong trình duyệt. Gói chưa ký số.
 
-**Kiểm tra trước phát hành:** 40/40 test extension và `go test ./...` đạt; toàn bộ 16 file extension trong ZIP khớp bản build. Đã thử lựa chọn/hướng dẫn trong môi trường giả lập; chưa chạy cài đặt đầu-cuối trên profile Chrome/Edge thực tế. Gói chưa ký số.
+**Kiểm tra:** `npm run test` đạt 44/44, `npm run build` và `go test ./...` đạt. Chưa chạy cài đặt/WHOIS đầu-cuối trên profile Chrome/Edge thực tế.

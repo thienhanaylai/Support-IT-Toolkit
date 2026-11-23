@@ -26,7 +26,7 @@ async function fetchJSON(url: string, timeoutMs: number, onProgress?: (event: Na
   return await response.json() as Record<string, unknown>
 }
 
-export async function runCheck(tool: Tool, input: string, portInput: number, scanPorts: number[] = commonPorts, mxCommand: MXCommand = 'dns', pingCount = 4, maxHops = 20, onProgress?: (event: NativeProgress) => void): Promise<CheckRecord> {
+export async function runCheck(tool: Tool, input: string, portInput: number, scanPorts: number[] = commonPorts, mxCommand: MXCommand = 'dns', pingCount = 4, maxHops = 20, onProgress?: (event: NativeProgress) => void, tabId?: number): Promise<CheckRecord> {
   onProgress?.({ text: 'Đang đọc cài đặt...' })
   const settings = await getSettings()
   const timeoutMs = safeTimeout(settings.timeoutMs)
@@ -37,7 +37,7 @@ export async function runCheck(tool: Tool, input: string, portInput: number, sca
   let source = 'Máy người dùng · Local Agent'
   if (tool === 'vm_info') {
     onProgress?.({ text: 'Đang đọc thông tin từ tab Portal...' })
-    const info = await getVMInfoFromTab()
+    const info = await getVMInfoFromTab(tabId)
     result = { ...info }
     target = info.computingName
     source = 'Tab hiện tại · Portal nội bộ'

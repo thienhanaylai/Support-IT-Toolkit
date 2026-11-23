@@ -12,7 +12,7 @@ Script build bản production, kiểm tra các đường dẫn cơ bản trong m
 
 **Lưu ý khi phát hành:**
 
-- Manifest hiện có tên **IT Support Toolkit**, phiên bản **0.1.0**. Cần tăng `version` trong `extension/public/manifest.json` cho mỗi lần cập nhật đã phát hành; nếu muốn đổi tên hiển thị trên chợ, sửa `name` trước khi tạo ZIP. Nút header trong popup hiện ghi **LongVanSupport Toolkit**.
+- Manifest hiện có tên **IT Support Toolkit**, phiên bản **0.1.2**. Cần tăng `version` trong `extension/public/manifest.json` cho mỗi lần cập nhật đã phát hành; nếu muốn đổi tên hiển thị trên chợ, sửa `name` trước khi tạo ZIP. Nút header trong popup hiện ghi **LongVanSupport Toolkit**.
 - ZIP của chợ chỉ gồm extension. Ping, Traceroute, TCP Port, Quét Port, SSL/TLS và Mạng LAN vẫn cần **Windows Local Agent** cài riêng trên máy người dùng. Native Messaging phải đăng ký với **Extension ID do Edge Add-ons cấp**; ID đó có thể khác bản Load unpacked đang dùng. Khi cần thêm ID của bản trên chợ vào máy đã cài Agent, chạy `Install.cmd` từ gói Windows ZIP và nhập **cả ID cũ lẫn ID mới** cách nhau bởi dấu phẩy. EXE trên máy đã cài sẽ tự dùng lại ID cũ nên không tự thêm ID mới. Không tự chuyển lịch sử/cài đặt giữa hai ID.
 - WHOIS, MXToolbox và IP Public phụ thuộc dịch vụ bên ngoài và quyền host khi người dùng kích hoạt. Quyền `optional_host_permissions` rộng trong manifest có thể cần giải trình khi Microsoft xét duyệt.
 - Chưa kiểm tra việc nộp gói trên tài khoản Partner Center hoặc quá trình xét duyệt của Microsoft. Không đưa khóa API, dữ liệu Portal hoặc thông tin nội bộ vào nội dung niêm yết.

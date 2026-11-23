@@ -21,19 +21,19 @@ const page = `<div class="domain-info-success"><div class="result-container">
   </div></div></div></div>`
 
 function setup(tabURL = longVanWhoisURL('vnnic.vn')) {
-  const remove = vi.fn(async () => {})
-  const create = vi.fn(async (): Promise<chrome.windows.Window> => ({ id: 42, state: 'minimized' } as chrome.windows.Window))
-  const update = vi.fn(async (): Promise<chrome.windows.Window> => ({ id: 42, state: 'minimized' } as chrome.windows.Window))
   const removeTab = vi.fn(async () => {})
   const createTab = vi.fn(async () => ({ id: 28 }))
-  const query = vi.fn(async () => [{ id: 27 }])
+  const getAll = vi.fn(async (): Promise<chrome.windows.Window[]> => [
+    { id: 77, type: 'popup', focused: true } as chrome.windows.Window,
+    { id: 42, type: 'normal', focused: true } as chrome.windows.Window,
+  ])
   const executeScript = vi.fn(async ({ func, args }: { func: (domain: string) => Promise<unknown>; args: string[] }) =>
     [{ result: await func(args[0]) }])
   vi.stubGlobal('chrome', {
     permissions: { contains: async () => true },
-    windows: { create, update, remove },
+    windows: { getAll },
     tabs: {
-      query, create: createTab, remove: removeTab,
+      create: createTab, remove: removeTab,
       get: vi.fn(async (id: number) => ({ id, status: 'complete', url: tabURL })),
       onUpdated: { addListener: vi.fn(), removeListener: vi.fn() },
       onRemoved: { addListener: vi.fn(), removeListener: vi.fn() },
@@ -41,7 +41,7 @@ function setup(tabURL = longVanWhoisURL('vnnic.vn')) {
     scripting: { executeScript },
     storage: { local: { get: async () => ({ settings: { saveHistory: false } }) } },
   })
-  return { create, update, remove, createTab, removeTab, query, executeScript }
+  return { createTab, removeTab, executeScript, getAll }
 }
 
 beforeEach(() => {
@@ -73,8 +73,8 @@ describe('Long Vân WHOIS page', () => {
     await expect(extractLongVanWhoisFromDOM('vnnic.vn')).resolves.toBeNull()
   })
 
-  it('closes its minimized window, never fetches RDAP and never saves the registrant', async () => {
-    const { create, remove, query, executeScript } = setup()
+  it('closes its inactive tab, never fetches RDAP and never saves the registrant', async () => {
+    const { createTab, removeTab, executeScript } = setup()
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
     vi.stubGlobal('crypto', { randomUUID: () => 'whois-test' })
@@ -86,10 +86,9 @@ describe('Long Vân WHOIS page', () => {
     expect(JSON.stringify(record)).not.toContain('DO NOT STORE PERSON')
     expect(getCopyText(record)).toContain('Ngày hết hạn: 01/09/2028')
     expect(fetchMock).not.toHaveBeenCalled()
-    expect(create).toHaveBeenCalledWith({ url: longVanWhoisURL('vnnic.vn'), focused: false, state: 'minimized' })
-    expect(query).toHaveBeenCalledWith({ windowId: 42 })
+    expect(createTab).toHaveBeenCalledWith({ windowId: 42, url: longVanWhoisURL('vnnic.vn'), active: false })
     expect(executeScript).toHaveBeenCalledOnce()
-    expect(remove).toHaveBeenCalledWith(42)
+    expect(removeTab).toHaveBeenCalledWith(28)
     const markup = renderToStaticMarkup(createElement(Result, { record }))
     expect(markup).toContain('NGÀY HẾT HẠN')
     expect(markup).toContain('dns1.vnnic.vn')
@@ -98,62 +97,32 @@ describe('Long Vân WHOIS page', () => {
     expect(markup).not.toContain('DO NOT STORE PERSON')
   })
 
-  it('refuses redirects before reading the page, and closes the window', async () => {
-    const { remove, executeScript } = setup('https://longvan.net.evil.test/domain/whois?ten_mien=vnnic.vn')
+  it('refuses redirects before reading the page, and closes the tab', async () => {
+    const { removeTab, executeScript } = setup('https://longvan.net.evil.test/domain/whois?ten_mien=vnnic.vn')
     await expect(longVanWhoisLookup('vnnic.vn', 3000)).rejects.toThrow('chuyển hướng')
     expect(executeScript).not.toHaveBeenCalled()
-    expect(remove).toHaveBeenCalledWith(42)
+    expect(removeTab).toHaveBeenCalledWith(28)
   })
 
-  it('retries minimizing when the newly created window reports a normal state', async () => {
-    const { create, update, remove, createTab, executeScript } = setup()
-    create.mockResolvedValueOnce({ id: 42, state: 'normal' } as chrome.windows.Window)
-    await expect(longVanWhoisLookup('vnnic.vn', 3000)).resolves.toMatchObject({ domain: 'vnnic.vn' })
-    expect(update).toHaveBeenCalledWith(42, { state: 'minimized' })
+  it('does not open WHOIS in the extension popup window when no normal browser window exists', async () => {
+    const { createTab, getAll } = setup()
+    getAll.mockResolvedValueOnce([])
+    await expect(longVanWhoisLookup('vnnic.vn', 3000)).rejects.toThrow('cửa sổ trình duyệt')
     expect(createTab).not.toHaveBeenCalled()
-    expect(executeScript).toHaveBeenCalledOnce()
-    expect(remove).toHaveBeenCalledWith(42)
-  })
-
-  it('uses an inactive tab when minimizing fails, then closes only that tab', async () => {
-    const { create, update, remove, createTab, removeTab, executeScript } = setup()
-    create.mockResolvedValueOnce({ id: 42, state: 'normal' } as chrome.windows.Window)
-    update.mockRejectedValueOnce(new Error('minimize unsupported'))
-    const progress = vi.fn()
-    await expect(longVanWhoisLookup('vnnic.vn', 3000, progress)).resolves.toMatchObject({ domain: 'vnnic.vn' })
-    expect(remove).toHaveBeenCalledTimes(1)
-    expect(remove).toHaveBeenCalledWith(42)
-    expect(createTab).toHaveBeenCalledWith({ url: longVanWhoisURL('vnnic.vn'), active: false })
-    expect(executeScript).toHaveBeenCalledWith(expect.objectContaining({ target: { tabId: 28 } }))
-    expect(removeTab).toHaveBeenCalledWith(28)
-    expect(progress).toHaveBeenCalledWith(expect.stringContaining('tab nền'))
-  })
-
-  it('falls back when window creation is rejected and cleans up the tab on redirect', async () => {
-    const { create, remove, createTab, removeTab, executeScript } = setup('https://longvan.net.evil.test/domain/whois?ten_mien=vnnic.vn')
-    create.mockRejectedValueOnce(new Error('unsupported'))
-    await expect(longVanWhoisLookup('vnnic.vn', 3000)).rejects.toThrow('chuyển hướng')
-    expect(createTab).toHaveBeenCalledWith({ url: longVanWhoisURL('vnnic.vn'), active: false })
-    expect(executeScript).not.toHaveBeenCalled()
-    expect(remove).not.toHaveBeenCalled()
-    expect(removeTab).toHaveBeenCalledWith(28)
   })
 
   it('does not leave an inactive tab when the WHOIS result is unavailable', async () => {
-    const { create, update, remove, removeTab, executeScript } = setup()
-    create.mockResolvedValueOnce({ id: 42, state: 'normal' } as chrome.windows.Window)
-    update.mockResolvedValueOnce({ id: 42, state: 'normal' } as chrome.windows.Window)
+    const { removeTab, executeScript } = setup()
     executeScript.mockResolvedValueOnce([{ result: null }])
     await expect(longVanWhoisLookup('vnnic.vn', 3000)).rejects.toThrow('chưa hiển thị kết quả WHOIS')
-    expect(remove).toHaveBeenCalledWith(42)
     expect(removeTab).toHaveBeenCalledWith(28)
   })
 
-  it('reports missing results instead of assuming availability, then closes the window', async () => {
-    const { remove, executeScript } = setup()
+  it('reports missing results instead of assuming availability, then closes the tab', async () => {
+    const { removeTab, executeScript } = setup()
     executeScript.mockResolvedValueOnce([{ result: null }])
     await expect(longVanWhoisLookup('vnnic.vn', 3000)).rejects.toThrow('chưa hiển thị kết quả WHOIS')
-    expect(remove).toHaveBeenCalledWith(42)
+    expect(removeTab).toHaveBeenCalledWith(28)
   })
 
   it('shows unavailable fields clearly and escapes text from saved results', () => {

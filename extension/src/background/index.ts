@@ -12,3 +12,6 @@ chrome.contextMenus.onClicked.addListener((info) => {
 })
 
 export {}
+import { registerJobs } from './jobs'
+
+registerJobs()
