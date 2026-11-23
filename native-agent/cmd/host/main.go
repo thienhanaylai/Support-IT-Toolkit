@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -17,6 +18,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"it-support-toolkit/native-agent/internal/security"
@@ -36,6 +38,7 @@ type request struct {
 	Ports      []int  `json:"ports"`
 	TimeoutMs  int    `json:"timeoutMs"`
 	RecordType string `json:"recordType"`
+	Stream     bool   `json:"stream"`
 }
 
 type response map[string]any
@@ -65,7 +68,12 @@ func main() {
 			_ = write(output, response{"success": false, "error": "JSON không hợp lệ"})
 			continue
 		}
-		result := dispatch(req)
+		var result response
+		if req.Stream {
+			result = dispatchStream(req, output)
+		} else {
+			result = dispatch(req)
+		}
 		if err := write(output, result); err != nil {
 			fmt.Fprintln(os.Stderr, "native messaging write error:", err)
 			return
@@ -92,6 +100,52 @@ func write(w *bufio.Writer, data response) error {
 
 func fail(action string, err error) response {
 	return response{"success": false, "action": action, "error": err.Error()}
+}
+
+func dispatchStream(req request, output *bufio.Writer) response {
+	timeout, err := security.Range(req.TimeoutMs, 500, 10000, 3000)
+	if err != nil {
+		return fail(req.Action, err)
+	}
+	var outputLock sync.Mutex
+	progressCount := 0
+	sendProgress := func(text string, completed, total int) {
+		outputLock.Lock()
+		defer outputLock.Unlock()
+		if progressCount >= 100 {
+			return
+		}
+		progressCount++
+		event := response{"type": "progress", "text": trimOutput([]byte(text), 500)}
+		if total > 0 {
+			event["completed"] = completed
+			event["total"] = total
+		}
+		_ = write(output, event)
+	}
+	var result response
+	switch req.Action {
+	case "ping":
+		result, err = pingWithProgress(req, timeout, func(line string) { sendProgress(line, 0, 0) })
+	case "traceroute":
+		result, err = tracerouteWithProgress(req, timeout, func(line string) { sendProgress(line, 0, 0) })
+	case "port_scan":
+		result, err = portScanWithProgress(req, timeout, func(item scanPortResult, completed, total int) {
+			service := item.Service
+			if service == "" {
+				service = "TCP"
+			}
+			sendProgress(fmt.Sprintf("Cổng %d (%s): %s · %d/%d", item.Port, service, item.State, completed, total), completed, total)
+		})
+	default:
+		return dispatch(req)
+	}
+	if err != nil {
+		return fail(req.Action, err)
+	}
+	result["success"] = true
+	result["action"] = req.Action
+	return result
 }
 
 func dispatch(req request) response {
@@ -131,6 +185,44 @@ func dispatch(req request) response {
 func checkedHost(value string) (string, error) { return security.Host(value) }
 
 func ping(req request, timeout int) (response, error) {
+	return pingWithProgress(req, timeout, nil)
+}
+
+func commandOutput(ctx context.Context, program string, args []string, maxOutput int, progress func(string)) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, program, args...)
+	if progress == nil {
+		return cmd.CombinedOutput()
+	}
+	pipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	cmd.Stderr = cmd.Stdout
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	var output bytes.Buffer
+	scanner := bufio.NewScanner(pipe)
+	scanner.Buffer(make([]byte, 4096), 64*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if output.Len() < maxOutput {
+			output.WriteString(line)
+			output.WriteByte('\n')
+		}
+		if line != "" {
+			progress(trimOutput([]byte(line), 500))
+		}
+	}
+	scanErr := scanner.Err()
+	runErr := cmd.Wait()
+	if scanErr != nil {
+		return output.Bytes(), scanErr
+	}
+	return output.Bytes(), runErr
+}
+
+func pingWithProgress(req request, timeout int, progress func(string)) (response, error) {
 	host, err := checkedHost(req.Target)
 	if err != nil {
 		return nil, err
@@ -145,7 +237,7 @@ func ping(req request, timeout int) (response, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(count*(timeout+1000))*time.Millisecond)
 	defer cancel()
 	// -n and -w are fixed flags; host cannot begin with '-'.
-	out, runErr := exec.CommandContext(ctx, "ping", "-n", strconv.Itoa(count), "-w", strconv.Itoa(timeout), host).CombinedOutput()
+	out, runErr := commandOutput(ctx, "ping", []string{"-n", strconv.Itoa(count), "-w", strconv.Itoa(timeout), host}, 8192, progress)
 	if ctx.Err() != nil {
 		return nil, errors.New("ping hết thời gian chờ")
 	}
@@ -189,6 +281,10 @@ func parseTimes(raw string) []int {
 }
 
 func traceroute(req request, timeout int) (response, error) {
+	return tracerouteWithProgress(req, timeout, nil)
+}
+
+func tracerouteWithProgress(req request, timeout int, progress func(string)) (response, error) {
 	host, err := checkedHost(req.Target)
 	if err != nil {
 		return nil, err
@@ -203,7 +299,7 @@ func traceroute(req request, timeout int) (response, error) {
 	// Windows tracert probes 3 times per hop.
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(hops*3*(timeout+500))*time.Millisecond)
 	defer cancel()
-	out, runErr := exec.CommandContext(ctx, "tracert", "-d", "-h", strconv.Itoa(hops), "-w", strconv.Itoa(timeout), host).CombinedOutput()
+	out, runErr := commandOutput(ctx, "tracert", []string{"-d", "-h", strconv.Itoa(hops), "-w", strconv.Itoa(timeout), host}, 24000, progress)
 	raw := trimOutput(out, 24000)
 	if ctx.Err() != nil {
 		return response{"target": host, "raw": raw, "timedOut": true}, nil

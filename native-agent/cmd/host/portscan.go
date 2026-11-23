@@ -6,6 +6,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -42,6 +43,10 @@ func validateScanPorts(ports []int) error {
 }
 
 func portScan(req request, timeout int) (response, error) {
+	return portScanWithProgress(req, timeout, nil)
+}
+
+func portScanWithProgress(req request, timeout int, progress func(scanPortResult, int, int)) (response, error) {
 	host, err := checkedHost(req.Target)
 	if err != nil {
 		return nil, err
@@ -79,6 +84,7 @@ func portScan(req request, timeout int) (response, error) {
 	results := make([]scanPortResult, len(req.Ports))
 	slots := make(chan struct{}, maxConcurrentChecks)
 	var group sync.WaitGroup
+	var completed atomic.Int32
 	for index, port := range req.Ports {
 		group.Add(1)
 		go func(index, port int) {
@@ -89,6 +95,9 @@ func portScan(req request, timeout int) (response, error) {
 				defer func() { <-slots }()
 			case <-ctx.Done():
 				results[index] = item
+				if progress != nil {
+					progress(item, int(completed.Add(1)), len(req.Ports))
+				}
 				return
 			}
 			start := time.Now()
@@ -104,6 +113,9 @@ func portScan(req request, timeout int) (response, error) {
 				}
 			}
 			results[index] = item
+			if progress != nil {
+				progress(item, int(completed.Add(1)), len(req.Ports))
+			}
 		}(index, port)
 	}
 	group.Wait()
