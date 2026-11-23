@@ -24,6 +24,8 @@ const tools: { id: Tool; icon: React.ReactNode; detail: string }[] = [
   { id: 'public_ip', icon: <Zap size={19} />, detail: 'IP Internet nhìn thấy' },
 ]
 const instantTools: Tool[] = ['local_interfaces', 'public_ip', 'vm_info']
+const inputTools = tools.filter((item) => !instantTools.includes(item.id))
+const quickTools = tools.filter((item) => instantTools.includes(item.id))
 
 function App() {
   const [input, setInput] = useState('')
@@ -53,7 +55,7 @@ function App() {
         }
       })
     })
-    getHistory().then((items) => setRecent(items.slice(0, 3)))
+    getHistory().then((items) => setRecent(items.slice(0, 5)))
   }, [])
 
   useEffect(() => {
@@ -89,7 +91,7 @@ function App() {
         setProgress((previous) => [...previous, event].slice(-100))
       })
       setRecord(item)
-      setRecent((prev) => [item, ...prev].slice(0, 3))
+      setRecent((prev) => [item, ...prev].slice(0, 5))
     } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
     finally { setBusy(false) }
   }
@@ -102,6 +104,10 @@ function App() {
   }
 
   return <main className="popup">
+    <header className="popup-header">
+      <div className="popup-brand"><img src="/icons/icon-32.png" width="24" height="24" alt="" /><strong>LongVanSupport Toolkit</strong></div>
+      <a className="popup-settings" href="options.html" target="_blank" rel="noreferrer"><Settings2 size={16} /> Cài đặt</a>
+    </header>
     <div className="main-content">
       {(!tool || !instantTools.includes(tool)) && <div className="input-panel">
         <label htmlFor="target">DOMAIN HOẶC ĐỊA CHỈ IP</label>
@@ -121,18 +127,25 @@ function App() {
         {tool === 'mxtoolbox' && <div className="scan-options">
           <label htmlFor="mx-command">LOẠI KIỂM TRA</label>
           <select id="mx-command" value={mxCommand} onChange={(e) => setMxCommand(e.target.value as MXCommand)}>
-            <option value="dns">DNS/NS (demo example.com)</option>
+            <option value="dns">DNS/NS</option>
             <option value="a">A</option><option value="aaaa">AAAA</option>
             <option value="mx">MX</option><option value="txt">TXT</option><option value="spf">SPF</option>
             <option value="dmarc">DMARC</option><option value="soa">SOA</option>
           </select>
-          <small>Cần API key trong Cài đặt; DNS example.com dùng thử miễn key.</small>
+          <small>Các tên miền khác cần API key trong Cài đặt.</small>
         </div>}
       </div>}
-      <div className="section-title"><span>CHỌN CÔNG CỤ</span></div>
-      <div className="tool-grid">{tools.map((item) => <button type="button" key={item.id} title={`${labels[item.id]} — ${item.detail}`} aria-label={`${labels[item.id]}: ${item.detail}`} disabled={busy} className={`tool ${tool === item.id ? 'selected' : ''}`} onClick={() => { setTool(item.id); setError(''); if (instantTools.includes(item.id)) void run(item.id) }}>
-        <span className="tool-icon">{item.icon}</span><strong>{labels[item.id]}</strong><small>{item.detail}</small>
-      </button>)}</div>
+      <section className="tool-section" aria-labelledby="input-tools-heading">
+        <div className="section-title" id="input-tools-heading"><span>CÔNG CỤ DÙNG DOMAIN / IP</span></div>
+        <div className="tool-grid">{inputTools.map((item) => <button type="button" key={item.id} title={`${labels[item.id]} — ${item.detail}`} aria-label={`${labels[item.id]}: ${item.detail}`} disabled={busy} className={`tool ${tool === item.id ? 'selected' : ''}`} onClick={() => { setTool(item.id); setError('') }}>
+          <span className="tool-icon">{item.icon}</span><strong>{labels[item.id]}</strong><small>{item.detail}</small>
+        </button>)}</div>
+      </section>
+      <section className="tool-section quick-tool-section" aria-label="Công cụ không cần ô nhập">
+        <div className="tool-grid">{quickTools.map((item) => <button type="button" key={item.id} title={`${labels[item.id]} — ${item.detail}`} aria-label={`${labels[item.id]}: ${item.detail}`} disabled={busy} className={`tool ${tool === item.id ? 'selected' : ''}`} onClick={() => { setTool(item.id); setError(''); void run(item.id) }}>
+          <span className="tool-icon">{item.icon}</span><strong>{labels[item.id]}</strong><small>{item.detail}</small>
+        </button>)}</div>
+      </section>
       <div className="source-hint"><span className="hint-icon">{tool && toolRequiresAgent(tool) ? <Monitor size={15} /> : <Globe2 size={15} />}</span>{!tool ? 'Chọn một công cụ để bắt đầu' : tool === 'vm_info' ? 'Chỉ đọc tab chi tiết computing của Portal khi bạn nhấn nút' : toolRequiresAgent(tool) ? 'Chạy từ máy bạn · cần Local Agent' : 'Dùng dịch vụ ngoài · có thể cần cấp quyền host'}</div>
       <div ref={resultRef}>
         {(busy || (error && progress.length > 0)) && tool && <div className="checking" role="status">
@@ -141,15 +154,12 @@ function App() {
           </div>
           {progress.length > 0 && <pre ref={progressRef} className="live-output" aria-label="Kết quả trong quá trình chạy">{progress.map((item) => item.text).join('\n')}</pre>}
         </div>}
-        {error && <div className="error" role="alert">{error.includes('WHOIS .vn') && error.includes('API key')
-          ? <>{error} <a href="options.html" target="_blank" rel="noopener noreferrer">Mở Cài đặt ↗</a> · <a href="https://vnnic.vn/whois-information" target="_blank" rel="noopener noreferrer">Tra cứu thủ công VNNIC ↗</a></>
-          : error}</div>}
+        {error && <div className="error" role="alert">{error}</div>}
         {record && <Result record={record} />}
       </div>
       <div className="section-title history-title"><span>GẦN ĐÂY</span><button className="history-link" onClick={() => { void chrome.windows.getCurrent().then((w) => chrome.sidePanel.open({ windowId: w.id! })).catch(() => chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel.html') })) }}>Xem tất cả <ArrowRight size={13} /></button></div>
       {recent.length ? recent.map((item) => <HistoryItem key={item.id} record={item} selected={record?.id === item.id} onClick={() => showRecord(item)} />) : <p className="empty"><Clock3 size={16} /> Chưa có lượt kiểm tra nào.</p>}
     </div>
-    <footer><span><span className="footer-dot" /> Local-first. Không thu thập dữ liệu.</span><a href="options.html" target="_blank" rel="noreferrer"><Settings2 size={16} /> Cài đặt</a></footer>
   </main>
 }
 createRoot(document.getElementById('root')!).render(<App />)

@@ -52,7 +52,7 @@ export function getCopyText(record: CheckRecord): string {
   if (record.tool === 'IP Public') return publicIP(record.result) ?? ''
   if (record.tool === 'Thông tin VM') return formatVMInfo(record.result)
   if (record.tool === 'MXToolbox') return formatMXToolbox(record.result)
-  if (record.tool === 'WHOIS / RDAP') return formatWHOIS(record.result)
+  if (record.tool === 'WHOIS' || record.tool === 'WHOIS / RDAP') return formatWHOIS(record.result)
   const raw = getRawOutput(record.result)
   if (raw) return raw
   if (record.tool === 'Mạng LAN') return formatLAN(record.result)

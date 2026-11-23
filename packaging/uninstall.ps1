@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 $hostName = 'com.itsupport.toolkit'
 $installDir = Join-Path $env:LOCALAPPDATA 'ITSupportToolkit'
 $manifestPath = Join-Path $installDir "$hostName.json"

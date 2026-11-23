@@ -2,7 +2,21 @@
 
 Extension Chrome/Edge Manifest V3 + Windows Local Agent (Go). Bản hiện tại là **MVP thử nghiệm**, chạy local-first, không có backend, tài khoản hoặc telemetry.
 
-## Yêu cầu
+## Gói cài một lần (Windows x64)
+
+**Gói một file:** mở [`release/ITSupportToolkit-Windows.exe`](release/ITSupportToolkit-Windows.exe), không cần giải nén. Trình cài tự chép extension tới vị trí cố định, cài Agent và đăng ký Native Messaging trong HKCU; máy cài không cần Node.js/Go hay quyền Administrator. Lần cài đầu, chọn **Chrome** hoặc **Edge** để chỉ mở trang quản lý của trình duyệt đó (cũng có thể chọn không mở), bật **Developer mode** → **Load unpacked** thư mục `%LOCALAPPDATA%\ITSupportToolkit\extension` → dán Extension ID vào cửa sổ cài. Có thể đăng ký cả Chrome và Edge bằng hai ID cách nhau dấu phẩy. Gói ZIP cài tay có tại [`release/ITSupportToolkit-Windows.zip`](release/ITSupportToolkit-Windows.zip), chứa `readme.txt` và `Install.cmd`.
+
+**Giới hạn của trình duyệt:** File EXE một click để **khởi động trình cài**, không thể tự động bật extension unpacked trong Chrome/Edge lần đầu trên máy cá nhân. Thao tác **Load unpacked** và nhập ID chỉ cần một lần; lần nâng cấp sau mở EXE mới để dùng lại ID đã đăng ký, rồi tải lại extension. Không di chuyển thư mục extension đã cài. Nếu bản cũ nằm ở thư mục khác, chuyển sang bản mới sẽ tạo ID khác và **không tự chuyển lịch sử/API key**; có thể gỡ bản cũ sau khi kiểm tra bản mới. Xem [`packaging/INSTALL.md`](packaging/INSTALL.md).
+
+**Để nộp lên Microsoft Edge Add-ons**, dùng ZIP riêng [`release/ITSupportToolkit-Edge-Store.zip`](release/ITSupportToolkit-Edge-Store.zip), **không dùng gói Windows**. Xem cấu trúc, cách build và lưu ý Agent tại [`packaging/EDGE_STORE.md`](packaging/EDGE_STORE.md).
+
+Muốn tự tạo lại EXE một file và ZIP từ mã nguồn (máy build cần Node.js/npm và Go):
+
+```powershell
+.\packaging\build-release.ps1 -Force
+```
+
+## Yêu cầu khi cài từ mã nguồn
 
 - Windows 10/11, Chrome hoặc Edge; Node.js 20+, npm; Go 1.22+ nếu muốn tự build Agent.
 - Extension ID dạng 32 chữ `a`–`p` lấy tại `chrome://extensions` hoặc `edge://extensions` sau khi bật **Developer mode**.
@@ -36,7 +50,12 @@ Gỡ extension từ trang quản lý extensions; lịch sử trên trình duyệ
 
 ## Dùng thử
 
-Nhấn icon extension để mở popup. Với công cụ cần domain/IP, nhập địa chỉ rồi nhấn **Kiểm tra**; **Mạng LAN**, **IP Public** và **Thông tin VM** chạy ngay khi nhấn chọn. **Ping** chọn 1–5 lần (mặc định 4), **Traceroute** chọn tối đa 1–30 hop (mặc định 20). Khi đang chạy, Ping/Traceroute hiển thị từng dòng kết quả và Quét Port hiển thị từng cổng hoàn tất; các công cụ khác hiển thị giai đoạn chờ thực tế (không thể đọc từng dòng từ API HTTP). **Quét Port** cho phép chọn 20 cổng TCP phổ biến hoặc nhập tối đa 32 cổng/dải nhỏ, hiển thị mở/đóng/timeout; chạy từ chính máy bạn với tối đa 6 kết nối song song, tối đa 2 giây/cổng. Để nhận tiến độ theo dòng/cổng, **cần cài lại Local Agent** bằng `packaging/install.ps1` với Extension ID hiện tại; Agent cũ chỉ gửi kết quả cuối. Chỉ kiểm tra target mà bạn được phép kiểm tra. MXToolbox, WHOIS/RDAP và IP Public có thể xin quyền truy cập host trước khi gửi truy vấn. Có thể chọn văn bản trên trang rồi dùng menu chuột phải **Kiểm tra bằng IT Support Toolkit**. Nhấn một mục **Gần đây** hoặc trong danh sách lịch sử để mở lại kết quả. **Ping** chỉ hiển thị đầu ra lệnh (không hiện JSON); **Sao chép dòng lệnh** lấy nguyên văn đầu ra của Agent. Các kết quả VM, MXToolbox, WHOIS/RDAP và Quét Port được sao chép dạng văn bản; **IP Public** chỉ sao chép địa chỉ IP. Trang lịch sử (`sidepanel.html`) không có thanh header thương hiệu, lưu tối đa 50 kết quả và xuất báo cáo HTML: các mục mặc định thu gọn, bấm từng mục mới xem chi tiết (dữ liệu được escape). Giao diện tự theo theme sáng/tối của hệ thống; đầu ra lệnh hiển thị nền đen chữ trắng. Options chỉnh timeout 500–10000 ms và lưu lịch sử. Công cụ HTTP / Redirect đã được bỏ; các kết quả cũ trong lịch sử vẫn được giữ lại.
+Nhấn icon extension để mở popup. Với công cụ cần domain/IP, nhập địa chỉ rồi nhấn **Kiểm tra**; **Mạng LAN**, **IP Public** và **Thông tin VM** chạy ngay khi nhấn chọn. **Ping** chọn 1–5 lần (mặc định 4), **Traceroute** chọn tối đa 1–30 hop (mặc định 20). Khi đang chạy, Ping/Traceroute hiển thị từng dòng kết quả và Quét Port hiển thị từng cổng hoàn tất; các công cụ khác hiển thị giai đoạn chờ thực tế (không thể đọc từng dòng từ API HTTP). **Quét Port** cho phép chọn 20 cổng TCP phổ biến hoặc nhập tối đa 32 cổng/dải nhỏ, hiển thị mở/đóng/timeout; chạy từ chính máy bạn với tối đa 6 kết nối song song, tối đa 2 giây/cổng. Để nhận tiến độ theo dòng/cổng, **cần cài lại Local Agent** bằng `packaging/install.ps1` với Extension ID hiện tại; Agent cũ chỉ gửi kết quả cuối. Chỉ kiểm tra target mà bạn được phép kiểm tra. MXToolbox, WHOIS và IP Public có thể xin quyền truy cập host trước khi gửi truy vấn. Có thể chọn văn bản trên trang rồi dùng menu chuột phải **Kiểm tra bằng IT Support Toolkit**. Nhấn một mục **Gần đây** hoặc trong danh sách lịch sử để mở lại kết quả. **Ping** chỉ hiển thị đầu ra lệnh (không hiện JSON); **Sao chép dòng lệnh** lấy nguyên văn đầu ra của Agent. Các kết quả VM, MXToolbox, WHOIS và Quét Port được sao chép dạng văn bản; **IP Public** chỉ sao chép địa chỉ IP. Trang lịch sử (`sidepanel.html`) không có thanh header thương hiệu, lưu tối đa 50 kết quả và xuất báo cáo HTML: các mục mặc định thu gọn, bấm từng mục mới xem chi tiết (dữ liệu được escape). Giao diện tự theo theme sáng/tối của hệ thống; đầu ra lệnh hiển thị nền đen chữ trắng. Options chỉnh timeout 500–10000 ms và lưu lịch sử. Công cụ HTTP / Redirect đã được bỏ; các kết quả cũ trong lịch sử vẫn được giữ lại.
+
+Popup đặt các công cụ dùng domain/IP gần ô nhập; Thông tin VM, Mạng LAN và IP Public ở hàng riêng bên dưới và chạy ngay khi chọn.
+Mục **Gần đây** trong popup hiển thị tối đa 5 lượt kiểm tra; lịch sử đầy đủ vẫn chứa tối đa 50 lượt.
+Popup rộng 660 px để đầu ra Mạng LAN dễ đọc hơn. Thanh cuộn trong kết quả được ẩn nhưng vẫn cuộn được bằng chuột, bàn di chuột hoặc bàn phím khi đặt focus vào đầu ra.
+Header nhỏ ở đầu popup ghi **LongVanSupport Toolkit** và chứa nút **Cài đặt**; popup không còn footer.
 
 ### Thông tin VM từ Portal
 
@@ -47,13 +66,13 @@ File HTML Portal mẫu tại thư mục gốc chỉ dùng để xác nhận cấ
 ### MXToolbox và WHOIS
 
 - **MXToolbox:** dùng [API chính thức](https://mxtoolbox.com/api/api-reference) cho DNS, A, AAAA, MX, TXT, SPF, DMARC, SOA. Chỉ hiển thị loại tra cứu/domain, DNS server, thời gian và các trường Type, Domain Name, IP Address, TTL của bản ghi (nếu API cung cấp). Nhập API key (UUID) trong Cài đặt. API key lưu tại `chrome.storage.local` **không mã hóa**, chỉ gửi trong header tới MXToolbox khi bạn chạy công cụ; không ghi vào lịch sử hoặc báo cáo. API có hạn mức theo tài khoản. Không có key chỉ được thử lệnh DNS với `example.com` qua endpoint demo của MXToolbox.
-- **WHOIS/RDAP:** tự tách tên miền đăng ký khỏi host bằng Public Suffix List (ví dụ `portal.longvan.vn` → `longvan.vn`, `www.example.co.uk` → `example.co.uk`). `.com`/`.net` gọi trực tiếp registry RDAP; các TLD khác tra [danh mục bootstrap IANA](https://data.iana.org/rdap/dns.json). Riêng **`.vn` không có RDAP công khai trong danh mục IANA**: nhập **BKNS WHOIS API key của bạn** trong Cài đặt để tra qua [API BKNS](https://whois.bkns.vn/en/docs) có dữ liệu `.vn` từ VNNIC. Key lưu cục bộ **không mã hóa**, chỉ gửi đến `whois.bkns.vn` khi bạn yêu cầu tra `.vn`; không ghi vào lịch sử/báo cáo. Không nhúng key demo dùng chung. Không có key thì tra thủ công qua [VNNIC](https://vnnic.vn/whois-information) (có thể cần CAPTCHA). Chỉ giữ tên miền, nhà đăng ký, tình trạng, trạng thái, DNSSEC, nameserver, các mốc thời gian; **không lưu dữ liệu registrant hay phản hồi WHOIS thô**. Sẽ xin quyền host khi cần.
+- **WHOIS:** tự tách tên miền đăng ký khỏi host bằng Public Suffix List (ví dụ `portal.longvan.vn` → `longvan.vn`). Khi bạn nhấn **Kiểm tra**, extension xin quyền `longvan.net`, mở `https://longvan.net/domain/whois?ten_mien=<tên-miền>` trong cửa sổ trình duyệt thu nhỏ (không thêm tab vào cửa sổ đang dùng), chờ trang hiển thị kết quả rồi chỉ đọc tên miền, nhà đăng ký, ngày đăng ký/hết hạn, trạng thái, nameserver và DNSSEC; sau đó đóng cửa sổ tạm. Không cần BKNS key hoặc mở VNNIC, không gọi RDAP. **Không lưu thông tin chủ thể, registrant hay HTML/WHOIS thô.** Long Vân là nguồn tổng hợp bên ngoài, không phải registry có thẩm quyền; dữ liệu có thể chậm cập nhật. Nếu trang đổi giao diện, cần xác minh hoặc chưa trả kết quả, extension báo lỗi chứ không suy đoán tên miền còn trống. Trang Long Vân có thể tải nội dung/analytics của chính họ khi cửa sổ tạm mở. Việc thu nhỏ có thể ảnh hưởng tốc độ tải tùy trình duyệt.
 
 | Công cụ | Nguồn | Ghi chú |
 |---|---|---|
 | Ping, traceroute, TCP port, Quét Port, TLS, LAN | Windows Local Agent | Traceroute dùng `tracert -d`, ping dùng `ping`; Quét Port chỉ thử kết nối TCP, không quét UDP; Ping hiển thị kết quả lệnh thay vì JSON. |
 | IP Public | ipify | Truy vấn gửi ra dịch vụ bên ngoài. |
-| MXToolbox / WHOIS | API MXToolbox / RDAP registry / BKNS (.vn) | Truy vấn gửi ra ngoài. MXToolbox cần API key cho domain bất kỳ; `.vn` cần BKNS API key để tra tự động. |
+| MXToolbox / WHOIS | API MXToolbox / trang Long Vân | MXToolbox cần API key cho domain bất kỳ; WHOIS đọc kết quả Long Vân trong cửa sổ thu nhỏ sau khi xin quyền host. |
 | Thông tin VM | Tab Portal đang mở | Đọc đúng chín trường trong DOM khi người dùng bấm nút; không cần Agent. |
 
 SSL/TLS **cơ bản** được kiểm tra bởi Agent từ máy người dùng; browser API không cho extension đọc certificate chain của trang tùy ý. TLS result bao gồm xác minh chain/hostname, thời hạn và TLS version. IP LAN lấy từ Go network interfaces; gateway và DNS có trong trường `ipconfig` (văn bản theo ngôn ngữ Windows), chưa được tách thành trường cấu trúc.

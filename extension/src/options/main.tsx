@@ -23,12 +23,12 @@ function App() {
       <small>Giới hạn từ 500 đến 10.000 ms.</small>
       <label htmlFor="mx-key">MXTOOLBOX API KEY (KHÔNG BẮT BUỘC)</label><input id="mx-key" type="password" autoComplete="off" placeholder="UUID từ tài khoản MXToolbox" value={settings.mxtoolboxApiKey} onChange={(e) => { setSaved(false); setSettings({ ...settings, mxtoolboxApiKey: e.target.value }) }} />
       <small>Key lưu trong chrome.storage.local (không mã hóa), chỉ gửi tới API chính thức của MXToolbox khi bạn kiểm tra. Không đưa vào lịch sử hoặc báo cáo. <a className="settings-link" href="https://mxtoolbox.com/api/api-reference" target="_blank" rel="noreferrer">Thông tin API ↗</a></small>
-      <label htmlFor="bkns-key">BKNS WHOIS API KEY (CHO TÊN MIỀN .VN)</label><input id="bkns-key" type="password" autoComplete="off" placeholder="Nhập key của bạn để tra cứu .vn" value={settings.bknsApiKey} onChange={(e) => { setSaved(false); setSettings({ ...settings, bknsApiKey: e.target.value }) }} />
-      <small>Key lưu trong chrome.storage.local (không mã hóa), chỉ gửi tới whois.bkns.vn khi bạn tra cứu .vn; không lưu vào lịch sử hoặc báo cáo. Không dùng key demo chung trong bản phát hành. <a className="settings-link" href="https://whois.bkns.vn/en/docs" target="_blank" rel="noreferrer">Tài liệu &amp; cách lấy key ↗</a></small>
+      {settings.bknsApiKey && <><label htmlFor="bkns-key">BKNS KEY CŨ (KHÔNG CÒN SỬ DỤNG)</label><input id="bkns-key" type="password" autoComplete="off" value={settings.bknsApiKey} readOnly />
+        <small>WHOIS hiện dùng trang Long Vân. Bạn có thể <button type="button" onClick={() => { setSaved(false); setSettings({ ...settings, bknsApiKey: '' }) }}>xóa key BKNS cũ</button> rồi nhấn Lưu cài đặt.</small></>}
       <label className="checkbox"><input type="checkbox" checked={settings.saveHistory} onChange={(e) => { setSaved(false); setSettings({ ...settings, saveHistory: e.target.checked }) }} /> Lưu lịch sử kiểm tra trên thiết bị</label>
       <button className="primary" type="submit">Lưu cài đặt</button>{saved && <p className="success">Đã lưu cài đặt.</p>}
     </form>
-    <p className="privacy">Không có telemetry. MXToolbox, WHOIS/RDAP (.vn qua BKNS) và IP Public gửi truy vấn đến dịch vụ bên ngoài; các công cụ Local Agent chỉ chạy sau khi bạn nhấn kiểm tra.</p>
+    <p className="privacy">Không có telemetry. MXToolbox, IP Public và WHOIS Long Vân kết nối ra ngoài khi bạn yêu cầu. WHOIS mở trang Long Vân trong cửa sổ thu nhỏ, chỉ trích xuất thông tin kỹ thuật rồi tự đóng cửa sổ tạm.</p>
   </div></main>
 }
 createRoot(document.getElementById('root')!).render(<App />)

@@ -2,6 +2,7 @@ node_modules/
 extension/dist/
 extension/*.tsbuildinfo
 native-agent/bin/
+release/
 *.exe
 *.log
 # Saved Portal pages can contain internal data and session state.

@@ -1,9 +1,10 @@
 import { nativeRequest, type NativeProgress } from './nativeHost'
-import { domainOnly, mxToolboxLookup, registrationDomain, whoisLookup, type MXCommand } from './domainLookup'
+import { domainOnly, mxToolboxLookup, registrationDomain, type MXCommand } from './domainLookup'
 import { grantHost } from './hostAccess'
 import { publicIP } from './formatRecord'
 import { commonPorts } from './scanPorts'
 import { getVMInfoFromTab } from './vmInfo'
+import { longVanWhoisLookup } from './longVanWhois'
 import { getSettings, saveRecord, type CheckRecord } from './storage'
 import { parseInput, safeMaxHops, safePingCount, safePort, safeTimeout } from './validation'
 
@@ -12,7 +13,7 @@ export const labels: Record<Tool, string> = {
   ping: 'Ping', traceroute: 'Traceroute', tcp_check: 'TCP Port', port_scan: 'Quét Port',
   tls_check: 'SSL / TLS',
   local_interfaces: 'Mạng LAN', public_ip: 'IP Public', vm_info: 'Thông tin VM',
-  mxtoolbox: 'MXToolbox', whois: 'WHOIS / RDAP',
+  mxtoolbox: 'MXToolbox', whois: 'WHOIS',
 }
 const external = new Set<Tool>(['public_ip', 'mxtoolbox', 'whois'])
 const browser = new Set<Tool>(['vm_info', ...external])
@@ -45,8 +46,8 @@ export async function runCheck(tool: Tool, input: string, portInput: number, sca
     source = 'Dịch vụ bên ngoài · MXToolbox'
   } else if (tool === 'whois') {
     target = registrationDomain(host)
-    result = await whoisLookup(target, timeoutMs, settings.bknsApiKey, (text) => onProgress?.({ text }))
-    source = target.endsWith('.vn') ? 'Dịch vụ bên ngoài · BKNS WHOIS' : 'Dịch vụ bên ngoài · RDAP'
+    result = await longVanWhoisLookup(target, timeoutMs, (text) => onProgress?.({ text }))
+    source = 'Trang WHOIS Long Vân'
   } else if (tool === 'public_ip') {
     onProgress?.({ text: 'Đang xin quyền truy cập ipify...' })
     result = await fetchJSON('https://api.ipify.org?format=json', timeoutMs, onProgress)

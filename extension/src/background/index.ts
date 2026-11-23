@@ -7,6 +7,8 @@ chrome.contextMenus.onClicked.addListener((info) => {
   if (info.menuItemId !== 'check-selection' || !info.selectionText) return
   const selected = info.selectionText.trim().slice(0, 2048)
   chrome.storage.session.set({ selectedTarget: selected }).then(() => chrome.windows.create({
-    url: chrome.runtime.getURL('popup.html'), type: 'popup', width: 480, height: 680,
+    url: chrome.runtime.getURL('popup.html'), type: 'popup', width: 680, height: 720,
   }))
 })
+
+export {}

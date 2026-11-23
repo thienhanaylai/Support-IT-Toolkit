@@ -1,0 +1,18 @@
+# Gói tải lên Microsoft Edge Add-ons
+
+Tải lên **`release/ITSupportToolkit-Edge-Store.zip`**, không dùng `ITSupportToolkit-Windows.zip` hoặc `.exe`. Trong ZIP dành cho Edge, `manifest.json`, `readme.txt`, `popup.html`, `background.js`, `assets/` và `icons/` nằm **ngay ở gốc**; không có thư mục `extension/`, mã nguồn, installer hay Agent. Mở `readme.txt` để xem hướng dẫn ngắn, không cần giải nén trước khi tải ZIP lên.
+
+Tạo lại từ mã nguồn trên máy có Node.js/npm:
+
+```powershell
+.\packaging\build-edge-store.ps1 -Force
+```
+
+Script build bản production, kiểm tra các đường dẫn cơ bản trong manifest, xác nhận từng file extension khớp `extension/dist` và `readme.txt` khớp `packaging/readme.txt`. Đăng nhập [Microsoft Partner Center](https://partner.microsoft.com/dashboard/microsoftedge/public/login), tạo extension mới rồi tải ZIP này lên ở mục **Upload package (.zip file)** theo [hướng dẫn của Microsoft](https://learn.microsoft.com/en-us/microsoft-edge/extensions/publish/publish-extension). Cần hoàn thiện phần mô tả, logo, hình ảnh, thông tin quyền và chính sách quyền riêng tư theo yêu cầu tại thời điểm nộp; tải ZIP lên không đồng nghĩa đã qua xét duyệt.
+
+**Lưu ý khi phát hành:**
+
+- Manifest hiện có tên **IT Support Toolkit**, phiên bản **0.1.0**. Cần tăng `version` trong `extension/public/manifest.json` cho mỗi lần cập nhật đã phát hành; nếu muốn đổi tên hiển thị trên chợ, sửa `name` trước khi tạo ZIP. Nút header trong popup hiện ghi **LongVanSupport Toolkit**.
+- ZIP của chợ chỉ gồm extension. Ping, Traceroute, TCP Port, Quét Port, SSL/TLS và Mạng LAN vẫn cần **Windows Local Agent** cài riêng trên máy người dùng. Native Messaging phải đăng ký với **Extension ID do Edge Add-ons cấp**; ID đó có thể khác bản Load unpacked đang dùng. Khi cần thêm ID của bản trên chợ vào máy đã cài Agent, chạy `Install.cmd` từ gói Windows ZIP và nhập **cả ID cũ lẫn ID mới** cách nhau bởi dấu phẩy. EXE trên máy đã cài sẽ tự dùng lại ID cũ nên không tự thêm ID mới. Không tự chuyển lịch sử/cài đặt giữa hai ID.
+- WHOIS, MXToolbox và IP Public phụ thuộc dịch vụ bên ngoài và quyền host khi người dùng kích hoạt. Quyền `optional_host_permissions` rộng trong manifest có thể cần giải trình khi Microsoft xét duyệt.
+- Chưa kiểm tra việc nộp gói trên tài khoản Partner Center hoặc quá trình xét duyệt của Microsoft. Không đưa khóa API, dữ liệu Portal hoặc thông tin nội bộ vào nội dung niêm yết.

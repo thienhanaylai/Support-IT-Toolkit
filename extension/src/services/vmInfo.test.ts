@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { extractVMInfoFromDOM, formatVMInfo, isPortalVMUrl } from './vmInfo'
-import { domainOnly, formatMXToolbox, mxToolboxLookup, rdapURLFromBootstrap, registrationDomain, summarizeBknsWhois, summarizeRDAP, whoisLookup } from './domainLookup'
+import { domainOnly, formatMXToolbox, mxToolboxLookup, registrationDomain } from './domainLookup'
 import { getCopyText } from './formatRecord'
 import { nativeRequest } from './nativeHost'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -68,19 +68,6 @@ describe('external domain lookups', () => {
     expect(registrationDomain('www.example.co.uk')).toBe('example.co.uk')
     expect(registrationDomain('longvan.vn')).toBe('longvan.vn')
   })
-  it('keeps only non-personal RDAP summary fields', () => {
-    const summary = summarizeRDAP({
-      ldhName: 'example.com', status: ['active'],
-      entities: [
-        { roles: ['registrant'], vcardArray: ['vcard', [['fn', {}, 'text', 'PRIVATE PERSON']]] },
-        { roles: ['registrar'], vcardArray: ['vcard', [['fn', {}, 'text', 'Example Registrar']]] },
-      ],
-      nameservers: [{ ldhName: 'ns1.example.com' }],
-      events: [{ eventAction: 'registration', eventDate: '2000-01-01T00:00:00Z' }],
-    })
-    expect(summary).toMatchObject({ domain: 'example.com', registrar: 'Example Registrar', nameServers: ['ns1.example.com'] })
-    expect(JSON.stringify(summary)).not.toContain('PRIVATE PERSON')
-  })
   it('uses the official MXToolbox demo endpoint for DNS example.com', async () => {
     vi.stubGlobal('chrome', { permissions: { contains: async () => true } })
     const fetchMock = vi.fn(async (_url: string) => new Response(JSON.stringify({
@@ -98,54 +85,6 @@ describe('external domain lookups', () => {
     expect(copy).toContain('DNS server: ns.example.com\nThời gian: 746 ms')
     expect(copy).not.toMatch(/GREEN|PRIVATE|CẢNH BÁO|DNS Record Published/)
     expect(formatMXToolbox({ ...result, records: [{ Type: 'NS', 'Domain Name': 'ns.example.com', Status: '[GREEN]' }], warnings: ['noisy'] })).not.toContain('GREEN')
-  })
-  it('looks up .net on the registry directly without opaque RDAP redirects', async () => {
-    const origins: string[] = []
-    vi.stubGlobal('chrome', { permissions: { contains: async ({ origins: requested }: { origins: string[] }) => { origins.push(...requested); return true } } })
-    const fetchMock = vi.fn(async (_url: string) =>
-      new Response(JSON.stringify({ ldhName: 'LONGVAN.NET', nameservers: [{ ldhName: 'NS.EXAMPLE.COM' }] }), { status: 200 }))
-    vi.stubGlobal('fetch', fetchMock)
-    const result = await whoisLookup('longvan.net', 3000)
-    expect(result).toMatchObject({ domain: 'LONGVAN.NET', source: 'rdap.verisign.com' })
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://rdap.verisign.com/net/v1/domain/longvan.net')
-    expect(origins).toEqual(['https://rdap.verisign.com/*'])
-    expect(getCopyText({ id: 'rdap', at: '', tool: 'WHOIS / RDAP', target: 'longvan.net', source: 'RDAP', status: 'ok', result })).toContain('Tên miền: LONGVAN.NET')
-  })
-  it('selects an HTTPS RDAP registry for other TLDs from the IANA bootstrap', () => {
-    const bootstrap = { services: [
-      [['test'], ['http://insecure.example/rdap/', 'https://rdap.registry.example/rdap/']],
-      [['org'], ['https://rdap.other.example/rdap/']],
-    ] }
-    expect(rdapURLFromBootstrap('example.test', bootstrap)).toBe('https://rdap.registry.example/rdap/domain/example.test')
-    expect(rdapURLFromBootstrap('example.org', bootstrap)).toBe('https://rdap.other.example/rdap/domain/example.org')
-    expect(rdapURLFromBootstrap('example.invalid', bootstrap)).toBeNull()
-  })
-  it('explains the .vn API-key requirement without attempting unlicensed access', async () => {
-    await expect(whoisLookup('longvan.vn', 3000)).rejects.toThrow('VNNIC')
-  })
-  it('queries .vn via configured BKNS WHOIS key and saves no registrant or key', async () => {
-    const origins: string[] = []
-    vi.stubGlobal('chrome', { permissions: { contains: async ({ origins: requested }: { origins: string[] }) => { origins.push(...requested); return true } } })
-    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => new Response(JSON.stringify({
-      domain: 'longvan.vn', status: 'registered',
-      data: { registrant: { name: 'PRIVATE PERSON' }, registrar: { name: 'Nhà đăng ký' },
-        nameservers: ['ns1.example.vn'], dates: { created: '2010-01-01', expiry: '2030-01-01' },
-        domainStatus: ['active'], dnssec: true },
-    }), { status: 200 }))
-    vi.stubGlobal('fetch', fetchMock)
-    const result = await whoisLookup(registrationDomain('portal.longvan.vn'), 3000, 'my-private-key')
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://whois.bkns.vn/api/v2/whois?domain=longvan.vn')
-    expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({ 'X-API-Key': 'my-private-key' })
-    expect(origins).toEqual(['https://whois.bkns.vn/*'])
-    expect(result).toMatchObject({ domain: 'longvan.vn', registrar: 'Nhà đăng ký', registrationStatus: 'registered', dnssec: true })
-    expect(JSON.stringify(result)).not.toMatch(/PRIVATE PERSON|my-private-key/)
-    expect(getCopyText({ id: 'vn', at: '', tool: 'WHOIS / RDAP', target: 'longvan.vn', source: 'BKNS WHOIS', status: 'ok', result })).toContain('Tình trạng đăng ký: registered')
-  })
-  it('reports unregistered domains without inventing a registrar', () => {
-    expect(summarizeBknsWhois({ domain: 'free.vn', status: 'available' }, 'free.vn')).toMatchObject({
-      registrationStatus: 'available', registrar: null, nameServers: [],
-    })
-    expect(() => summarizeBknsWhois({ domain: 'other.vn', status: 'registered' }, 'free.vn')).toThrow('không đúng tên miền')
   })
   it('explains that an installed older Agent does not support port scans', async () => {
     vi.stubGlobal('chrome', { runtime: { sendNativeMessage: async () => ({ success: false, error: 'action không được hỗ trợ' }) } })
@@ -173,6 +112,8 @@ describe('external domain lookups', () => {
     }
     const html = renderToStaticMarkup(createElement(Result, { record }))
     expect(html).toContain('Windows IP Configuration')
+    expect(html).toContain('tabindex="0"')
+    expect(html).toContain('cuộn để xem thêm')
     expect(html).toContain('Máy người dùng')
     expect(html).not.toContain('&quot;adapters&quot;')
     expect(html).not.toContain('Adapter: Wi-Fi')
