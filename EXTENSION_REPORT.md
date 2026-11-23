@@ -9,10 +9,10 @@
 | Công cụ | Khả năng | Nguồn / mức kiểm chứng |
 |---|---|---|
 | Thông tin VM | Đọc tab chi tiết computing của Portal **khi người dùng bấm nút**; xuất đúng 9 trường: Link VM, Tên computing, Nhóm ảo hóa, Nhóm, Tên VM, VMID, VMP, Host, ResourcePool. Không lấy ô chỉnh sửa ẩn. | DOM của tab Portal; đã đối chiếu với HTML mẫu thực tế và test bộ trích xuất. Chưa thử trên phiên Portal đang đăng nhập trong Chrome/Edge. |
-| Ping | Chọn 1–5 lần ping (mặc định 4); hiển thị đầu ra lệnh, không hiện khối JSON. | Local Agent; đã thử với địa chỉ loopback trên Windows; có test tham số gửi tới Agent. |
-| Traceroute | Chọn tối đa 1–30 hop (mặc định 20); xem các hop và đầu ra `tracert -d` trên Windows. | Local Agent; đã thử với loopback; có test tham số gửi tới Agent. |
+| Ping | Chọn 1–5 lần ping (mặc định 4); hiển thị từng dòng khi đang chạy và kết quả cuối không có JSON. | Local Agent; đã thử luồng nhiều thông báo với loopback trên Windows và test tham số gửi tới Agent. |
+| Traceroute | Chọn tối đa 1–30 hop (mặc định 20); hiện từng dòng/hop của `tracert -d` trên Windows. | Local Agent; đã thử với loopback; có test tham số gửi tới Agent. |
 | TCP Port | Kiểm tra kết nối tới một cổng TCP và trả trạng thái mở/đóng/timeout. | Local Agent; đã thử qua Agent và test Go với cổng loopback. |
-| Quét Port | Quét 20 cổng phổ biến hoặc danh sách tối đa 32 cổng; tối đa 6 kết nối đồng thời, 2 giây mỗi cổng. | Local Agent; đã thử qua Agent và test Go với loopback. Máy dùng Agent cũ phải cài lại Agent. |
+| Quét Port | Quét 20 cổng phổ biến hoặc danh sách tối đa 32 cổng; hiện từng cổng hoàn tất, tối đa 6 kết nối đồng thời, 2 giây mỗi cổng. | Local Agent; đã thử luồng nhiều thông báo và test Go với loopback. Máy dùng Agent cũ phải cài lại Agent để có tiến độ. |
 | SSL / TLS | Kiểm tra phiên bản TLS, chứng chỉ, thời hạn và kết quả xác minh chain/hostname. | Local Agent; đã thử kết nối TLS tới tên miền công khai. |
 | MXToolbox | Tra DNS/NS, A, AAAA, MX, TXT, SPF, DMARC, SOA; hiển thị loại tra cứu/domain, DNS server, thời gian và các trường Type, Domain Name, IP Address, TTL nếu có. | API MXToolbox; endpoint demo DNS `example.com` trả dữ liệu và có test lọc kết quả. Truy vấn domain khác cần API key riêng; **chưa thử với key của người dùng**. |
 | WHOIS / RDAP | Tách tên miền đăng ký khỏi hostname (ví dụ `portal.example.vn` → `example.vn`), lấy nhà đăng ký, ngày, trạng thái, nameserver, DNSSEC khi nguồn cung cấp. `.com`/`.net` dùng RDAP registry; TLD khác tra danh mục IANA. `.vn` dùng BKNS WHOIS với API key. | Đã kiểm tra các endpoint RDAP công khai và test adapter BKNS bằng phản hồi mô phỏng. **Chưa thử BKNS bằng key của người dùng hoặc luồng xin quyền trên Chrome/Edge**. Không có key BKNS thì tra `.vn` thủ công tại VNNIC. |
@@ -32,7 +32,7 @@
 ## Kết quả rà soát
 
 - `npm run build`: **đạt**.
-- `npm run test`: **28/28 bài test đạt**.
+- `npm run test`: **31/31 bài test đạt** (bao gồm luồng nhiều thông báo Native Messaging).
 - `npm audit --audit-level=moderate`: **0 lỗ hổng được báo** tại thời điểm rà soát.
 - `go test ./...`: **đạt**.
 - Thử trực tiếp Agent đã cài với Ping, Traceroute, TCP Port, Quét Port, SSL/TLS và Mạng LAN: **đều có phản hồi thành công**. Các phép thử mạng nội bộ dùng loopback; TLS dùng một tên miền công khai. Không xuất dữ liệu mạng nội bộ vào báo cáo này.
@@ -51,4 +51,4 @@
 
 ## Áp dụng phiên bản mới
 
-Chạy `npm ci` rồi `npm run build` trong `extension/` khi dựng từ máy mới. Với bản đã cài, tải lại extension ở `chrome://extensions` hoặc `edge://extensions` để lấy `extension/dist` mới. **Chỉ cần cài lại Local Agent** nếu mã Agent thay đổi hoặc máy đang dùng Agent cũ không hỗ trợ Quét Port; cập nhật giao diện/WHOIS không cần cài lại Agent.
+Chạy `npm ci` rồi `npm run build` trong `extension/` khi dựng từ máy mới. Với bản đã cài, tải lại extension ở `chrome://extensions` hoặc `edge://extensions` để lấy `extension/dist` mới. **Bản cập nhật hiển thị theo dòng/cổng yêu cầu cài lại Local Agent** bằng `packaging/install.ps1` với Extension ID hiện tại. Agent cũ vẫn trả kết quả cuối nhưng không phát tiến độ.

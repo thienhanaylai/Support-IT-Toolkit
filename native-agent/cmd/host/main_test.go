@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"net"
+	"runtime"
 	"testing"
 )
 
@@ -80,5 +81,59 @@ func TestPortScanLocalListener(t *testing.T) {
 	rows, ok := result["ports"].([]scanPortResult)
 	if !ok || len(rows) != 1 || rows[0].State != "open" {
 		t.Fatalf("unexpected scan rows: %v", result["ports"])
+	}
+}
+
+func TestStreamPortScanSendsProgressBeforeFinalResult(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	port := listener.Addr().(*net.TCPAddr).Port
+	var frames bytes.Buffer
+	writer := bufio.NewWriter(&frames)
+	result := dispatchStream(request{Action: "port_scan", Target: "127.0.0.1", Ports: []int{port, 1}, TimeoutMs: 500}, writer)
+	if err := write(writer, result); err != nil {
+		t.Fatal(err)
+	}
+	reader := bytes.NewReader(frames.Bytes())
+	var messages []response
+	for reader.Len() > 0 {
+		var size uint32
+		if err := binary.Read(reader, binary.LittleEndian, &size); err != nil {
+			t.Fatal(err)
+		}
+		body := make([]byte, size)
+		if _, err := reader.Read(body); err != nil {
+			t.Fatal(err)
+		}
+		var message response
+		if err := json.Unmarshal(body, &message); err != nil {
+			t.Fatal(err)
+		}
+		messages = append(messages, message)
+	}
+	if len(messages) != 3 || messages[0]["type"] != "progress" || messages[1]["type"] != "progress" ||
+		messages[2]["success"] != true || messages[2]["openCount"] != float64(1) {
+		t.Fatalf("unexpected stream sequence: %v", messages)
+	}
+	if messages[1]["completed"] != float64(2) || messages[1]["total"] != float64(2) {
+		t.Fatalf("missing scan progress: %v", messages[1])
+	}
+}
+
+func TestStreamPingEmitsLinesAndFinalResult(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows ping flags")
+	}
+	var frames bytes.Buffer
+	writer := bufio.NewWriter(&frames)
+	result := dispatchStream(request{Action: "ping", Target: "127.0.0.1", Count: 1, TimeoutMs: 1000}, writer)
+	if result["success"] != true || result["raw"] == "" {
+		t.Fatalf("ping failed: %v", result)
+	}
+	if frames.Len() == 0 {
+		t.Fatal("ping did not emit any progress before final result")
 	}
 }

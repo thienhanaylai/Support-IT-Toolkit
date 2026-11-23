@@ -8,6 +8,7 @@ import { getHistory, type CheckRecord } from '../services/storage'
 import { commonPorts, parseScanPorts } from '../services/scanPorts'
 import { domainOnly, type MXCommand } from '../services/domainLookup'
 import { parseInput } from '../services/validation'
+import type { NativeProgress } from '../services/nativeHost'
 import '../style.css'
 
 const tools: { id: Tool; icon: React.ReactNode; detail: string }[] = [
@@ -34,10 +35,12 @@ function App() {
   const [mxCommand, setMxCommand] = useState<MXCommand>('dns')
   const [tool, setTool] = useState<Tool | null>(null)
   const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState<NativeProgress[]>([])
   const [error, setError] = useState('')
   const [record, setRecord] = useState<CheckRecord | null>(null)
   const [recent, setRecent] = useState<CheckRecord[]>([])
   const resultRef = useRef<HTMLDivElement>(null)
+  const progressRef = useRef<HTMLPreElement>(null)
 
   useEffect(() => {
     chrome.storage.session.get('selectedTarget').then(({ selectedTarget }) => {
@@ -58,11 +61,15 @@ function App() {
       resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
   }, [busy, record, error])
+  useEffect(() => {
+    progressRef.current?.scrollTo({ top: progressRef.current.scrollHeight })
+  }, [progress])
 
   async function run(selectedTool: Tool | null = tool) {
     if (busy) return
     setError('')
     setRecord(null)
+    setProgress([])
     if (!selectedTool) {
       setError('Hãy chọn một công cụ trước khi kiểm tra')
       return
@@ -78,7 +85,9 @@ function App() {
     }
     setBusy(true)
     try {
-      const item = await runCheck(selectedTool, input, port, scanPorts, mxCommand, pingCount, maxHops)
+      const item = await runCheck(selectedTool, input, port, scanPorts, mxCommand, pingCount, maxHops, (event) => {
+        setProgress((previous) => [...previous, event].slice(-100))
+      })
       setRecord(item)
       setRecent((prev) => [item, ...prev].slice(0, 3))
     } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
@@ -126,7 +135,12 @@ function App() {
       </button>)}</div>
       <div className="source-hint"><span className="hint-icon">{tool && toolRequiresAgent(tool) ? <Monitor size={15} /> : <Globe2 size={15} />}</span>{!tool ? 'Chọn một công cụ để bắt đầu' : tool === 'vm_info' ? 'Chỉ đọc tab chi tiết computing của Portal khi bạn nhấn nút' : toolRequiresAgent(tool) ? 'Chạy từ máy bạn · cần Local Agent' : 'Dùng dịch vụ ngoài · có thể cần cấp quyền host'}</div>
       <div ref={resultRef}>
-        {busy && tool && <div className="checking" role="status">Đang kiểm tra {labels[tool]}...</div>}
+        {(busy || (error && progress.length > 0)) && tool && <div className="checking" role="status">
+          <div>{busy ? `Đang kiểm tra ${labels[tool]}` : `Tiến trình ${labels[tool]} đã dừng`}
+            {busy && progress.at(-1)?.total ? ` · ${progress.at(-1)?.completed}/${progress.at(-1)?.total} cổng` : ''}
+          </div>
+          {progress.length > 0 && <pre ref={progressRef} className="live-output" aria-label="Kết quả trong quá trình chạy">{progress.map((item) => item.text).join('\n')}</pre>}
+        </div>}
         {error && <div className="error" role="alert">{error.includes('WHOIS .vn') && error.includes('API key')
           ? <>{error} <a href="options.html" target="_blank" rel="noopener noreferrer">Mở Cài đặt ↗</a> · <a href="https://vnnic.vn/whois-information" target="_blank" rel="noopener noreferrer">Tra cứu thủ công VNNIC ↗</a></>
           : error}</div>}

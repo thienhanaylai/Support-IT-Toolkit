@@ -48,7 +48,7 @@ export function mxRecordList(data: Record<string, unknown>): string[] {
   return [...new Set(fromRows)]
 }
 
-export async function mxToolboxLookup(domain: string, command: MXCommand, apiKey: string, timeoutMs: number): Promise<Record<string, unknown>> {
+export async function mxToolboxLookup(domain: string, command: MXCommand, apiKey: string, timeoutMs: number, onProgress?: (text: string) => void): Promise<Record<string, unknown>> {
   if (!mxCommands.includes(command)) throw new Error('Loại truy vấn MXToolbox không hợp lệ')
   const key = apiKey.trim()
   if (key && !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(key)) {
@@ -60,7 +60,9 @@ export async function mxToolboxLookup(domain: string, command: MXCommand, apiKey
   const url = key
     ? `https://api.mxtoolbox.com/api/v1/Lookup/${command}/?argument=${encodeURIComponent(domain)}`
     : 'https://mxtoolbox.com/api/v1/lookup/dns/example.com'
+  onProgress?.('Đang kiểm tra quyền truy cập MXToolbox...')
   await grantHost(url)
+  onProgress?.('Đang chờ kết quả MXToolbox...')
   const response = await fetch(url, {
     headers: key ? { Authorization: key, Accept: 'application/json' } : { Accept: 'application/json' },
     signal: AbortSignal.timeout(Math.max(5000, timeoutMs)),
@@ -147,13 +149,15 @@ export function summarizeBknsWhois(data: RDAPlike, domain: string): Record<strin
   }
 }
 
-export async function bknsWhoisLookup(domain: string, apiKey: string, timeoutMs: number): Promise<Record<string, unknown>> {
+export async function bknsWhoisLookup(domain: string, apiKey: string, timeoutMs: number, onProgress?: (text: string) => void): Promise<Record<string, unknown>> {
   const key = apiKey.trim()
   if (!key) {
     throw new Error('Tra cứu WHOIS .vn tự động cần BKNS API key trong Cài đặt. Nếu chưa có key, tra cứu thủ công trên VNNIC.')
   }
   const url = `https://whois.bkns.vn/api/v2/whois?domain=${encodeURIComponent(domain)}`
+  onProgress?.('Đang kiểm tra quyền truy cập BKNS WHOIS...')
   await grantHost(url)
+  onProgress?.('Đang chờ kết quả BKNS WHOIS...')
   const response = await fetch(url, {
     headers: { 'X-API-Key': key, Accept: 'application/json' },
     redirect: 'error',
@@ -185,12 +189,14 @@ export function rdapURLFromBootstrap(domain: string, bootstrap: Record<string, u
   return null
 }
 
-async function rdapEndpoint(domain: string, timeoutMs: number): Promise<string> {
+async function rdapEndpoint(domain: string, timeoutMs: number, onProgress?: (text: string) => void): Promise<string> {
   // Direct registry endpoints for .com/.net avoid the opaque 302 response of rdap.org in extension fetch.
   const tld = domain.toLowerCase().split('.').at(-1)
   if (tld === 'com' || tld === 'net') return `https://rdap.verisign.com/${tld}/v1/domain/${encodeURIComponent(domain)}`
   const bootstrapURL = 'https://data.iana.org/rdap/dns.json'
+  onProgress?.('Đang kiểm tra quyền truy cập danh mục RDAP IANA...')
   await grantHost(bootstrapURL)
+  onProgress?.('Đang tải danh mục RDAP IANA...')
   const response = await fetch(bootstrapURL, {
     signal: AbortSignal.timeout(Math.max(5000, timeoutMs)), cache: 'force-cache',
   })
@@ -201,10 +207,12 @@ async function rdapEndpoint(domain: string, timeoutMs: number): Promise<string> 
   return endpoint
 }
 
-export async function whoisLookup(domain: string, timeoutMs: number, bknsApiKey = ''): Promise<Record<string, unknown>> {
-  if (domain.endsWith('.vn')) return bknsWhoisLookup(domain, bknsApiKey, timeoutMs)
-  const url = await rdapEndpoint(domain, timeoutMs)
+export async function whoisLookup(domain: string, timeoutMs: number, bknsApiKey = '', onProgress?: (text: string) => void): Promise<Record<string, unknown>> {
+  if (domain.endsWith('.vn')) return bknsWhoisLookup(domain, bknsApiKey, timeoutMs, onProgress)
+  const url = await rdapEndpoint(domain, timeoutMs, onProgress)
+  onProgress?.('Đang kiểm tra quyền truy cập máy chủ RDAP...')
   await grantHost(url)
+  onProgress?.('Đang chờ phản hồi RDAP...')
   let response: Response
   try {
     response = await fetch(url, {
