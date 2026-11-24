@@ -22,4 +22,25 @@ describe('context menu popup', () => {
       url: 'chrome-extension://test/popup.html', type: 'popup', width: 680, height: 720,
     })
   })
+
+  it('opens Agent instructions only on first install, not on extension updates', async () => {
+    let onInstalled: ((details: { reason: string }) => void) | undefined
+    const create = vi.fn(async () => ({}))
+    vi.stubGlobal('chrome', {
+      runtime: {
+        onInstalled: { addListener: (listener: typeof onInstalled) => { onInstalled = listener } },
+        onMessage: { addListener: vi.fn() },
+        getURL: (file: string) => `chrome-extension://test/${file}`,
+      },
+      contextMenus: { create: vi.fn(), onClicked: { addListener: vi.fn() } },
+      sidePanel: { setPanelBehavior: vi.fn(async () => {}) },
+      tabs: { create },
+    })
+    await import('./index')
+    onInstalled!({ reason: 'update' })
+    expect(create).not.toHaveBeenCalled()
+    onInstalled!({ reason: 'install' })
+    await vi.waitFor(() => expect(create).toHaveBeenCalledOnce())
+    expect(create).toHaveBeenCalledWith({ url: 'chrome-extension://test/welcome.html' })
+  })
 })

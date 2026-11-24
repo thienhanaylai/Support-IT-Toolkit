@@ -15,6 +15,13 @@ Local Agent riêng nếu muốn dùng Ping, Traceroute, TCP Port, Quét Port,
 SSL/TLS và Mạng LAN. Khi cài Agent, phải đăng ký đúng Extension ID
 của phiên bản trên Edge Add-ons.
 
+Khi cài mới, extension mở trang hướng dẫn kèm ID và link tải Install.cmd
+cho Agent tại GitHub Release v0.1.3. Link luôn có lại trong Cài đặt.
+CMD tải ZIP Agent, kiểm tra SHA-256 và yêu cầu người dùng nhập ID.
+Trình duyệt không thể tự chạy CMD. Nếu file CMD bị chặn, tải gói
+ITSupportToolkit-Agent-Windows.zip cùng Release, giải nén và chạy
+Install.cmd bên trong. Gói này cũng không tải lên Edge Add-ons.
+
 WHOIS, MXToolbox và IP Public sử dụng dịch vụ bên ngoài khi người dùng
 yêu cầu. MXToolbox cần API key cho tên miền bất kỳ. Gói ZIP không chứa
 API key hay dữ liệu lịch sử/Portal của người dùng.

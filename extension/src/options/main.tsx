@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { Header } from '../components/Header'
 import { defaultSettings, getSettings, type Settings } from '../services/storage'
 import { safeTimeout } from '../services/validation'
+import { agentInstallerURL, agentZipURL } from '../services/agentDownload'
 import '../style.css'
 
 function App() {
@@ -28,6 +29,13 @@ function App() {
       <label className="checkbox"><input type="checkbox" checked={settings.saveHistory} onChange={(e) => { setSaved(false); setSettings({ ...settings, saveHistory: e.target.checked }) }} /> Lưu lịch sử kiểm tra trên thiết bị</label>
       <button className="primary" type="submit">Lưu cài đặt</button>{saved && <p className="success">Đã lưu cài đặt.</p>}
     </form>
+    <section className="agent-card" aria-labelledby="agent-options-title">
+      <h2 id="agent-options-title">Cài / cập nhật Local Agent (Windows)</h2>
+      <p>Ping, Traceroute, TCP Port, Quét Port, SSL/TLS và Mạng LAN cần Agent cài riêng. Tải <a href={agentInstallerURL} target="_blank" rel="noopener noreferrer">Install.cmd từ GitHub Release ↗</a> hoặc <a href={agentZipURL} target="_blank" rel="noopener noreferrer">ZIP Agent ↗</a>, rồi nhập Extension ID của bản này khi được hỏi.</p>
+      <label htmlFor="current-extension-id">EXTENSION ID</label>
+      <input id="current-extension-id" readOnly value={chrome.runtime.id} onFocus={(event) => event.currentTarget.select()} />
+      <p className="agent-note">Nếu tải ZIP, giải nén rồi chạy `Install.cmd` nằm trong ZIP. Agent không được đóng gói vào extension trên Edge Add-ons.</p>
+    </section>
     <p className="privacy">Không có telemetry. MXToolbox, IP Public và WHOIS Long Vân kết nối ra ngoài khi bạn yêu cầu. WHOIS mở tab nền không chuyển khỏi tab hiện tại, chỉ trích xuất thông tin kỹ thuật rồi tự đóng tab tạm. Tiến trình và kết quả hiện tại được giữ trong phiên trình duyệt khi bạn đóng popup; bật lưu lịch sử nếu muốn giữ kết quả sau khi khởi động lại trình duyệt.</p>
   </div></main>
 }

@@ -1,6 +1,13 @@
-chrome.runtime.onInstalled.addListener(() => {
+import { registerJobs } from './jobs'
+
+registerJobs()
+
+chrome.runtime.onInstalled.addListener((details) => {
   chrome.contextMenus.create({ id: 'check-selection', title: 'Kiểm tra bằng IT Support Toolkit', contexts: ['selection'] })
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(console.error)
+  if (details.reason === 'install') {
+    chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html') }).catch(console.error)
+  }
 })
 
 chrome.contextMenus.onClicked.addListener((info) => {
@@ -10,8 +17,3 @@ chrome.contextMenus.onClicked.addListener((info) => {
     url: chrome.runtime.getURL('popup.html'), type: 'popup', width: 680, height: 720,
   }))
 })
-
-export {}
-import { registerJobs } from './jobs'
-
-registerJobs()

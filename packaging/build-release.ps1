@@ -41,6 +41,9 @@ try {
   } finally { Pop-Location }
 
   Copy-Item -Path (Join-Path $repo 'extension\dist\*') -Destination (Join-Path $staging 'extension') -Recurse -Force
+  if (!(Test-Path -LiteralPath (Join-Path $staging 'extension\welcome.html') -PathType Leaf)) {
+    throw 'Built extension is missing welcome.html.'
+  }
   foreach ($name in @('setup.ps1', 'install.ps1')) {
     $scriptBytes = [System.IO.File]::ReadAllBytes((Join-Path $PSScriptRoot $name))
     if ($scriptBytes.Length -lt 6 -or $scriptBytes[0] -ne 239 -or $scriptBytes[1] -ne 187 -or $scriptBytes[2] -ne 191 -or

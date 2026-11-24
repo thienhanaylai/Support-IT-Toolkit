@@ -33,6 +33,7 @@ if (Test-Path -LiteralPath (Join-Path $dist 'readme.txt')) { throw 'Build output
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 if ($manifest.manifest_version -ne 3) { throw 'Expected a Manifest V3 extension.' }
 $required = @(
+  'welcome.html',
   $manifest.action.default_popup,
   $manifest.background.service_worker,
   $manifest.options_page,

@@ -1,1 +1,2 @@
 packaging/Install.cmd text eol=crlf
+packaging/agent/Install.cmd text eol=crlf
