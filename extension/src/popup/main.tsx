@@ -1,8 +1,9 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ArrowRight, ClipboardCopy, ClipboardPaste, Clock3, Globe2, HardDrive, MailSearch, Monitor, Network, Radio, RotateCw, ScanSearch, Search, Server, Settings2, ShieldCheck, UserRoundSearch, Zap } from 'lucide-react'
+import { ArrowRight, ClipboardCopy, Clock3, Globe2, HardDrive, MailSearch, Monitor, Network, Radio, RotateCw, ScanSearch, Search, Server, Settings2, ShieldCheck, UserRoundSearch, Zap } from 'lucide-react'
 import { HistoryItem } from '../components/HistoryItem'
 import { Result } from '../components/Result'
+import { PasswordGenerator } from '../components/PasswordGenerator'
 import { labels, toolRequiresAgent, type Tool } from '../services/checks'
 import { getHistory, getSettings, type CheckRecord } from '../services/storage'
 import { commonPorts, parseScanPorts } from '../services/scanPorts'
@@ -11,7 +12,7 @@ import { longVanWhoisURL } from '../services/longVanWhois'
 import { grantHost } from '../services/hostAccess'
 import { parseInput } from '../services/validation'
 import { draftKey, jobKey, type CheckJob, type PopupDraft } from '../services/work'
-import { copyServiceConfig, isPortalCreateUrl, isPortalServiceUrl, isPortalVmConfig, pasteServiceConfig, portalVmConfigKey, type PortalVmConfig } from '../services/portalVmConfig'
+import { copyServiceConfig, isPortalServiceUrl, isPortalVmConfig, portalVmConfigKey, type PortalVmConfig } from '../services/portalVmConfig'
 import '../style.css'
 
 const tools: { id: Tool; icon: React.ReactNode; detail: string }[] = [
@@ -28,7 +29,8 @@ const tools: { id: Tool; icon: React.ReactNode; detail: string }[] = [
 ]
 const instantTools: Tool[] = ['local_interfaces', 'public_ip', 'vm_info']
 const inputTools = tools.filter((item) => !instantTools.includes(item.id))
-const quickTools = tools.filter((item) => instantTools.includes(item.id))
+const vmTools = tools.filter((item) => item.id === 'vm_info')
+const networkInfoTools = tools.filter((item) => ['local_interfaces', 'public_ip'].includes(item.id))
 
 function App() {
   const [input, setInput] = useState('')
@@ -45,7 +47,7 @@ function App() {
   const [error, setError] = useState('')
   const [record, setRecord] = useState<CheckRecord | null>(null)
   const [recent, setRecent] = useState<CheckRecord[]>([])
-  const [portalPage, setPortalPage] = useState<'service' | 'create' | null>(null)
+  const [isServicePage, setIsServicePage] = useState(false)
   const [vmConfig, setVmConfig] = useState<PortalVmConfig | null>(null)
   const [configBusy, setConfigBusy] = useState(false)
   const [configMessage, setConfigMessage] = useState('')
@@ -69,8 +71,7 @@ function App() {
       if (mounted) setHasMXKey(isMXToolboxApiKey(settings.mxtoolboxApiKey))
     }).catch(() => { if (mounted) setHasMXKey(null) })
     void chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
-      if (mounted) setPortalPage(tab?.url && isPortalServiceUrl(tab.url) ? 'service' :
-        tab?.url && isPortalCreateUrl(tab.url) ? 'create' : null)
+      if (mounted) setIsServicePage(Boolean(tab?.url && isPortalServiceUrl(tab.url)))
     }).catch(() => {})
     void chrome.storage.session.get(portalVmConfigKey).then((saved) => {
       if (mounted && isPortalVmConfig(saved[portalVmConfigKey])) setVmConfig(saved[portalVmConfigKey])
@@ -203,6 +204,8 @@ function App() {
 
   function showRecord(item: CheckRecord) {
     if (busy) return
+    const recordTool = tools.find((candidate) => labels[candidate.id] === item.tool)?.id
+    if (recordTool) setTool(recordTool)
     setRecord(item)
     setError('')
     void chrome.storage.session.set({ displayedRecord: item })
@@ -231,7 +234,7 @@ function App() {
     } finally { setMxKeySaving(false) }
   }
 
-  async function transferConfig(action: 'copy' | 'paste') {
+  async function copyPortalConfig() {
     if (configBusy || busy) return
     setConfigBusy(true)
     setConfigMessage('')
@@ -239,21 +242,33 @@ function App() {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
       if (!tab?.id || !tab.url) throw new Error('Không tìm thấy tab Portal đang mở.')
-      if (action === 'copy') {
-        const config = await copyServiceConfig(tab.id, tab.url)
-        setVmConfig(config)
-        setConfigMessage('Đã sao chép 4 thông số vào phiên trình duyệt. Mở trang Tạo computing để dán.')
-      } else {
-        const outcome = await pasteServiceConfig(tab.id, tab.url)
-        if (outcome.error) {
-          setConfigFailed(true)
-          setConfigMessage(`${outcome.applied.length ? `Đã điền ${outcome.applied.join(' → ')}. ` : ''}Dừng: ${outcome.error}`)
-        } else setConfigMessage('Đã điền CPU → RAM → Internet → Disk. Hãy kiểm tra lại trước khi tạo VM.')
-      }
+      const config = await copyServiceConfig(tab.id, tab.url)
+      setVmConfig(config)
+      setConfigMessage('Đã sao chép cấu hình và thông tin kiểm tra vào phiên trình duyệt. Mở trang Tạo computing để dán.')
     } catch (cause) {
       setConfigFailed(true)
       setConfigMessage(cause instanceof Error ? cause.message : 'Không thể chuyển cấu hình VM.')
     } finally { setConfigBusy(false) }
+  }
+
+  function toolOutput(groupTools: Tool[]) {
+    if (!tool || !groupTools.includes(tool)) return null
+    return <div className="tool-group-output" ref={resultRef}>
+      <div className="source-hint"><span className="hint-icon">{toolRequiresAgent(tool) ? <Monitor size={15} /> : <Globe2 size={15} />}</span>{tool === 'vm_info' ? 'Chỉ đọc tab chi tiết computing của Portal khi bạn nhấn nút' : toolRequiresAgent(tool) ? 'Chạy từ máy bạn · cần Local Agent' : 'Dùng dịch vụ ngoài · có thể cần cấp quyền host'}</div>
+      {(busy || (error && progress.length > 0)) && <div className="checking" role="status">
+        <div>{busy ? `Đang kiểm tra ${labels[tool]}` : `Tiến trình ${labels[tool]} đã dừng`}
+          {busy && progress.at(-1)?.total ? ` · ${progress.at(-1)?.completed}/${progress.at(-1)?.total} cổng` : ''}
+        </div>
+        {progress.length > 0 && <pre ref={progressRef} className="live-output" aria-label="Kết quả trong quá trình chạy">{progress.map((item) => item.text).join('\n')}</pre>}
+      </div>}
+      {error && <div className="error" role="alert">
+        <div>{error}</div>
+        {tool === 'vm_info' && <button type="button" className="retry-vm" disabled={busy} onClick={() => void run('vm_info')}>
+          <RotateCw size={14} /> Thử lại
+        </button>}
+      </div>}
+      {record && <Result record={record} />}
+    </div>
   }
 
   if (!ready) return <main className="popup"><p role="status">Đang khôi phục phiên kiểm tra...</p></main>
@@ -264,83 +279,73 @@ function App() {
       <a className="popup-settings" href="options.html" target="_blank" rel="noreferrer"><Settings2 size={16} /> Cài đặt</a>
     </header>
     <div className="main-content">
-      {(!tool || !instantTools.includes(tool)) && <div className="input-panel">
-        <label htmlFor="target">DOMAIN HOẶC ĐỊA CHỈ IP</label>
-        <div className="input-wrap"><Search size={18} /><input id="target" placeholder="Domain hoặc IP" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} /><button type="button" className="inline-check" disabled={busy || !tool} onClick={() => mxNeedsKey ? setShowMXKeyForm(true) : void run()}>{busy ? 'Đang chạy...' : mxNeedsKey ? 'Nhập API key' : tool ? 'Kiểm tra' : 'Chọn công cụ'}<ArrowRight size={14} /></button></div>
-        {tool && ['tcp_check', 'tls_check'].includes(tool) && <div className="port-row"><label htmlFor="port">PORT</label><input id="port" type="number" min={1} max={65535} value={port} onChange={(e) => setPort(Number(e.target.value))} /></div>}
-        {tool === 'ping' && <div className="port-row"><label htmlFor="ping-count">SỐ LẦN PING (1–5)</label><input id="ping-count" type="number" min={1} max={5} step={1} value={pingCount} onChange={(e) => setPingCount(Number(e.target.value))} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} /></div>}
-        {tool === 'traceroute' && <div className="port-row"><label htmlFor="max-hops">SỐ HOP TỐI ĐA (1–30)</label><input id="max-hops" type="number" min={1} max={30} step={1} value={maxHops} onChange={(e) => setMaxHops(Number(e.target.value))} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} /></div>}
-        {tool === 'port_scan' && <div className="scan-options">
-          <label htmlFor="scan-mode">CỔNG TCP CẦN QUÉT</label>
-          <select id="scan-mode" value={scanMode} onChange={(e) => setScanMode(e.target.value as 'common' | 'custom')}>
-            <option value="common">Cổng phổ biến ({commonPorts.length})</option>
-            <option value="custom">Nhập danh sách tùy chọn</option>
-          </select>
-          {scanMode === 'custom' && <input type="text" aria-label="Danh sách cổng TCP" placeholder="22,80,443,8000-8005" value={customPorts} onChange={(e) => setCustomPorts(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} />}
-          <small>Tối đa 32 cổng · 2 giây/cổng · chỉ quét khi bạn nhấn Kiểm tra.</small>
-        </div>}
-        {tool === 'mxtoolbox' && <div className="scan-options">
-          <label htmlFor="mx-command">LOẠI KIỂM TRA</label>
-          <select id="mx-command" value={mxCommand} onChange={(e) => setMxCommand(e.target.value as MXCommand)}>
-            <option value="dns">DNS/NS</option>
-            <option value="a">A</option><option value="aaaa">AAAA</option>
-            <option value="mx">MX</option><option value="txt">TXT</option><option value="spf">SPF</option>
-            <option value="dmarc">DMARC</option><option value="soa">SOA</option>
-          </select>
-          {hasMXKey === false && <div className="mx-key-prompt">
-            <div>Chưa có API key MXToolbox. Cần key để kiểm tra tên miền bất kỳ; chỉ DNS <code>example.com</code> dùng thử không cần key.</div>
-            {!showMXKeyForm && <button type="button" className="mx-key-open" onClick={() => { setShowMXKeyForm(true); setMxKeySaved(false) }}>Nhập API key</button>}
-            {showMXKeyForm && <form className="mx-key-form" onSubmit={(event) => void saveMXKey(event)}>
-              <label htmlFor="mx-key-popup">API key MXToolbox (UUID)</label>
-              <input id="mx-key-popup" type="password" autoComplete="off" spellCheck={false} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value={mxKeyDraft} onChange={(event) => { setMxKeyDraft(event.target.value); setMxKeyError('') }} />
-              <div className="mx-key-actions"><button type="submit" disabled={mxKeySaving}>{mxKeySaving ? 'Đang lưu...' : 'Lưu API key'}</button><button type="button" disabled={mxKeySaving} onClick={() => { setShowMXKeyForm(false); setMxKeyDraft(''); setMxKeyError('') }}>Hủy</button></div>
-              {mxKeyError && <p className="mx-key-error" role="alert">{mxKeyError}</p>}
-              <small>Key lưu trên thiết bị trong chrome.storage.local (không mã hóa); chỉ gửi tới MXToolbox khi bạn bấm Kiểm tra.</small>
-            </form>}
-          </div>}
-          {hasMXKey && <small>API key đã lưu. Có thể thay đổi trong Cài đặt.</small>}
-          {mxKeySaved && <small className="mx-key-saved" role="status">Đã lưu API key. Bây giờ bạn có thể bấm Kiểm tra.</small>}
-        </div>}
-      </div>}
-      <section className="tool-section" aria-labelledby="input-tools-heading">
+      <PasswordGenerator />
+      <section className="tool-section popup-tool-group domain-tool-section" aria-labelledby="input-tools-heading">
         <div className="section-title" id="input-tools-heading"><span>CÔNG CỤ DÙNG DOMAIN / IP</span></div>
+        {(!tool || !instantTools.includes(tool)) && <div className="input-panel">
+          <div className="input-wrap"><Search size={18} /><input id="target" aria-label="Domain hoặc địa chỉ IP" placeholder="Domain hoặc IP" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} /><button type="button" className="inline-check" disabled={busy || !tool} onClick={() => mxNeedsKey ? setShowMXKeyForm(true) : void run()}>{busy ? 'Đang chạy...' : mxNeedsKey ? 'Nhập API key' : tool ? 'Kiểm tra' : 'Chọn công cụ'}<ArrowRight size={14} /></button></div>
+          {tool && ['tcp_check', 'tls_check'].includes(tool) && <div className="port-row"><label htmlFor="port">PORT</label><input id="port" type="number" min={1} max={65535} value={port} onChange={(e) => setPort(Number(e.target.value))} /></div>}
+          {tool === 'ping' && <div className="port-row"><label htmlFor="ping-count">SỐ LẦN PING (1–5)</label><input id="ping-count" type="number" min={1} max={5} step={1} value={pingCount} onChange={(e) => setPingCount(Number(e.target.value))} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} /></div>}
+          {tool === 'traceroute' && <div className="port-row"><label htmlFor="max-hops">SỐ HOP TỐI ĐA (1–30)</label><input id="max-hops" type="number" min={1} max={30} step={1} value={maxHops} onChange={(e) => setMaxHops(Number(e.target.value))} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} /></div>}
+          {tool === 'port_scan' && <div className="scan-options">
+            <label htmlFor="scan-mode">CỔNG TCP CẦN QUÉT</label>
+            <select id="scan-mode" value={scanMode} onChange={(e) => setScanMode(e.target.value as 'common' | 'custom')}>
+              <option value="common">Cổng phổ biến ({commonPorts.length})</option>
+              <option value="custom">Nhập danh sách tùy chọn</option>
+            </select>
+            {scanMode === 'custom' && <input type="text" aria-label="Danh sách cổng TCP" placeholder="22,80,443,8000-8005" value={customPorts} onChange={(e) => setCustomPorts(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} />}
+            <small>Tối đa 32 cổng · 2 giây/cổng · chỉ quét khi bạn nhấn Kiểm tra.</small>
+          </div>}
+          {tool === 'mxtoolbox' && <div className="scan-options">
+            <label htmlFor="mx-command">LOẠI KIỂM TRA</label>
+            <select id="mx-command" value={mxCommand} onChange={(e) => setMxCommand(e.target.value as MXCommand)}>
+              <option value="dns">DNS/NS</option>
+              <option value="a">A</option><option value="aaaa">AAAA</option>
+              <option value="mx">MX</option><option value="txt">TXT</option><option value="spf">SPF</option>
+              <option value="dmarc">DMARC</option><option value="soa">SOA</option>
+            </select>
+            {hasMXKey === false && <div className="mx-key-prompt">
+              <div>Chưa có API key MXToolbox. Cần key để kiểm tra tên miền bất kỳ; chỉ DNS <code>example.com</code> dùng thử không cần key.</div>
+              {!showMXKeyForm && <button type="button" className="mx-key-open" onClick={() => { setShowMXKeyForm(true); setMxKeySaved(false) }}>Nhập API key</button>}
+              {showMXKeyForm && <form className="mx-key-form" onSubmit={(event) => void saveMXKey(event)}>
+                <label htmlFor="mx-key-popup">API key MXToolbox (UUID)</label>
+                <input id="mx-key-popup" type="password" autoComplete="off" spellCheck={false} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value={mxKeyDraft} onChange={(event) => { setMxKeyDraft(event.target.value); setMxKeyError('') }} />
+                <div className="mx-key-actions"><button type="submit" disabled={mxKeySaving}>{mxKeySaving ? 'Đang lưu...' : 'Lưu API key'}</button><button type="button" disabled={mxKeySaving} onClick={() => { setShowMXKeyForm(false); setMxKeyDraft(''); setMxKeyError('') }}>Hủy</button></div>
+                {mxKeyError && <p className="mx-key-error" role="alert">{mxKeyError}</p>}
+                <small>Key lưu trên thiết bị trong chrome.storage.local (không mã hóa); chỉ gửi tới MXToolbox khi bạn bấm Kiểm tra.</small>
+              </form>}
+            </div>}
+            {hasMXKey && <small>API key đã lưu. Có thể thay đổi trong Cài đặt.</small>}
+            {mxKeySaved && <small className="mx-key-saved" role="status">Đã lưu API key. Bây giờ bạn có thể bấm Kiểm tra.</small>}
+          </div>}
+        </div>}
         <div className="tool-grid">{inputTools.map((item) => <button type="button" key={item.id} title={`${labels[item.id]} — ${item.detail}`} aria-label={`${labels[item.id]}: ${item.detail}`} disabled={busy} className={`tool ${tool === item.id ? 'selected' : ''}`} onClick={() => { setTool(item.id); setError('') }}>
           <span className="tool-icon">{item.icon}</span><strong>{labels[item.id]}</strong><small>{item.detail}</small>
         </button>)}</div>
+        {toolOutput(inputTools.map((item) => item.id))}
       </section>
-      <section className="tool-section quick-tool-section" aria-label="Công cụ không cần ô nhập">
-        <div className="tool-grid">{quickTools.map((item) => <button type="button" key={item.id} title={`${labels[item.id]} — ${item.detail}`} aria-label={`${labels[item.id]}: ${item.detail}`} disabled={busy} className={`tool ${tool === item.id ? 'selected' : ''}`} onClick={() => { setTool(item.id); setError(''); void run(item.id) }}>
+      <section className="tool-section popup-tool-group vm-tool-section" aria-labelledby="vm-tools-heading">
+        <div className="section-title" id="vm-tools-heading"><span>THÔNG TIN VM</span></div>
+        <div className="tool-grid">{vmTools.map((item) => <button type="button" key={item.id} title={`${labels[item.id]} — ${item.detail}`} aria-label={`${labels[item.id]}: ${item.detail}`} disabled={busy} className={`tool ${tool === item.id ? 'selected' : ''}`} onClick={() => { setTool(item.id); setError(''); void run(item.id) }}>
           <span className="tool-icon">{item.icon}</span><strong>{labels[item.id]}</strong><small>{item.detail}</small>
         </button>)}</div>
+        {toolOutput(vmTools.map((item) => item.id))}
       </section>
-      {portalPage && <section className="vm-transfer" aria-label="Chuyển cấu hình từ Dịch vụ sang Tạo computing">
+      <section className="tool-section popup-tool-group network-info-section" aria-labelledby="network-info-heading">
+        <div className="section-title" id="network-info-heading"><span>THÔNG TIN MẠNG</span></div>
+        <div className="tool-grid">{networkInfoTools.map((item) => <button type="button" key={item.id} title={`${labels[item.id]} — ${item.detail}`} aria-label={`${labels[item.id]}: ${item.detail}`} disabled={busy} className={`tool ${tool === item.id ? 'selected' : ''}`} onClick={() => { setTool(item.id); setError(''); void run(item.id) }}>
+          <span className="tool-icon">{item.icon}</span><strong>{labels[item.id]}</strong><small>{item.detail}</small>
+        </button>)}</div>
+        {toolOutput(networkInfoTools.map((item) => item.id))}
+      </section>
+      {isServicePage && <section className="vm-transfer" aria-label="Sao chép cấu hình từ trang Dịch vụ">
         <div className="vm-transfer-title">CẤU HÌNH VM <span>PORTAL</span></div>
-        {portalPage === 'service' ? <>
-          <p>Chỉ lấy CORE, RAM, Internet và STORAGE từ <strong>Nhóm thuộc tính</strong> đang hiển thị. Không lấy IP, Backup hay OS.</p>
-          <button type="button" disabled={configBusy || busy} onClick={() => void transferConfig('copy')}><ClipboardCopy size={15} /> Sao chép thông số</button>
-        </> : <>
-          <p>{vmConfig ? `Đã lưu tạm: ${vmConfig.cpu} Core · ${vmConfig.ramGB} GB RAM · ${vmConfig.internetMbps} Mb/s · ${vmConfig.diskGB} GB ${vmConfig.diskType.replace('_STORAGE', '')}.` : 'Chưa có thông số. Hãy mở trang Dịch vụ và sao chép cấu hình trước.'}</p>
-          <button type="button" disabled={configBusy || busy || !vmConfig} onClick={() => void transferConfig('paste')}><ClipboardPaste size={15} /> {configBusy ? 'Đang chờ Portal...' : 'Dán cấu hình vào VM'}</button>
-          <small>Điền lần lượt CPU → RAM → Internet → Disk; không bấm Tạo VM hay Lưu thay bạn.</small>
-        </>}
+        <p>Lấy CORE, RAM, Internet và STORAGE để dán VM; hiển thị thêm OS và Site Provider để kiểm tra. Không lấy IP hoặc Backup.</p>
+        {vmConfig && <p>Đã lưu tạm: {vmConfig.cpu} Core · {vmConfig.ramGB} GB RAM · {vmConfig.internetMbps} Mb/s · {vmConfig.diskGB} GB {vmConfig.diskType.replace('_STORAGE', '')} · OS: {vmConfig.os || vmConfig.osId || 'Không có'} · Site Provider: {vmConfig.siteProvider || vmConfig.siteProviderId || 'Không có'}.</p>}
+        <button type="button" disabled={configBusy || busy} onClick={() => void copyPortalConfig()}><ClipboardCopy size={15} /> {configBusy ? 'Đang sao chép...' : 'Sao chép thông số'}</button>
         {configMessage && <p className={`vm-transfer-message${configFailed ? ' vm-transfer-error' : ''}`} role={configFailed ? 'alert' : 'status'}>{configMessage}</p>}
       </section>}
-      <div className="source-hint"><span className="hint-icon">{tool && toolRequiresAgent(tool) ? <Monitor size={15} /> : <Globe2 size={15} />}</span>{!tool ? 'Chọn một công cụ để bắt đầu' : tool === 'vm_info' ? 'Chỉ đọc tab chi tiết computing của Portal khi bạn nhấn nút' : toolRequiresAgent(tool) ? 'Chạy từ máy bạn · cần Local Agent' : 'Dùng dịch vụ ngoài · có thể cần cấp quyền host'}</div>
-      <div ref={resultRef}>
-        {(busy || (error && progress.length > 0)) && tool && <div className="checking" role="status">
-          <div>{busy ? `Đang kiểm tra ${labels[tool]}` : `Tiến trình ${labels[tool]} đã dừng`}
-            {busy && progress.at(-1)?.total ? ` · ${progress.at(-1)?.completed}/${progress.at(-1)?.total} cổng` : ''}
-          </div>
-          {progress.length > 0 && <pre ref={progressRef} className="live-output" aria-label="Kết quả trong quá trình chạy">{progress.map((item) => item.text).join('\n')}</pre>}
-        </div>}
-        {error && <div className="error" role="alert">
-          <div>{error}</div>
-          {tool === 'vm_info' && <button type="button" className="retry-vm" disabled={busy} onClick={() => void run('vm_info')}>
-            <RotateCw size={14} /> Thử lại
-          </button>}
-        </div>}
-        {record && <Result record={record} />}
-      </div>
+      {!tool && <div className="source-hint"><span className="hint-icon"><Globe2 size={15} /></span>Chọn một công cụ để bắt đầu</div>}
       <div className="section-title history-title"><span>GẦN ĐÂY</span><button className="history-link" onClick={() => { void chrome.windows.getCurrent().then((w) => chrome.sidePanel.open({ windowId: w.id! })).catch(() => chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel.html') })) }}>Xem tất cả <ArrowRight size={13} /></button></div>
       {recent.length ? recent.map((item) => <HistoryItem key={item.id} record={item} selected={record?.id === item.id} onClick={() => showRecord(item)} />) : <p className="empty"><Clock3 size={16} /> Chưa có lượt kiểm tra nào.</p>}
     </div>

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Clock3, Download, HardDrive, History, KeyRound, Search, Trash2 } from 'lucide-react'
+import { Clock3, Download, HardDrive, History, KeyRound, Search, ShieldCheck, Trash2 } from 'lucide-react'
 import { Header } from '../components/Header'
 import { HistoryItem } from '../components/HistoryItem'
 import { Result } from '../components/Result'
-import { agentInstallerURL, agentZipURL } from '../services/agentDownload'
+import { agentZipURL } from '../services/agentDownload'
+import { hasPortalAccess, removePortalAccess, requestPortalAccess } from '../services/portalAccess'
 import { downloadReport } from '../services/report'
 import { defaultSettings, getHistory, getSettings, type CheckRecord, type Settings } from '../services/storage'
 import { safeTimeout } from '../services/validation'
@@ -19,6 +20,9 @@ function App() {
   const [historyError, setHistoryError] = useState('')
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [portalAccess, setPortalAccess] = useState<boolean | null>(null)
+  const [portalBusy, setPortalBusy] = useState(false)
+  const [portalError, setPortalError] = useState('')
   const filtered = history.filter((item) =>
     `${item.tool} ${item.target} ${item.source}`.toLocaleLowerCase('vi-VN')
       .includes(query.trim().toLocaleLowerCase('vi-VN')),
@@ -33,6 +37,8 @@ function App() {
     void getHistory().then((items) => { if (mounted) setHistory(items) }).catch(() => {
       if (mounted) setHistoryError('Không thể tải lịch sử. Hãy mở lại trang và thử lần nữa.')
     }).finally(() => { if (mounted) setHistoryLoading(false) })
+    void hasPortalAccess().then((allowed) => { if (mounted) setPortalAccess(allowed) })
+      .catch(() => { if (mounted) setPortalAccess(false) })
     const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
       if (area === 'local' && changes.history && mounted) {
         setHistory((changes.history.newValue as CheckRecord[] | undefined) ?? [])
@@ -69,12 +75,27 @@ function App() {
     }
   }
 
+  async function changePortalAccess(enabled: boolean) {
+    if (portalBusy) return
+    setPortalBusy(true)
+    setPortalError('')
+    try {
+      const changed = enabled ? await requestPortalAccess() : await removePortalAccess()
+      const allowed = await hasPortalAccess()
+      setPortalAccess(allowed)
+      if (enabled && (!changed || !allowed)) setPortalError('Quyền Portal chưa được cấp.')
+      if (!enabled && allowed) setPortalError('Không thể thu hồi quyền Portal.')
+    } catch {
+      setPortalError(enabled ? 'Không thể cấp quyền Portal.' : 'Không thể thu hồi quyền Portal.')
+    } finally { setPortalBusy(false) }
+  }
+
   return <main className="panel options-page"><Header section="Cài đặt" /><div className="main-content">
     <div className="eyebrow">KHÔNG GIAN CỦA BẠN</div>
     <h1>Cài đặt <span>& lịch sử.</span></h1>
     <p className="intro">Tùy chỉnh cách kiểm tra và quản lý kết quả đã lưu trên thiết bị này.</p>
     <nav className="options-nav" aria-label="Mục cài đặt">
-      <a href="#preferences">Tùy chọn</a><a href="#history">Lịch sử</a><a href="#agent">Local Agent</a>
+      <a href="#preferences">Tùy chọn</a><a href="#portal-access">Quyền Portal</a><a href="#history">Lịch sử</a><a href="#agent">Local Agent</a>
     </nav>
 
     <form id="preferences" className="options-section" onSubmit={(event) => void submit(event)}>
@@ -105,6 +126,19 @@ function App() {
       <div className="options-save"><button className="primary" type="submit">Lưu cài đặt</button>{saved && <span className="success" role="status">Đã lưu cài đặt.</span>}{saveError && <span className="options-error" role="alert">{saveError}</span>}</div>
     </form>
 
+    <section id="portal-access" className="options-section" aria-labelledby="portal-access-options-title">
+      <div className="options-section-heading"><span className="options-section-icon"><ShieldCheck size={19} /></span><div>
+        <h2 id="portal-access-options-title">Quyền truy cập Portal Long Vân</h2><p>Quản lý quyền sao chép và dán cấu hình VM trên Portal.</p>
+      </div></div>
+      <label className="options-toggle" htmlFor="portal-access-toggle">
+        <span><strong>Cho phép truy cập portal.longvan.vn</strong><small>Chỉ dùng trên trang Dịch vụ và Tạo computing. Sau khi thay đổi, hãy refresh các tab Portal đang mở.</small></span>
+        <input id="portal-access-toggle" type="checkbox" disabled={portalBusy || portalAccess === null} checked={portalAccess === true} onChange={(event) => void changePortalAccess(event.target.checked)} />
+      </label>
+      {portalAccess === true && <p className="success" role="status">Đã cấp quyền Portal.</p>}
+      {portalAccess === false && <p className="agent-note">Chưa cấp quyền Portal. Các nút sao chép/dán sẽ không được chèn vào trang.</p>}
+      {portalError && <p className="options-error" role="alert">{portalError}</p>}
+    </section>
+
     <section id="history" className="options-section" aria-labelledby="options-history-title">
       <div className="options-section-heading options-history-heading"><span className="options-section-icon"><History size={19} /></span><div>
         <h2 id="options-history-title">Lịch sử kiểm tra <span className="options-badge">{historyLoading ? '…' : history.length}/50</span></h2>
@@ -130,10 +164,10 @@ function App() {
       <div className="options-section-heading"><span className="options-section-icon"><HardDrive size={19} /></span><div>
         <h2 id="agent-options-title">Local Agent cho Windows</h2><p>Cài hoặc cập nhật Agent khi cần dùng các công cụ mạng tại máy.</p>
       </div></div>
-      <p>Ping, Traceroute, TCP Port, Quét Port, SSL/TLS và Mạng LAN cần Agent cài riêng. Tải <a href={agentInstallerURL} target="_blank" rel="noopener noreferrer">Install.cmd từ GitHub Release ↗</a> hoặc <a href={agentZipURL} target="_blank" rel="noopener noreferrer">ZIP Agent ↗</a>, rồi nhập Extension ID của bản này khi được hỏi.</p>
+      <p>Ping, Traceroute, TCP Port, Quét Port, SSL/TLS và Mạng LAN cần Agent cài riêng. <a href={agentZipURL} target="_blank" rel="noopener noreferrer">Tải ZIP Agent từ GitHub Release ↗</a>, giải nén toàn bộ rồi chạy <strong>Install.cmd</strong> bên trong và nhập Extension ID của bản này khi được hỏi.</p>
       <label htmlFor="current-extension-id">Extension ID của bạn</label>
       <input id="current-extension-id" readOnly value={chrome.runtime.id} onFocus={(event) => event.currentTarget.select()} />
-      <p className="agent-note">Nếu tải ZIP, giải nén rồi chạy Install.cmd nằm trong ZIP. Agent không được đóng gói vào extension trên Edge Add-ons.</p>
+      <p className="agent-note">Không di chuyển hoặc chạy riêng Install.cmd vì bộ cài cần các file đi kèm trong ZIP. Agent không được đóng gói vào extension trên Edge Add-ons.</p>
     </section>
   </div></main>
 }

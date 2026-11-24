@@ -1,0 +1,15 @@
+.it-toolkit-portal-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.it-toolkit-portal-button{appearance:none;border:0;border-radius:6px;padding:10px 14px;background:#008f6a;color:#fff;font:700 13px/1.2 "Segoe UI",Arial,sans-serif;cursor:pointer;box-shadow:0 2px 6px #008f6a33}
+.it-toolkit-portal-button:hover:not(:disabled){background:#007b5c}
+.it-toolkit-portal-button:focus-visible{outline:3px solid #50d7ad;outline-offset:2px}
+.it-toolkit-portal-button:disabled{opacity:.6;cursor:wait}
+.it-toolkit-portal-status{max-width:420px;color:#526b63;font:600 12px/1.45 "Segoe UI",Arial,sans-serif}
+.it-toolkit-portal-status.is-success{color:#087457}
+.it-toolkit-portal-status.is-error{color:#b0322a}
+.it-toolkit-portal-status.is-working{color:#396b5c}
+.it-toolkit-create-tools{margin:0 8px 16px;padding:13px 14px;border:1px solid #bfe2d2;border-radius:8px;background:#f2faf6}
+.it-toolkit-config-summary{flex:1 1 100%;color:#375c50;font:600 12px/1.5 "Segoe UI",Arial,sans-serif}
+.ui-panel-actions>.it-toolkit-portal-tools{display:inline-flex;margin-right:8px;vertical-align:middle}
+.it-toolkit-service-status{box-sizing:border-box;max-width:none;margin:10px 14px 0;padding:9px 11px;border:1px solid #cfe5dc;border-radius:6px;background:#f7fcf9}
+.it-toolkit-service-status[hidden]{display:none}
+@media(max-width:700px){.it-toolkit-create-tools{margin:0 0 12px}.it-toolkit-service-status{margin:8px 8px 0}}

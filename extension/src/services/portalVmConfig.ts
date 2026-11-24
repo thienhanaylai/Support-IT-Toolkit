@@ -4,6 +4,10 @@ export type PortalVmConfig = {
   internetMbps: number
   diskGB: number
   diskType: string
+  os: string
+  osId: string
+  siteProvider: string
+  siteProviderId: string
 }
 
 export const portalVmConfigKey = 'portalVmConfig'
@@ -24,6 +28,14 @@ function isPortalPath(value: string, pathname: string): boolean {
 export function isPortalServiceUrl(value: string): boolean { return isPortalPath(value, servicePath) }
 export function isPortalCreateUrl(value: string): boolean { return isPortalPath(value, createPath) }
 
+function portalAccessError(cause: unknown): Error {
+  const message = cause instanceof Error ? cause.message : String(cause)
+  if (/cannot access contents|must request permission|cannot access page|missing host permission/i.test(message)) {
+    return new Error('Extension chưa có quyền truy cập Portal. Hãy tải lại extension tại edge://extensions, refresh trang Portal rồi thử lại.')
+  }
+  return cause instanceof Error ? cause : new Error(message)
+}
+
 export function isPortalVmConfig(value: unknown): value is PortalVmConfig {
   if (!value || typeof value !== 'object') return false
   const data = value as Partial<PortalVmConfig>
@@ -31,8 +43,12 @@ export function isPortalVmConfig(value: unknown): value is PortalVmConfig {
     Number.isInteger(data.ramGB) && data.ramGB! > 0 && data.ramGB! <= 4096 &&
     Number.isInteger(data.internetMbps) && data.internetMbps! > 0 && data.internetMbps! <= 100000 &&
     Number.isInteger(data.diskGB) && data.diskGB! > 0 && data.diskGB! <= 1000000 &&
-    typeof data.diskType === 'string' &&
-    /^(NVME_STORAGE|SSD_STORAGE|PCI_SSD_STORAGE|COLD_STORAGE|SAFE_SSD_STORAGE|SAFE_STORAGE|TURBOSSD_STORAGE)$/.test(data.diskType)
+    typeof data.diskType === 'string' && data.diskType.length <= 80 &&
+    /^(?:[A-Z0-9]+_)*STORAGE$/.test(data.diskType) &&
+    typeof data.os === 'string' && data.os.length <= 300 &&
+    typeof data.osId === 'string' && data.osId.length <= 300 &&
+    typeof data.siteProvider === 'string' && data.siteProvider.length <= 300 &&
+    typeof data.siteProviderId === 'string' && data.siteProviderId.length <= 300
 }
 
 // Runs in the service tab. Read only the displayed attribute cells, never hidden editors.
@@ -40,35 +56,55 @@ export function isPortalVmConfig(value: unknown): value is PortalVmConfig {
 export function extractServiceConfigFromDOM(): PortalVmConfig | null {
   const table = document.getElementById('frm-info-service:componentInfoService:resourceBare_data')
   if (!table) return null
-  const values = new Map<string, string>()
+  const values = new Map<string, { name: string; value: string }>()
   for (const row of table.querySelectorAll(':scope > tr')) {
     const cells = row.querySelectorAll(':scope > td')
     const name = cells[0]?.querySelector('.ui-cell-editor-output')
     const value = cells[1]?.querySelector('.ui-cell-editor-output')
-    const code = name?.querySelector('span')?.textContent?.trim()
-    if (!code || !/^#(?:CORE|RAM|INTERNET|NVME_STORAGE|SSD_STORAGE|PCI_SSD_STORAGE|COLD_STORAGE|SAFE_SSD_STORAGE|SAFE_STORAGE|TURBOSSD_STORAGE)$/.test(code)) continue
+    const code = name?.querySelector('span')?.textContent?.trim().toUpperCase()
+    const recognized = code && (/^#(?:CORE|CPU|RAM|INTERNET|OS|PROVINCE|SITE_PROVIDER|SITEPROVIDER)$/.test(code) ||
+      /^#(?:[A-Z0-9]+_)*STORAGE$/.test(code))
+    if (!name || !code || !recognized) continue
     if (!value || values.has(code)) return null
-    values.set(code, value.textContent?.replace(/\s+/g, ' ').trim() ?? '')
+    const displayName = [...name.childNodes]
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.textContent ?? '').join(' ').replace(/\s+/g, ' ').trim().slice(0, 300)
+    values.set(code, {
+      name: displayName,
+      value: (value.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 300),
+    })
   }
   function amount(code: string, unit: RegExp): number | null {
-    const match = values.get(code)?.match(unit)
+    const match = values.get(code)?.value.match(unit)
     const number = match ? Number(match[1]) : NaN
     return Number.isSafeInteger(number) && number > 0 ? number : null
   }
-  const diskCodes = [...values.keys()].filter((code) =>
-    /^#(?:NVME_STORAGE|SSD_STORAGE|PCI_SSD_STORAGE|COLD_STORAGE|SAFE_SSD_STORAGE|SAFE_STORAGE|TURBOSSD_STORAGE)$/.test(code))
+  const diskCodes = [...values.keys()].filter((code) => /^#(?:[A-Z0-9]+_)*STORAGE$/.test(code))
   if (diskCodes.length !== 1) return null
-  const cpu = amount('#CORE', /^(\d+)\s*Core$/i)
+  const cpuCodes = ['#CORE', '#CPU'].filter((code) => values.has(code))
+  if (cpuCodes.length !== 1) return null
+  const cpu = amount(cpuCodes[0], /^(\d+)\s*(?:Core|CPU|vCPU)$/i)
   const ramGB = amount('#RAM', /^(\d+)\s*GB$/i)
   const internetMbps = amount('#INTERNET', /^(\d+)\s*Mb\/s$/)
   const diskGB = amount(diskCodes[0], /^(\d+)\s*GB$/i)
   if (cpu === null || ramGB === null || internetMbps === null || diskGB === null) return null
-  return { cpu, ramGB, internetMbps, diskGB, diskType: diskCodes[0].slice(1) }
+  const os = values.get('#OS')
+  const provider = values.get('#SITE_PROVIDER') ?? values.get('#SITEPROVIDER') ?? values.get('#PROVINCE')
+  return {
+    cpu, ramGB, internetMbps, diskGB, diskType: diskCodes[0].slice(1),
+    os: os?.name ?? '', osId: os?.value ?? '',
+    siteProvider: provider?.name ?? '', siteProviderId: provider?.value ?? '',
+  }
 }
 
 export async function copyServiceConfig(tabId: number, url: string): Promise<PortalVmConfig> {
   if (!isPortalServiceUrl(url)) throw new Error('Hãy mở trang chi tiết Dịch vụ trên Portal.')
-  const [injection] = await chrome.scripting.executeScript({ target: { tabId }, func: extractServiceConfigFromDOM })
+  let injection: chrome.scripting.InjectionResult<PortalVmConfig | null> | undefined
+  try {
+    [injection] = await chrome.scripting.executeScript({ target: { tabId }, func: extractServiceConfigFromDOM })
+  } catch (cause) {
+    throw portalAccessError(cause)
+  }
   const config = injection?.result
   if (!isPortalVmConfig(config)) {
     throw new Error('Không đọc đủ CORE, RAM, Internet và một STORAGE từ Nhóm thuộc tính. Hãy kiểm tra trang đã tải xong.')
@@ -87,7 +123,7 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
   const error = (message: string): PasteResult => ({ applied, error: message })
   const numbers = [config.cpu, config.ramGB, config.internetMbps, config.diskGB]
   if (numbers.some((value) => !Number.isSafeInteger(value) || value <= 0) ||
-      !/^(NVME_STORAGE|SSD_STORAGE|PCI_SSD_STORAGE|COLD_STORAGE|SAFE_SSD_STORAGE|SAFE_STORAGE|TURBOSSD_STORAGE)$/.test(config.diskType)) {
+      !/^(?:[A-Z0-9]+_)*STORAGE$/.test(config.diskType) || config.diskType.length > 80) {
     return error('Cấu hình đã sao chép không hợp lệ.')
   }
   function resourceSection(): Element | undefined {
@@ -113,24 +149,49 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
   } }).jQuery
   if (!pf?.widgets || !jq) return error('PrimeFaces chưa sẵn sàng. Hãy đợi trang tải xong rồi thử lại.')
 
+  function normalizedLabel(value: string | null | undefined): string {
+    return (value ?? '').replace(/\*/g, '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN')
+  }
   function container(label: string): Element | null {
     const field = [...(resourceSection()?.querySelectorAll('label') ?? [])]
-      .find((node) => node.textContent?.trim() === label)
-    return field?.closest(label === 'Disk' ? '.ui-g-12.p-0' : '.ui-g-12.ui-md-4') ?? null
+      .find((node) => normalizedLabel(node.textContent) === normalizedLabel(label))
+    return field?.closest('.ui-g-12') ?? field?.parentElement ?? null
   }
   function numberInput(label: string): HTMLInputElement | null {
-    return container(label)?.querySelector<HTMLInputElement>('.ui-inputnumber input[id$="_input"]:not([type="hidden"])') ?? null
+    const inputs = [...(container(label)?.querySelectorAll<HTMLInputElement>('input:not([type="hidden"])') ?? [])]
+    return inputs.find((input) => input.id.endsWith('_input') &&
+      (input.closest('.ui-inputnumber') || input.inputMode === 'numeric')) ?? null
   }
   function widgetFor(input: Element) {
     return Object.values(pf!.widgets).find((widget) => widget.input?.[0] === input)
   }
-  const disk = container('Disk')
-  const diskSelect = disk?.querySelector<HTMLSelectElement>('select[id$="_input"]')
-  if (['CPU', 'RAM', 'Internet', 'Disk'].some((label) => !numberInput(label)) ||
-      !diskSelect || ![...diskSelect.options].some((option) => option.value === config.diskType) ||
-      disk!.querySelectorAll('.ui-inputnumber input[id$="_input"]:not([type="hidden"])').length !== 1) {
-    return error('Thiếu ô CPU, RAM, Internet hoặc Disk phù hợp. Chưa thay đổi dữ liệu.')
+  function diskSelect(): HTMLSelectElement | null {
+    return container('Disk')?.querySelector<HTMLSelectElement>('select[id$="_input"]') ?? null
   }
+  function storageSignature(value: string): string {
+    return value.toUpperCase().replace(/_STORAGE$/, '').replace(/(?:^|_)PRO(?:_|$)/g, '_')
+      .replace(/[^A-Z0-9]/g, '')
+  }
+  function diskOption(select: HTMLSelectElement): HTMLOptionElement | null {
+    const exact = [...select.options].find((option) => option.value === config.diskType)
+    if (exact) return exact
+    const signature = storageSignature(config.diskType)
+    const compatible = [...select.options].filter((option) => storageSignature(option.value) === signature)
+    return compatible.length === 1 ? compatible[0] : null
+  }
+  const disk = container('Disk')
+  const missing = ['CPU', 'RAM', 'Internet', 'Disk'].filter((label) => !numberInput(label))
+  if (missing.length) return error(`Không tìm thấy ô ${missing.join(', ')} trong phần Tài nguyên. Chưa thay đổi dữ liệu.`)
+  const initialDiskSelect = diskSelect()
+  if (!disk || !initialDiskSelect) return error('Không tìm thấy ô chọn loại Disk. Chưa thay đổi dữ liệu.')
+  const initialDiskOption = diskOption(initialDiskSelect)
+  if (!initialDiskOption) {
+    const available = [...initialDiskSelect.options].map((option) => option.textContent?.trim() || option.value).filter(Boolean).join(', ')
+    return error(`Loại Disk ${config.diskType} không tương thích với trang Tạo computing${available ? ` (đang có: ${available})` : ''}. Chưa thay đổi dữ liệu.`)
+  }
+  const diskInputs = [...disk.querySelectorAll<HTMLInputElement>('input:not([type="hidden"])')]
+    .filter((input) => input.id.endsWith('_input') && (input.closest('.ui-inputnumber') || input.inputMode === 'numeric'))
+  if (diskInputs.length !== 1) return error('Không xác định duy nhất ô dung lượng Disk. Chưa thay đổi dữ liệu.')
 
   function waitForUpdate(source: string, change: () => void): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -197,17 +258,20 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
     applied.push('RAM')
     await setNumber('Internet', config.internetMbps)
     applied.push('Internet')
-    const currentSelect = container('Disk')?.querySelector<HTMLSelectElement>('select[id$="_input"]')
+    const currentSelect = diskSelect()
     if (!currentSelect) throw new Error('Không còn ô chọn loại Disk.')
-    if (currentSelect.value !== config.diskType) {
+    const desiredOption = diskOption(currentSelect)
+    if (!desiredOption) throw new Error(`Loại Disk ${config.diskType} không còn trong danh sách.`)
+    const desiredDiskType = desiredOption.value
+    if (currentSelect.value !== desiredDiskType) {
       const widget = widgetFor(currentSelect)
       if (!widget?.selectValue || !widget.triggerChange) throw new Error('Ô chọn loại Disk chưa sẵn sàng.')
       await waitForUpdate(currentSelect.id.slice(0, -'_input'.length), () => {
-        widget.selectValue!(config.diskType)
+        widget.selectValue!(desiredDiskType)
         widget.triggerChange!()
       })
     }
-    if (container('Disk')?.querySelector<HTMLSelectElement>('select[id$="_input"]')?.value !== config.diskType) {
+    if (diskSelect()?.value !== desiredDiskType) {
       throw new Error('Portal chưa giữ loại Disk vừa chọn.')
     }
     await setNumber('Disk', config.diskGB)
@@ -222,9 +286,14 @@ export async function pasteServiceConfig(tabId: number, url: string): Promise<Pa
   if (!isPortalCreateUrl(url)) throw new Error('Hãy mở trang Tạo computing trên Portal.')
   const saved = (await chrome.storage.session.get(portalVmConfigKey))[portalVmConfigKey]
   if (!isPortalVmConfig(saved)) throw new Error('Chưa có cấu hình hợp lệ. Hãy sao chép thông số ở trang Dịch vụ trước.')
-  const [injection] = await chrome.scripting.executeScript({
-    target: { tabId }, world: 'MAIN', func: pasteServiceConfigIntoDOM, args: [saved],
-  })
+  let injection: chrome.scripting.InjectionResult<PasteResult> | undefined
+  try {
+    [injection] = await chrome.scripting.executeScript({
+      target: { tabId }, world: 'MAIN', func: pasteServiceConfigIntoDOM, args: [saved],
+    })
+  } catch (cause) {
+    throw portalAccessError(cause)
+  }
   if (!injection?.result) throw new Error('Trang Tạo computing đã thay đổi hoặc không phản hồi.')
   return injection.result
 }

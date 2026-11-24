@@ -32,13 +32,15 @@ if (!(Test-Path -LiteralPath $readme -PathType Leaf)) { throw 'Missing Edge pack
 if (Test-Path -LiteralPath (Join-Path $dist 'readme.txt')) { throw 'Build output already contains readme.txt.' }
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 if ($manifest.manifest_version -ne 3) { throw 'Expected a Manifest V3 extension.' }
-$required = @(
+$required = @(@(
   'welcome.html',
   $manifest.action.default_popup,
   $manifest.background.service_worker,
   $manifest.options_page,
   $manifest.side_panel.default_path
-) + @($manifest.icons.PSObject.Properties.Value)
+) + @($manifest.icons.PSObject.Properties.Value) +
+  @('portal.js', 'portal.css') +
+  @($manifest.content_scripts | ForEach-Object { @($_.js) + @($_.css) }) | Where-Object { $_ })
 foreach ($path in $required) {
   if (!$path -or [System.IO.Path]::IsPathRooted($path) -or $path -match '(^|[\\/])\.\.([\\/]|$)' -or
       !(Test-Path -LiteralPath (Join-Path $dist $path) -PathType Leaf)) {

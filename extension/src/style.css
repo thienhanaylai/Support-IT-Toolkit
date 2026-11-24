@@ -1,7 +1,7 @@
 :root{font-family:'Segoe UI',system-ui,sans-serif;color:#172633;background:#f5f8fa;font-synthesis:none}
 html,body{scrollbar-width:none}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none}
 *{box-sizing:border-box}body{margin:0}button,input,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.55;cursor:not-allowed}a{color:inherit;text-decoration:none}
-.popup{width:660px;min-height:620px;background:#fff}.panel{max-width:880px;margin:auto;min-height:100vh;background:#fff}
+.popup{width:561px;min-height:620px;background:#fff}.panel{max-width:880px;margin:auto;min-height:100vh;background:#fff}
 .popup-header{height:50px;padding:0 24px;border-bottom:1px solid #e7ecef;background:#fff;display:flex;align-items:center;justify-content:space-between;gap:12px}
 .popup-brand{display:flex;align-items:center;gap:9px;min-width:0}.popup-brand img{display:block;flex:none;border-radius:6px}.popup-brand strong{font-size:13px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .popup-settings{display:inline-flex;align-items:center;gap:6px;flex:none;border-radius:6px;padding:7px 9px;color:#087457;font-size:11px;font-weight:700}
@@ -57,7 +57,8 @@ h1{font:700 29px/1.18 'Space Grotesk',sans-serif;letter-spacing:-1.3px;margin:13
 .history-list{border-top:0}
 .popup .section-title:not(.history-title){margin:18px 0 10px}
 .tool-grid{gap:6px}
-.quick-tool-section{margin-top:16px}
+.popup-tool-group{margin-top:12px;padding:11px;border:1px solid #dfe9e9;border-radius:10px;background:#fbfdfc}.popup .popup-tool-group>.section-title{margin:0 0 10px}.domain-tool-section .input-panel{margin-bottom:10px;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}.vm-tool-section,.network-info-section{margin-top:12px}
+.tool-group-output{margin-top:11px;padding-top:10px;border-top:1px solid #e0e9e6}.tool-group-output .source-hint{margin:0 0 9px}.tool-group-output .checking,.tool-group-output .error,.tool-group-output .result{margin-top:8px;margin-bottom:0}
 .tool{display:flex;align-items:center;gap:8px;min-height:44px;padding:6px 8px}
 .tool-icon{flex:0 0 26px;width:26px;height:26px;margin:0}
 .tool-icon svg{width:16px;height:16px}
@@ -78,6 +79,10 @@ h1{font:700 29px/1.18 'Space Grotesk',sans-serif;letter-spacing:-1.3px;margin:13
 .mx-key-actions button:last-child{border-color:#b9d7c8;background:transparent;color:#305b4c}
 .mx-key-error{margin:0;color:#a53028;font-size:11px}
 .scan-options small.mx-key-saved{color:#087457;font-weight:700}
+.password-generator{margin-top:0;padding:10px 11px;border:1px solid #dcebe5;border-radius:9px;background:#f8fcfa}
+.password-heading{display:flex;align-items:center;gap:8px}.password-heading-copy{min-width:0;flex:1}.password-heading strong{display:block;color:#263f46;font-size:11px}.password-heading-actions{display:flex;align-items:center;gap:5px;flex:none}.password-options-toggle,.password-history-toggle{height:31px;padding:0 7px;border:1px solid transparent;border-radius:6px;background:transparent;color:#078667;font-size:9px;font-weight:750;white-space:nowrap}.password-options-toggle:hover,.password-history-toggle:hover{background:#e7f5ef}.password-options-toggle[aria-expanded="true"],.password-history-toggle[aria-expanded="true"]{border-color:#9acdb8;background:#e1f2eb}.password-history-toggle{display:flex;align-items:center;gap:4px}
+.password-options{display:grid;grid-template-columns:1fr 1fr;gap:9px 12px;margin-top:10px;padding-top:10px;border-top:1px solid #e0ece8;font-size:10px}.password-checks{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px 8px}.password-checks label,.password-extra span{display:flex;align-items:center;gap:6px;color:#344e55;white-space:nowrap}.password-options input[type="checkbox"]{width:14px;height:14px;margin:0;accent-color:#008f6a}.password-length{display:flex;align-items:center;gap:7px;color:#344e55}.password-length input{width:60px;height:29px;border:1px solid #d4e3df;border-radius:5px;padding:0 7px;background:#fff;color:#203641}.password-extra{display:grid;gap:5px}.password-extra>input{height:30px;min-width:0;width:100%;border:1px solid #d4e3df;border-radius:5px;padding:0 8px;background:#fff;color:#203641;font-size:10px}
+.password-generate{display:flex;align-items:center;justify-content:center;gap:6px;height:34px;min-width:94px;padding:0 13px;border:1px solid #00b486;border-radius:7px;background:#009d75;color:#fff;font-size:11px;font-weight:850;white-space:nowrap;box-shadow:0 3px 9px #008f6a35}.password-generate svg{stroke-width:2.5}.password-generate:hover{border-color:#18d09e;background:#007f60;box-shadow:0 4px 11px #008f6a55}.password-result{display:flex;align-items:center;gap:5px;margin-top:8px;padding:5px 6px;border:1px solid #cde2da;border-radius:6px;background:#fff}.password-result code,.password-recent code{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#263f46;font:11px Consolas,monospace}.password-result button,.password-recent button{display:grid;place-items:center;flex:none;height:27px;border:1px solid #9fcfbc;border-radius:5px;background:#dff3ea;color:#067558}.password-result button:hover,.password-recent button:hover{background:#c9eadc;border-color:#66b99a}.password-result .password-copy-main{display:flex;width:auto;padding:0 9px;gap:5px;font-size:9px;font-weight:800;white-space:nowrap}.password-error{margin:7px 0 0;color:#a53028;font-size:10px}.password-recent{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-top:8px;padding-top:8px;border-top:1px solid #d9e9e3}.password-recent>strong{grid-column:1/-1;color:#71858d;font-size:8px;letter-spacing:.6px}.password-recent>div{display:flex;align-items:center;min-width:0;gap:3px;padding:4px 5px;border-radius:5px;background:#eef6f3}.password-recent button{width:25px;height:25px}
 .lookup-hint{margin:11px 0 0;color:#71868a;font-size:11px;line-height:1.5}
 .lookup-hint a,.error a{color:#008f6a;text-decoration:underline}
 .scan-summary{display:flex;gap:13px;align-items:center;margin:13px 0 7px;font-size:11px;color:#70848b}
@@ -98,6 +103,7 @@ h1{font:700 29px/1.18 'Space Grotesk',sans-serif;letter-spacing:-1.3px;margin:13
 .agent-card a{color:#087457;text-decoration:underline;font-weight:700}.agent-card label{display:block;color:#687f85;font-size:10px;font-weight:800;letter-spacing:.7px}
 .agent-card input{max-width:100%;width:360px;height:37px;padding:0 9px;border:1px solid #bad9cb;border-radius:6px;background:#fff;color:#263d43;font:12px Consolas,monospace}
 .agent-id-row{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin-top:7px}.agent-id-row button{border:0;border-radius:6px;background:#008f6a;color:white;padding:9px 12px;font-size:11px;font-weight:700}
+.portal-access-button{border:0;border-radius:6px;background:#008f6a;color:#fff;padding:10px 14px;font-size:12px;font-weight:700}.portal-access-button:hover:not(:disabled){background:#007b5c}.portal-access-card .success{font-weight:700}
 .agent-note{margin:13px 0 0;color:#657e78}.onboarding .intro{max-width:660px}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .options-page .main-content{padding:34px 36px 48px}
@@ -225,6 +231,7 @@ h1{font:700 29px/1.18 'Space Grotesk',sans-serif;letter-spacing:-1.3px;margin:13
   .mx-key-actions button:last-child{border-color:#4f806c;color:#c4e5d5}
   .mx-key-error{color:#ffb2aa}
   .scan-options small.mx-key-saved{color:#8ee8bc}
+  .popup-tool-group{background:#192428;border-color:#344b50}.tool-group-output{border-color:#344b50}.password-generator{background:#192c28;border-color:#375a4d}.password-heading strong,.password-checks label,.password-extra span,.password-length{color:#e8f1f0}.password-recent>strong{color:#a2b8bd}.password-options{border-color:#375047}.password-options-toggle,.password-history-toggle{color:#77e8ba}.password-options-toggle:hover,.password-history-toggle:hover,.password-options-toggle[aria-expanded="true"],.password-history-toggle[aria-expanded="true"]{background:#21473b;border-color:#477a67}.password-length input,.password-extra>input,.password-result{background:#111b1f;border-color:#3b5257;color:#e8f1f0}.password-result code,.password-recent code{color:#e8f1f0}.password-result button,.password-recent button{background:#21473b;border-color:#477a67;color:#9ee7c1}.password-result button:hover,.password-recent button:hover{background:#2c5b4b;border-color:#65aa8e}.password-recent{border-color:#375047}.password-recent>div{background:#203530}.password-error{color:#ffb2aa}
   .lookup-hint{color:#a2b8bd}
   .lookup-hint a,.error a{color:#65e2b3}
   .tool{background:#1b272b;border-color:#354a50;color:#e8f1f0}

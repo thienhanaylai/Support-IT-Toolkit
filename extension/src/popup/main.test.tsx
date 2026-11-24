@@ -33,8 +33,29 @@ it('restores the form and live progress after the popup is reopened, then shows 
   })
   await import('./main')
   await vi.waitFor(() => expect((document.querySelector('#target') as HTMLInputElement)?.value).toBe('example.com'))
+  const password = document.querySelector('.password-generator')!
+  const domainTools = document.querySelector('.domain-tool-section')!
+  const vmTools = document.querySelector('.vm-tool-section')!
+  const networkTools = document.querySelector('.network-info-section')!
+  expect(domainTools.contains(document.querySelector('#target'))).toBe(true)
+  expect(domainTools.textContent).not.toContain('DOMAIN HOẶC ĐỊA CHỈ IP')
+  expect(document.querySelector('#target')?.getAttribute('aria-label')).toBe('Domain hoặc địa chỉ IP')
+  expect(vmTools.textContent).toContain('THÔNG TIN VM')
+  expect(vmTools.textContent).toContain('Thông tin VM')
+  expect(vmTools.textContent).not.toContain('Mạng LAN')
+  expect(vmTools.textContent).not.toContain('IP Public')
+  expect(networkTools.textContent).toContain('THÔNG TIN MẠNG')
+  expect(networkTools.textContent).toContain('Mạng LAN')
+  expect(networkTools.textContent).toContain('IP Public')
+  expect(networkTools.textContent).not.toContain('Thông tin VM')
+  expect(password.compareDocumentPosition(domainTools) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(domainTools.compareDocumentPosition(vmTools) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(vmTools.compareDocumentPosition(networkTools) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(document.body.textContent).toContain('Reply 1/4')
   expect(document.body.textContent).toContain('Đang kiểm tra Ping')
+  expect(domainTools.querySelector('.checking')?.textContent).toContain('Đang kiểm tra Ping')
+  expect(vmTools.querySelector('.checking')).toBeNull()
+  expect(networkTools.querySelector('.checking')).toBeNull()
 
   const record = {
     id: 'record-1', at: new Date().toISOString(), tool: 'Ping', target: 'example.com',
@@ -42,11 +63,16 @@ it('restores the form and live progress after the popup is reopened, then shows 
   }
   onChanged?.({ [jobKey]: { newValue: { ...running, status: 'done', record } } }, 'session')
   await vi.waitFor(() => expect(document.body.textContent).toContain('Reply from example.com'))
+  expect(domainTools.querySelector('.result')?.textContent).toContain('Reply from example.com')
 })
 
-it('offers copy on the Service tab and stores only the four resource values', async () => {
+it('offers copy only on the Service tab and includes OS and Site Provider for review', async () => {
   document.body.innerHTML = '<div id="root"></div>'
-  const config = { cpu: 2, ramGB: 4, internetMbps: 200, diskGB: 50, diskType: 'NVME_STORAGE' }
+  const config = {
+    cpu: 2, ramGB: 4, internetMbps: 200, diskGB: 50, diskType: 'NVME_STORAGE',
+    os: 'Windows Server 2022 Standard (64-bit)', osId: '118498',
+    siteProvider: 'HCM', siteProviderId: '106066',
+  }
   const set = vi.fn(async () => {})
   const executeScript = vi.fn(async () => [{ result: config }])
   vi.stubGlobal('chrome', {
@@ -63,13 +89,19 @@ it('offers copy on the Service tab and stores only the four resource values', as
   await vi.waitFor(() => expect(document.querySelector('.vm-transfer button')).not.toBeNull())
   document.querySelector<HTMLButtonElement>('.vm-transfer button')!.click()
   await vi.waitFor(() => expect(set).toHaveBeenCalledWith({ [portalVmConfigKey]: config }))
-  expect(document.querySelector('.vm-transfer')?.textContent).toContain('Đã sao chép 4 thông số')
+  expect(document.querySelector('.vm-transfer')?.textContent).toContain('Đã sao chép cấu hình')
+  expect(document.querySelector('.vm-transfer')?.textContent).toContain('Windows Server 2022 Standard')
+  expect(document.querySelector('.vm-transfer')?.textContent).toContain('HCM')
   expect(executeScript).toHaveBeenCalledWith(expect.objectContaining({ target: { tabId: 4 } }))
 })
 
-it('offers paste on the Create computing tab, using MAIN world for PrimeFaces', async () => {
+it('does not show the popup transfer section on the Create computing tab', async () => {
   document.body.innerHTML = '<div id="root"></div>'
-  const config = { cpu: 2, ramGB: 4, internetMbps: 200, diskGB: 50, diskType: 'NVME_STORAGE' }
+  const config = {
+    cpu: 2, ramGB: 4, internetMbps: 200, diskGB: 50, diskType: 'NVME_STORAGE',
+    os: 'Windows Server 2022 Standard (64-bit)', osId: '118498',
+    siteProvider: 'HCM', siteProviderId: '106066',
+  }
   const executeScript = vi.fn(async () => [{ result: { applied: ['CPU', 'RAM', 'Internet', 'Disk'] } }])
   vi.stubGlobal('chrome', {
     runtime: { sendMessage: vi.fn(async () => ({})) },
@@ -82,10 +114,9 @@ it('offers paste on the Create computing tab, using MAIN world for PrimeFaces', 
     },
   })
   await import('./main')
-  await vi.waitFor(() => expect(document.querySelector<HTMLButtonElement>('.vm-transfer button')?.disabled).toBe(false))
-  document.querySelector<HTMLButtonElement>('.vm-transfer button')!.click()
-  await vi.waitFor(() => expect(executeScript).toHaveBeenCalledWith(expect.objectContaining({ target: { tabId: 5 }, world: 'MAIN', args: [config] })))
-  expect(document.querySelector('.vm-transfer')?.textContent).toContain('Đã điền CPU → RAM → Internet → Disk')
+  await vi.waitFor(() => expect(document.querySelector('.popup-header')).not.toBeNull())
+  expect(document.querySelector('.vm-transfer')).toBeNull()
+  expect(executeScript).not.toHaveBeenCalled()
 })
 
 it('retries a failed VM lookup using the currently active Portal tab', async () => {
@@ -122,6 +153,7 @@ it('retries a failed VM lookup using the currently active Portal tab', async () 
     return button!
   })
   expect(retry.textContent).toContain('Thử lại')
+  expect(document.querySelector('.vm-tool-section')?.contains(retry.closest('.error'))).toBe(true)
   retry.click()
   await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
     type: 'toolkit:start-job',
@@ -147,6 +179,34 @@ it('does not show VM retry for an unrelated failed check', async () => {
   await import('./main')
   await vi.waitFor(() => expect(document.querySelector('.error')?.textContent).toContain('Ping thất bại'))
   expect(document.querySelector('.retry-vm')).toBeNull()
+})
+
+it('opens a recent result inside the matching tool group', async () => {
+  document.body.innerHTML = '<div id="root"></div>'
+  Element.prototype.scrollIntoView = vi.fn()
+  const record = {
+    id: 'network-record', at: new Date().toISOString(), tool: 'Mạng LAN', target: 'Máy này',
+    source: 'Local Agent', status: 'ok' as const, result: { raw: 'Ethernet 192.168.1.2' },
+  }
+  vi.stubGlobal('chrome', {
+    runtime: { sendMessage: vi.fn(async () => ({})) },
+    tabs: { query: vi.fn(async () => []) },
+    storage: {
+      session: { get: vi.fn(async () => ({})), set: vi.fn(async () => {}), remove: vi.fn(async () => {}) },
+      local: { get: vi.fn(async (key: string) => key === 'history' ? { history: [record] } : {}) },
+      onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
+    },
+  })
+  await import('./main')
+  const recent = await vi.waitFor(() => {
+    const button = document.querySelector<HTMLButtonElement>('.recent')
+    expect(button).not.toBeNull()
+    return button!
+  })
+  recent.click()
+  await vi.waitFor(() => expect(document.querySelector('.network-info-section .result')?.textContent).toContain('Ethernet 192.168.1.2'))
+  expect(document.querySelector('.domain-tool-section .result')).toBeNull()
+  expect(document.querySelector('.vm-tool-section .result')).toBeNull()
 })
 
 async function openMXPopup(domain: string, failed = false) {

@@ -7,7 +7,11 @@ import {
 
 const serviceUrl = 'https://portal.longvan.vn/cloud-service-manager/manager/cloud-service-detail.xhtml?id=123'
 const createUrl = 'https://portal.longvan.vn/computing-manager/manager/computing/computing_create.xhtml?id=456'
-const config: PortalVmConfig = { cpu: 2, ramGB: 4, internetMbps: 200, diskGB: 50, diskType: 'NVME_STORAGE' }
+const config: PortalVmConfig = {
+  cpu: 2, ramGB: 4, internetMbps: 200, diskGB: 50, diskType: 'NVME_STORAGE',
+  os: 'Windows Server 2022 Standard (64-bit)', osId: '118498',
+  siteProvider: 'HCM', siteProviderId: '106066',
+}
 
 function serviceTable() {
   document.body.innerHTML = `<table><tbody id="frm-info-service:componentInfoService:resourceBare_data">
@@ -18,7 +22,8 @@ function serviceTable() {
       ['IP', '#IP', '1 IP'],
       ['Internet', '#INTERNET', '200 Mb/s'],
       ['Backup', '#BACKUP', '1 Daily'],
-      ['OS', '#OS', '118498'],
+      ['Windows Server 2022 Standard (64-bit)', '#OS', '118498'],
+      ['HCM', '#PROVINCE', '106066'],
     ].map(([name, code, value]) => `<tr><td><div class="ui-cell-editor-output">${name}<br><span>${code}</span></div><div class="ui-cell-editor-input"><input value="WRONG-HIDDEN"></div></td><td><div class="ui-cell-editor-output">${value}</div><div class="ui-cell-editor-input"><input value="9999"></div></td></tr>`).join('')}
   </tbody></table>`
 }
@@ -46,7 +51,11 @@ describe('Service configuration', () => {
   it('reads displayed attributes only, with exact units and storage type', async () => {
     serviceTable()
     expect(extractServiceConfigFromDOM()).toEqual(config)
-    expect(JSON.stringify(extractServiceConfigFromDOM())).not.toMatch(/WRONG-HIDDEN|9999|#IP|118498/)
+    expect(JSON.stringify(extractServiceConfigFromDOM())).not.toMatch(/WRONG-HIDDEN|9999|#IP/)
+    expect(extractServiceConfigFromDOM()).toMatchObject({
+      os: 'Windows Server 2022 Standard (64-bit)', osId: '118498',
+      siteProvider: 'HCM', siteProviderId: '106066',
+    })
     const set = vi.fn(async () => {})
     vi.stubGlobal('chrome', { scripting: { executeScript: vi.fn(async ({ func }: { func: () => PortalVmConfig | null }) => [{ result: func() }]) }, storage: { session: { set } } })
     expect(await copyServiceConfig(7, serviceUrl)).toEqual(config)
@@ -61,6 +70,45 @@ describe('Service configuration', () => {
     expect(extractServiceConfigFromDOM()).toBeNull()
     expect(isPortalVmConfig({ ...config, diskType: 'BACKUP' })).toBe(false)
     expect(isPortalVmConfig({ ...config, cpu: -1 })).toBe(false)
+  })
+
+  it('reads shuffled CPU and NVME PRO storage attributes while ignoring unrelated rows', () => {
+    document.body.innerHTML = `<table><tbody id="frm-info-service:componentInfoService:resourceBare_data">
+      ${[
+        ['Backup', '#BACKUP', '1 Daily'],
+        ['HN', '#PROVINCE', '106068'],
+        ['CPU', '#CPU', '8 Core'],
+        ['IP', '#IP', '1 IP'],
+        ['STORAGE', '#NVME_PRO_STORAGE', '300 GB'],
+        ['Ubuntu 22.04 (64-bit)', '#OS', '100101'],
+        ['RAM', '#RAM', '8 GB'],
+        ['Internet', '#INTERNET', '700 Mb/s'],
+      ].map(([name, code, value]) => `<tr><td><div class="ui-cell-editor-output">${name}<br><span>${code}</span></div></td><td><div class="ui-cell-editor-output">${value}</div></td></tr>`).join('')}
+    </tbody></table>`
+    expect(extractServiceConfigFromDOM()).toEqual({
+      cpu: 8, ramGB: 8, internetMbps: 700, diskGB: 300, diskType: 'NVME_PRO_STORAGE',
+      os: 'Ubuntu 22.04 (64-bit)', osId: '100101', siteProvider: 'HN', siteProviderId: '106068',
+    })
+  })
+
+  it('rejects ambiguous CPU or multiple storage attributes instead of copying the wrong values', () => {
+    serviceTable()
+    const table = document.getElementById('frm-info-service:componentInfoService:resourceBare_data')!
+    table.insertAdjacentHTML('beforeend', '<tr><td><div class="ui-cell-editor-output">CPU<br><span>#CPU</span></div></td><td><div class="ui-cell-editor-output">4 Core</div></td></tr>')
+    expect(extractServiceConfigFromDOM()).toBeNull()
+    table.lastElementChild?.remove()
+    table.insertAdjacentHTML('beforeend', '<tr><td><div class="ui-cell-editor-output">STORAGE<br><span>#NVME_PRO_STORAGE</span></div></td><td><div class="ui-cell-editor-output">100 GB</div></td></tr>')
+    expect(extractServiceConfigFromDOM()).toBeNull()
+  })
+
+  it('turns missing Portal host permission into actionable guidance', async () => {
+    vi.stubGlobal('chrome', {
+      scripting: { executeScript: vi.fn(async () => {
+        throw new Error('Cannot access contents of the page. Extension manifest must request permission to access the respective host.')
+      }) },
+      storage: { session: { set: vi.fn() } },
+    })
+    await expect(copyServiceConfig(7, serviceUrl)).rejects.toThrow('edge://extensions')
   })
 })
 
@@ -144,6 +192,27 @@ describe('Create computing form', () => {
       .toEqual(['2', '4', '200', '50'])
     expect((document.getElementById('disk_type_input') as HTMLSelectElement).value).toBe('NVME_STORAGE')
     expect(submitted).not.toHaveBeenCalled()
+  })
+
+  it('maps copied NVME PRO storage to the single compatible NVMe option in the create form', async () => {
+    createForm()
+    const order = mockPrimeFaces()
+    const proConfig = { ...config, cpu: 8, ramGB: 8, internetMbps: 700, diskGB: 300, diskType: 'NVME_PRO_STORAGE' }
+    expect(await pasteServiceConfigIntoDOM(proConfig)).toEqual({ applied: ['CPU', 'RAM', 'Internet', 'Disk'] })
+    expect(order).toEqual(['cpu', 'ram', 'internet', 'disk_type', 'disk'])
+    expect((document.getElementById('disk_type_input') as HTMLSelectElement).value).toBe('NVME_STORAGE')
+    expect(['cpu', 'ram', 'internet', 'disk'].map((id) => (document.getElementById(`${id}_input`) as HTMLInputElement).value))
+      .toEqual(['8', '8', '700', '300'])
+  })
+
+  it('reports an unsupported disk type before changing any resource value', async () => {
+    createForm()
+    const order = mockPrimeFaces()
+    const result = await pasteServiceConfigIntoDOM({ ...config, diskType: 'ARCHIVE_STORAGE' })
+    expect(result.applied).toEqual([])
+    expect(result.error).toContain('ARCHIVE_STORAGE không tương thích')
+    expect(result.error).toContain('NVMe')
+    expect(order).toEqual([])
   })
 
   it('skips values already matching the saved Portal sample but keeps the required order', async () => {

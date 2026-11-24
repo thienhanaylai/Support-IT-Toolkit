@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CheckRecord } from '../services/storage'
+import { agentZipURL } from '../services/agentDownload'
 
 const records: CheckRecord[] = [
   { id: 'one', at: '2026-11-24T12:00:00Z', tool: 'Ping', target: 'example.com', source: 'Local Agent', status: 'ok', result: { message: 'pong' } },
@@ -13,21 +14,50 @@ async function openSettings(initialHistory = records) {
   const get = vi.fn(async (key: string) => key === 'history' ? { history: initialHistory } : { settings: { timeoutMs: 3200, saveHistory: true, mxtoolboxApiKey: '', bknsApiKey: '' } })
   const set = vi.fn(async () => {})
   const remove = vi.fn(async () => {})
+  let portalAllowed = false
+  const permissionRequest = vi.fn(async () => { portalAllowed = true; return true })
+  const permissionRemove = vi.fn(async () => { portalAllowed = false; return true })
   vi.stubGlobal('chrome', {
-    runtime: { id: 'abcdefghijklmnopabcdefghijklmnop', getManifest: () => ({ version: '0.1.4' }) },
+    runtime: { id: 'abcdefghijklmnopabcdefghijklmnop', getManifest: () => ({ version: '0.1.5' }) },
     storage: { local: { get, set, remove }, onChanged: {
       addListener: (listener: typeof onChanged) => { onChanged = listener },
       removeListener: vi.fn(),
     } },
+    permissions: {
+      contains: vi.fn(async () => portalAllowed),
+      request: permissionRequest,
+      remove: permissionRemove,
+    },
   })
   await import('./main')
   await vi.waitFor(() => expect(document.querySelector('.options-history-list .recent')).not.toBeNull())
-  return { get, set, remove, changed: (history: CheckRecord[]) => onChanged?.({ history: { newValue: history } as chrome.storage.StorageChange }, 'local') }
+  return { get, set, remove, permissionRequest, permissionRemove,
+    changed: (history: CheckRecord[]) => onChanged?.({ history: { newValue: history } as chrome.storage.StorageChange }, 'local') }
 }
 
 afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); document.body.innerHTML = '' })
 
 describe('Settings history', () => {
+  it('can grant and revoke Portal access from Settings', async () => {
+    const { permissionRequest, permissionRemove } = await openSettings()
+    const toggle = document.querySelector<HTMLInputElement>('#portal-access-toggle')!
+    await vi.waitFor(() => expect(toggle.disabled).toBe(false))
+    toggle.click()
+    await vi.waitFor(() => expect(permissionRequest).toHaveBeenCalledWith({ origins: ['https://portal.longvan.vn/*'] }))
+    await vi.waitFor(() => expect(toggle.checked).toBe(true))
+    toggle.click()
+    await vi.waitFor(() => expect(permissionRemove).toHaveBeenCalledWith({ origins: ['https://portal.longvan.vn/*'] }))
+    await vi.waitFor(() => expect(toggle.checked).toBe(false))
+  })
+
+  it('shows only the complete Agent ZIP download link', async () => {
+    await openSettings()
+    expect((document.querySelector('#current-extension-id') as HTMLInputElement).value).toBe(chrome.runtime.id)
+    expect(document.querySelector(`a[href="${agentZipURL}"]`)).not.toBeNull()
+    expect(document.querySelectorAll('a[href*="github.com/thienhanaylai/Support-IT-Toolkit/releases/download"]')).toHaveLength(1)
+    expect(document.body.textContent).toContain('Không di chuyển hoặc chạy riêng Install.cmd')
+  })
+
   it('shows saved records, filters them, and opens the selected result', async () => {
     await openSettings()
     expect(document.querySelectorAll('.options-history-list .recent')).toHaveLength(2)
