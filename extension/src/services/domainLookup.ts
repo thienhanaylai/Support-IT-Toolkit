@@ -5,6 +5,10 @@ import { getDomain } from 'tldts'
 export const mxCommands = ['dns', 'a', 'aaaa', 'mx', 'txt', 'spf', 'dmarc', 'soa'] as const
 export type MXCommand = typeof mxCommands[number]
 
+export function isMXToolboxApiKey(value: string): boolean {
+  return /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value.trim())
+}
+
 export function domainOnly(input: string): string {
   const { host } = parseInput(input)
   if (!host.includes('.') || host.includes(':') || /^\d+(?:\.\d+){3}$/.test(host)) {
@@ -51,7 +55,7 @@ export function mxRecordList(data: Record<string, unknown>): string[] {
 export async function mxToolboxLookup(domain: string, command: MXCommand, apiKey: string, timeoutMs: number, onProgress?: (text: string) => void): Promise<Record<string, unknown>> {
   if (!mxCommands.includes(command)) throw new Error('Loại truy vấn MXToolbox không hợp lệ')
   const key = apiKey.trim()
-  if (key && !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(key)) {
+  if (key && !isMXToolboxApiKey(key)) {
     throw new Error('API key MXToolbox phải là UUID hợp lệ')
   }
   if (!key && !(domain === 'example.com' && command === 'dns')) {

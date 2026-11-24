@@ -1,7 +1,7 @@
 # Báo cáo IT Support Toolkit Extension
 
-**Ngày rà soát:** 23/11/2026  
-**Phiên bản manifest:** 0.1.3 (Chrome/Edge Manifest V3)
+**Ngày rà soát:** 24/11/2026
+**Phiên bản manifest:** 0.1.4 (Chrome/Edge Manifest V3)
 **Phạm vi:** extension trong `extension/`, Windows Local Agent trong `native-agent/`.
 
 ## Extension hiện làm được gì?
@@ -34,10 +34,10 @@
 ## Kết quả rà soát
 
 - `npm run build`: **đạt**.
-- `npm run test`: **47/47 bài test đạt** (bao gồm trang chào mừng/link Agent và lần cài đầu, khôi phục popup, lưu tiến trình/kết quả của service worker, tab Portal ban đầu, Native Messaging, WHOIS và giao diện SSL/TLS). WHOIS luôn dùng tab nền không kích hoạt trong cửa sổ trình duyệt bình thường và đóng tab sau khi tra cứu.
+- `npm run test`: **63/63 bài test đạt** (bao gồm trang Cài đặt/lịch sử, nhập MXToolbox API key trong popup, chuyển cấu hình Dịch vụ → Tạo computing theo thứ tự, thử lại Thông tin VM, trang chào mừng/link Agent, khôi phục popup, Native Messaging, WHOIS và giao diện SSL/TLS). WHOIS luôn dùng tab nền không kích hoạt trong cửa sổ trình duyệt bình thường và đóng tab sau khi tra cứu.
 - `npm audit --audit-level=moderate`: **0 lỗ hổng được báo** tại thời điểm rà soát.
 - `go test ./...`: **đạt**.
-- Kiểm tra ZIP sau khi đóng gói: **22/22 file extension khớp bản build** trong `extension/dist`, đủ bốn icon, manifest v0.1.3, trang chào mừng, installer và Agent Windows x64. ZIP Agent riêng có `Install.cmd`, `setup.ps1`, `install-agent.ps1`, Agent và `readme.txt`; CMD tải trực tiếp đối chiếu SHA-256 trước khi cài. File Agent lấy trực tiếp từ ZIP trước đó đã chạy thành công Ping, TCP Port, Quét Port và Mạng LAN với mục tiêu loopback; có thông báo tiến độ.
+- Kiểm tra ZIP sau khi đóng gói: **23/23 file extension khớp bản build** trong `extension/dist`, đủ bốn icon, manifest v0.1.4, trang chào mừng, installer và Agent Windows x64. Gói Edge Add-ons có 24 file gồm `readme.txt`, không chứa Agent/installer. Local Agent vẫn dùng bộ cài v0.1.3; ZIP Agent riêng có `Install.cmd`, `setup.ps1`, `install-agent.ps1`, Agent và `readme.txt`; CMD tải trực tiếp đối chiếu SHA-256 trước khi cài.
 - EXE một file nhúng nguyên vẹn ZIP hiện tại, `--verify` tự giải nén và kiểm tra đủ file bắt buộc; kiến trúc Windows x64. Luồng nâng cấp dùng lại Extension ID đã đăng ký được kiểm tra với thư mục và Agent giả lập cách ly, **không chạy bộ cài thật trên máy**.
 - Kiểm tra popup bằng trình duyệt với dữ liệu mô phỏng: rộng 660 px, 5 mục gần đây, WHOIS hiển thị theo mục, Mạng LAN vẫn cuộn được khi ẩn thanh cuộn. Đây không phải phiên extension được cài trong trình duyệt.
 - Các script PowerShell trong `packaging/` đã được kiểm tra cú pháp. Bộ cài Windows hiển thị tiếng Việt, hỏi chọn Chrome, Edge hoặc xem hướng dẫn cho cả hai; ba nhánh đã được thử bằng `packaging/test-setup.ps1` với Agent giả lập. Bộ cài không tự mở trình duyệt: thử trên profile tách biệt xác nhận Chrome/Edge chuyển địa chỉ nội bộ từ dòng lệnh thành New Tab. `setup.ps1` và `install.ps1` dùng đúng một UTF-8 BOM để Windows PowerShell 5.1 hiển thị tiếng Việt; manifest Native Messaging vẫn ghi UTF-8 không BOM. ZIP/EXE cài tay có `readme.txt` riêng; **chưa chạy installer thật** để tránh thay đổi registry hoặc extension đang dùng trên máy.

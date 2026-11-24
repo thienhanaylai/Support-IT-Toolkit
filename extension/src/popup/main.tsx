@@ -1,16 +1,17 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ArrowRight, Clock3, Globe2, HardDrive, MailSearch, Monitor, Network, Radio, ScanSearch, Search, Server, Settings2, ShieldCheck, UserRoundSearch, Zap } from 'lucide-react'
+import { ArrowRight, ClipboardCopy, ClipboardPaste, Clock3, Globe2, HardDrive, MailSearch, Monitor, Network, Radio, RotateCw, ScanSearch, Search, Server, Settings2, ShieldCheck, UserRoundSearch, Zap } from 'lucide-react'
 import { HistoryItem } from '../components/HistoryItem'
 import { Result } from '../components/Result'
 import { labels, toolRequiresAgent, type Tool } from '../services/checks'
 import { getHistory, getSettings, type CheckRecord } from '../services/storage'
 import { commonPorts, parseScanPorts } from '../services/scanPorts'
-import { domainOnly, registrationDomain, type MXCommand } from '../services/domainLookup'
+import { domainOnly, isMXToolboxApiKey, registrationDomain, type MXCommand } from '../services/domainLookup'
 import { longVanWhoisURL } from '../services/longVanWhois'
 import { grantHost } from '../services/hostAccess'
 import { parseInput } from '../services/validation'
 import { draftKey, jobKey, type CheckJob, type PopupDraft } from '../services/work'
+import { copyServiceConfig, isPortalCreateUrl, isPortalServiceUrl, isPortalVmConfig, pasteServiceConfig, portalVmConfigKey, type PortalVmConfig } from '../services/portalVmConfig'
 import '../style.css'
 
 const tools: { id: Tool; icon: React.ReactNode; detail: string }[] = [
@@ -44,14 +45,41 @@ function App() {
   const [error, setError] = useState('')
   const [record, setRecord] = useState<CheckRecord | null>(null)
   const [recent, setRecent] = useState<CheckRecord[]>([])
+  const [portalPage, setPortalPage] = useState<'service' | 'create' | null>(null)
+  const [vmConfig, setVmConfig] = useState<PortalVmConfig | null>(null)
+  const [configBusy, setConfigBusy] = useState(false)
+  const [configMessage, setConfigMessage] = useState('')
+  const [configFailed, setConfigFailed] = useState(false)
+  const [hasMXKey, setHasMXKey] = useState<boolean | null>(null)
+  const [showMXKeyForm, setShowMXKeyForm] = useState(false)
+  const [mxKeyDraft, setMxKeyDraft] = useState('')
+  const [mxKeyError, setMxKeyError] = useState('')
+  const [mxKeySaving, setMxKeySaving] = useState(false)
+  const [mxKeySaved, setMxKeySaved] = useState(false)
   const resultRef = useRef<HTMLDivElement>(null)
   const progressRef = useRef<HTMLPreElement>(null)
   const busy = starting || job?.status === 'running'
   const progress = job?.progress ?? []
+  const mxDemo = tool === 'mxtoolbox' && input.trim().toLowerCase() === 'example.com' && mxCommand === 'dns'
+  const mxNeedsKey = tool === 'mxtoolbox' && hasMXKey === false && !mxDemo
 
   useEffect(() => {
     let mounted = true
+    void getSettings().then((settings) => {
+      if (mounted) setHasMXKey(isMXToolboxApiKey(settings.mxtoolboxApiKey))
+    }).catch(() => { if (mounted) setHasMXKey(null) })
+    void chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+      if (mounted) setPortalPage(tab?.url && isPortalServiceUrl(tab.url) ? 'service' :
+        tab?.url && isPortalCreateUrl(tab.url) ? 'create' : null)
+    }).catch(() => {})
+    void chrome.storage.session.get(portalVmConfigKey).then((saved) => {
+      if (mounted && isPortalVmConfig(saved[portalVmConfigKey])) setVmConfig(saved[portalVmConfigKey])
+    }).catch(() => {})
     const changed = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area === 'local' && changes.settings && mounted) {
+        const next = changes.settings.newValue as { mxtoolboxApiKey?: string } | undefined
+        setHasMXKey(isMXToolboxApiKey(next?.mxtoolboxApiKey ?? ''))
+      }
       if (area !== 'session' || !changes[jobKey] || !mounted) return
       const next = changes[jobKey].newValue as CheckJob | undefined
       setJob(next ?? null)
@@ -136,6 +164,21 @@ function App() {
       setError(e instanceof Error ? e.message : String(e))
       return
     }
+    if (selectedTool === 'mxtoolbox') {
+      try {
+        const settings = await getSettings()
+        const validKey = isMXToolboxApiKey(settings.mxtoolboxApiKey)
+        setHasMXKey(validKey)
+        if (!validKey && (settings.mxtoolboxApiKey.trim() || !(domainOnly(input) === 'example.com' && mxCommand === 'dns'))) {
+          setShowMXKeyForm(true)
+          setMxKeySaved(false)
+          return
+        }
+      } catch {
+        setError('Không thể đọc API key MXToolbox. Hãy thử lại.')
+        return
+      }
+    }
     setTool(selectedTool)
     setStarting(true)
     try {
@@ -166,6 +209,53 @@ function App() {
     requestAnimationFrame(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
 
+  async function saveMXKey(event: React.FormEvent) {
+    event.preventDefault()
+    const key = mxKeyDraft.trim()
+    if (!isMXToolboxApiKey(key)) {
+      setMxKeyError('API key MXToolbox phải là UUID hợp lệ.')
+      return
+    }
+    setMxKeySaving(true)
+    setMxKeyError('')
+    try {
+      const settings = await getSettings()
+      await chrome.storage.local.set({ settings: { ...settings, mxtoolboxApiKey: key } })
+      setHasMXKey(true)
+      setShowMXKeyForm(false)
+      setMxKeyDraft('')
+      setMxKeySaved(true)
+      setError('')
+    } catch {
+      setMxKeyError('Không thể lưu API key. Hãy thử lại.')
+    } finally { setMxKeySaving(false) }
+  }
+
+  async function transferConfig(action: 'copy' | 'paste') {
+    if (configBusy || busy) return
+    setConfigBusy(true)
+    setConfigMessage('')
+    setConfigFailed(false)
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+      if (!tab?.id || !tab.url) throw new Error('Không tìm thấy tab Portal đang mở.')
+      if (action === 'copy') {
+        const config = await copyServiceConfig(tab.id, tab.url)
+        setVmConfig(config)
+        setConfigMessage('Đã sao chép 4 thông số vào phiên trình duyệt. Mở trang Tạo computing để dán.')
+      } else {
+        const outcome = await pasteServiceConfig(tab.id, tab.url)
+        if (outcome.error) {
+          setConfigFailed(true)
+          setConfigMessage(`${outcome.applied.length ? `Đã điền ${outcome.applied.join(' → ')}. ` : ''}Dừng: ${outcome.error}`)
+        } else setConfigMessage('Đã điền CPU → RAM → Internet → Disk. Hãy kiểm tra lại trước khi tạo VM.')
+      }
+    } catch (cause) {
+      setConfigFailed(true)
+      setConfigMessage(cause instanceof Error ? cause.message : 'Không thể chuyển cấu hình VM.')
+    } finally { setConfigBusy(false) }
+  }
+
   if (!ready) return <main className="popup"><p role="status">Đang khôi phục phiên kiểm tra...</p></main>
 
   return <main className="popup">
@@ -176,7 +266,7 @@ function App() {
     <div className="main-content">
       {(!tool || !instantTools.includes(tool)) && <div className="input-panel">
         <label htmlFor="target">DOMAIN HOẶC ĐỊA CHỈ IP</label>
-        <div className="input-wrap"><Search size={18} /><input id="target" placeholder="Domain hoặc IP" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} /><button type="button" className="inline-check" disabled={busy || !tool} onClick={() => void run()}>{busy ? 'Đang chạy...' : tool ? 'Kiểm tra' : 'Chọn công cụ'}<ArrowRight size={14} /></button></div>
+        <div className="input-wrap"><Search size={18} /><input id="target" placeholder="Domain hoặc IP" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} /><button type="button" className="inline-check" disabled={busy || !tool} onClick={() => mxNeedsKey ? setShowMXKeyForm(true) : void run()}>{busy ? 'Đang chạy...' : mxNeedsKey ? 'Nhập API key' : tool ? 'Kiểm tra' : 'Chọn công cụ'}<ArrowRight size={14} /></button></div>
         {tool && ['tcp_check', 'tls_check'].includes(tool) && <div className="port-row"><label htmlFor="port">PORT</label><input id="port" type="number" min={1} max={65535} value={port} onChange={(e) => setPort(Number(e.target.value))} /></div>}
         {tool === 'ping' && <div className="port-row"><label htmlFor="ping-count">SỐ LẦN PING (1–5)</label><input id="ping-count" type="number" min={1} max={5} step={1} value={pingCount} onChange={(e) => setPingCount(Number(e.target.value))} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} /></div>}
         {tool === 'traceroute' && <div className="port-row"><label htmlFor="max-hops">SỐ HOP TỐI ĐA (1–30)</label><input id="max-hops" type="number" min={1} max={30} step={1} value={maxHops} onChange={(e) => setMaxHops(Number(e.target.value))} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} /></div>}
@@ -197,7 +287,19 @@ function App() {
             <option value="mx">MX</option><option value="txt">TXT</option><option value="spf">SPF</option>
             <option value="dmarc">DMARC</option><option value="soa">SOA</option>
           </select>
-          <small>Các tên miền khác cần API key trong Cài đặt.</small>
+          {hasMXKey === false && <div className="mx-key-prompt">
+            <div>Chưa có API key MXToolbox. Cần key để kiểm tra tên miền bất kỳ; chỉ DNS <code>example.com</code> dùng thử không cần key.</div>
+            {!showMXKeyForm && <button type="button" className="mx-key-open" onClick={() => { setShowMXKeyForm(true); setMxKeySaved(false) }}>Nhập API key</button>}
+            {showMXKeyForm && <form className="mx-key-form" onSubmit={(event) => void saveMXKey(event)}>
+              <label htmlFor="mx-key-popup">API key MXToolbox (UUID)</label>
+              <input id="mx-key-popup" type="password" autoComplete="off" spellCheck={false} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value={mxKeyDraft} onChange={(event) => { setMxKeyDraft(event.target.value); setMxKeyError('') }} />
+              <div className="mx-key-actions"><button type="submit" disabled={mxKeySaving}>{mxKeySaving ? 'Đang lưu...' : 'Lưu API key'}</button><button type="button" disabled={mxKeySaving} onClick={() => { setShowMXKeyForm(false); setMxKeyDraft(''); setMxKeyError('') }}>Hủy</button></div>
+              {mxKeyError && <p className="mx-key-error" role="alert">{mxKeyError}</p>}
+              <small>Key lưu trên thiết bị trong chrome.storage.local (không mã hóa); chỉ gửi tới MXToolbox khi bạn bấm Kiểm tra.</small>
+            </form>}
+          </div>}
+          {hasMXKey && <small>API key đã lưu. Có thể thay đổi trong Cài đặt.</small>}
+          {mxKeySaved && <small className="mx-key-saved" role="status">Đã lưu API key. Bây giờ bạn có thể bấm Kiểm tra.</small>}
         </div>}
       </div>}
       <section className="tool-section" aria-labelledby="input-tools-heading">
@@ -211,6 +313,18 @@ function App() {
           <span className="tool-icon">{item.icon}</span><strong>{labels[item.id]}</strong><small>{item.detail}</small>
         </button>)}</div>
       </section>
+      {portalPage && <section className="vm-transfer" aria-label="Chuyển cấu hình từ Dịch vụ sang Tạo computing">
+        <div className="vm-transfer-title">CẤU HÌNH VM <span>PORTAL</span></div>
+        {portalPage === 'service' ? <>
+          <p>Chỉ lấy CORE, RAM, Internet và STORAGE từ <strong>Nhóm thuộc tính</strong> đang hiển thị. Không lấy IP, Backup hay OS.</p>
+          <button type="button" disabled={configBusy || busy} onClick={() => void transferConfig('copy')}><ClipboardCopy size={15} /> Sao chép thông số</button>
+        </> : <>
+          <p>{vmConfig ? `Đã lưu tạm: ${vmConfig.cpu} Core · ${vmConfig.ramGB} GB RAM · ${vmConfig.internetMbps} Mb/s · ${vmConfig.diskGB} GB ${vmConfig.diskType.replace('_STORAGE', '')}.` : 'Chưa có thông số. Hãy mở trang Dịch vụ và sao chép cấu hình trước.'}</p>
+          <button type="button" disabled={configBusy || busy || !vmConfig} onClick={() => void transferConfig('paste')}><ClipboardPaste size={15} /> {configBusy ? 'Đang chờ Portal...' : 'Dán cấu hình vào VM'}</button>
+          <small>Điền lần lượt CPU → RAM → Internet → Disk; không bấm Tạo VM hay Lưu thay bạn.</small>
+        </>}
+        {configMessage && <p className={`vm-transfer-message${configFailed ? ' vm-transfer-error' : ''}`} role={configFailed ? 'alert' : 'status'}>{configMessage}</p>}
+      </section>}
       <div className="source-hint"><span className="hint-icon">{tool && toolRequiresAgent(tool) ? <Monitor size={15} /> : <Globe2 size={15} />}</span>{!tool ? 'Chọn một công cụ để bắt đầu' : tool === 'vm_info' ? 'Chỉ đọc tab chi tiết computing của Portal khi bạn nhấn nút' : toolRequiresAgent(tool) ? 'Chạy từ máy bạn · cần Local Agent' : 'Dùng dịch vụ ngoài · có thể cần cấp quyền host'}</div>
       <div ref={resultRef}>
         {(busy || (error && progress.length > 0)) && tool && <div className="checking" role="status">
@@ -219,7 +333,12 @@ function App() {
           </div>
           {progress.length > 0 && <pre ref={progressRef} className="live-output" aria-label="Kết quả trong quá trình chạy">{progress.map((item) => item.text).join('\n')}</pre>}
         </div>}
-        {error && <div className="error" role="alert">{error}</div>}
+        {error && <div className="error" role="alert">
+          <div>{error}</div>
+          {tool === 'vm_info' && <button type="button" className="retry-vm" disabled={busy} onClick={() => void run('vm_info')}>
+            <RotateCw size={14} /> Thử lại
+          </button>}
+        </div>}
         {record && <Result record={record} />}
       </div>
       <div className="section-title history-title"><span>GẦN ĐÂY</span><button className="history-link" onClick={() => { void chrome.windows.getCurrent().then((w) => chrome.sidePanel.open({ windowId: w.id! })).catch(() => chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel.html') })) }}>Xem tất cả <ArrowRight size={13} /></button></div>

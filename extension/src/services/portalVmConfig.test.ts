@@ -1,0 +1,177 @@
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  copyServiceConfig, extractServiceConfigFromDOM, isPortalCreateUrl, isPortalServiceUrl,
+  isPortalVmConfig, pasteServiceConfig, pasteServiceConfigIntoDOM, portalVmConfigKey, type PortalVmConfig,
+} from './portalVmConfig'
+
+const serviceUrl = 'https://portal.longvan.vn/cloud-service-manager/manager/cloud-service-detail.xhtml?id=123'
+const createUrl = 'https://portal.longvan.vn/computing-manager/manager/computing/computing_create.xhtml?id=456'
+const config: PortalVmConfig = { cpu: 2, ramGB: 4, internetMbps: 200, diskGB: 50, diskType: 'NVME_STORAGE' }
+
+function serviceTable() {
+  document.body.innerHTML = `<table><tbody id="frm-info-service:componentInfoService:resourceBare_data">
+    ${[
+      ['CORE', '#CORE', '2 Core'],
+      ['RAM', '#RAM', '4 GB'],
+      ['STORAGE', '#NVME_STORAGE', '50 GB'],
+      ['IP', '#IP', '1 IP'],
+      ['Internet', '#INTERNET', '200 Mb/s'],
+      ['Backup', '#BACKUP', '1 Daily'],
+      ['OS', '#OS', '118498'],
+    ].map(([name, code, value]) => `<tr><td><div class="ui-cell-editor-output">${name}<br><span>${code}</span></div><div class="ui-cell-editor-input"><input value="WRONG-HIDDEN"></div></td><td><div class="ui-cell-editor-output">${value}</div><div class="ui-cell-editor-input"><input value="9999"></div></td></tr>`).join('')}
+  </tbody></table>`
+}
+
+function createForm() {
+  document.body.innerHTML = `<form id="frmMain"><fieldset><legend>Tài nguyên</legend>
+    ${[['CPU', 'cpu', '1'], ['RAM', 'ram', '2'], ['Internet', 'internet', '100']].map(([label, id, value]) =>
+      `<div class="ui-g-12 ui-md-4"><label>${label}</label><span class="ui-inputnumber"><input id="${id}_input" value="${value}"><input id="${id}_hinput" type="hidden" value="${value}"></span></div>`).join('')}
+    <div class="ui-g-12 p-0"><label>Disk</label><select id="disk_type_input"><option value="SSD_STORAGE" selected>SSD</option><option value="NVME_STORAGE">NVMe</option></select>
+      <span class="ui-inputnumber"><input id="disk_input" value="30"><input id="disk_hinput" type="hidden" value="30"></span></div>
+  </fieldset><button type="submit" id="create-vm">Tạo VM</button></form>`
+}
+
+afterEach(() => { document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.restoreAllMocks() })
+
+describe('Service configuration', () => {
+  it('accepts only the two Portal paths, not lookalike domains', () => {
+    expect(isPortalServiceUrl(serviceUrl)).toBe(true)
+    expect(isPortalCreateUrl(createUrl)).toBe(true)
+    expect(isPortalServiceUrl(createUrl)).toBe(false)
+    expect(isPortalCreateUrl('https://portal.longvan.vn.evil.test/computing-manager/manager/computing/computing_create.xhtml')).toBe(false)
+    expect(isPortalCreateUrl('http://portal.longvan.vn/computing-manager/manager/computing/computing_create.xhtml')).toBe(false)
+  })
+
+  it('reads displayed attributes only, with exact units and storage type', async () => {
+    serviceTable()
+    expect(extractServiceConfigFromDOM()).toEqual(config)
+    expect(JSON.stringify(extractServiceConfigFromDOM())).not.toMatch(/WRONG-HIDDEN|9999|#IP|118498/)
+    const set = vi.fn(async () => {})
+    vi.stubGlobal('chrome', { scripting: { executeScript: vi.fn(async ({ func }: { func: () => PortalVmConfig | null }) => [{ result: func() }]) }, storage: { session: { set } } })
+    expect(await copyServiceConfig(7, serviceUrl)).toEqual(config)
+    expect(set).toHaveBeenCalledWith({ [portalVmConfigKey]: config })
+    document.querySelectorAll('.ui-cell-editor-output')[9].textContent = '200 MB/s'
+    expect(extractServiceConfigFromDOM()).toBeNull()
+  })
+
+  it('rejects incomplete and untrusted copied data', () => {
+    serviceTable()
+    document.querySelector('tr')?.remove()
+    expect(extractServiceConfigFromDOM()).toBeNull()
+    expect(isPortalVmConfig({ ...config, diskType: 'BACKUP' })).toBe(false)
+    expect(isPortalVmConfig({ ...config, cpu: -1 })).toBe(false)
+  })
+})
+
+describe('Create computing form', () => {
+  function mockPrimeFaces(failAt?: string) {
+    const order: string[] = []
+    const events = new Map<string, Set<(...args: unknown[]) => void>>()
+    const pf: { widgets: Record<string, unknown> } = { widgets: {} }
+    const initialValues = new Map<Element, string>()
+    function bind() {
+      pf.widgets = {}
+      initialValues.clear()
+      for (const input of document.querySelectorAll<HTMLInputElement>('.ui-inputnumber input[id$="_input"]')) {
+        const hidden = document.getElementById(input.id.replace(/_input$/, '_hinput')) as HTMLInputElement
+        initialValues.set(input, input.value)
+        pf.widgets[input.id] = {
+          input: { 0: input },
+          autonumeric: { set: (value: string) => { input.value = value; input.setAttribute('value', value) } },
+          copyValueToHiddenInput: () => {
+            const previous = hidden.value
+            hidden.value = input.value
+            hidden.setAttribute('value', input.value)
+            return previous
+          },
+          getValue: () => input.value,
+        }
+      }
+      const select = document.querySelector<HTMLSelectElement>('select[id$="_input"]')!
+      pf.widgets[select.id] = {
+        input: { 0: select },
+        selectValue: (value: string) => {
+          select.value = value
+          for (const option of select.options) {
+            if (option.value === value) option.setAttribute('selected', 'selected')
+            else option.removeAttribute('selected')
+          }
+        },
+        triggerChange: () => change(select.id.slice(0, -'_input'.length)),
+      }
+    }
+    function emit(event: string, source: string) {
+      for (const handler of events.get(event) ?? []) handler({}, {}, { source })
+    }
+    function change(source: string) {
+      order.push(source)
+      queueMicrotask(() => {
+        if (source === failAt) { emit('pfAjaxError', source); return }
+        const form = document.getElementById('frmMain')!
+        form.outerHTML = form.outerHTML // PrimeFaces replaces the form after each AJAX response.
+        bind()
+        emit('pfAjaxUpdated', source)
+        emit('pfAjaxComplete', source)
+      })
+    }
+    bind()
+    vi.stubGlobal('PrimeFaces', pf)
+    vi.stubGlobal('jQuery', (node: Element | Document) => ({
+      on: (name: string, handler: (...args: unknown[]) => void) => {
+        if (!events.has(name)) events.set(name, new Set())
+        events.get(name)!.add(handler)
+      },
+      off: (name: string, handler: (...args: unknown[]) => void) => { events.get(name)?.delete(handler) },
+      trigger: (name: string) => {
+        if (name === 'change' && node instanceof HTMLInputElement) {
+          const hidden = document.getElementById(node.id.replace(/_input$/, '_hinput')) as HTMLInputElement
+          if (hidden.value !== initialValues.get(node)) change(node.id.slice(0, -'_input'.length))
+        }
+      },
+    }))
+    return order
+  }
+
+  it('fills CPU, RAM, Internet then disk type and size, waiting for every rerender', async () => {
+    createForm()
+    const order = mockPrimeFaces()
+    const submitted = vi.fn((event: Event) => event.preventDefault())
+    document.getElementById('frmMain')!.addEventListener('submit', submitted)
+    expect(await pasteServiceConfigIntoDOM(config)).toEqual({ applied: ['CPU', 'RAM', 'Internet', 'Disk'] })
+    expect(order).toEqual(['cpu', 'ram', 'internet', 'disk_type', 'disk'])
+    expect(['cpu', 'ram', 'internet', 'disk'].map((id) => (document.getElementById(`${id}_input`) as HTMLInputElement).value))
+      .toEqual(['2', '4', '200', '50'])
+    expect((document.getElementById('disk_type_input') as HTMLSelectElement).value).toBe('NVME_STORAGE')
+    expect(submitted).not.toHaveBeenCalled()
+  })
+
+  it('skips values already matching the saved Portal sample but keeps the required order', async () => {
+    createForm()
+    for (const [id, value] of [['cpu', '2'], ['ram', '4']]) {
+      document.getElementById(`${id}_input`)!.setAttribute('value', value)
+    }
+    const select = document.querySelector<HTMLSelectElement>('select[id$="_input"]')!
+    select.value = 'NVME_STORAGE'
+    select.options[0].removeAttribute('selected')
+    select.options[1].setAttribute('selected', 'selected')
+    const order = mockPrimeFaces()
+    expect(await pasteServiceConfigIntoDOM(config)).toEqual({ applied: ['CPU', 'RAM', 'Internet', 'Disk'] })
+    expect(order).toEqual(['internet', 'disk'])
+  })
+
+  it('stops after a failed AJAX update rather than entering later fields', async () => {
+    createForm()
+    const order = mockPrimeFaces('ram')
+    const result = await pasteServiceConfigIntoDOM(config)
+    expect(result.applied).toEqual(['CPU'])
+    expect(result.error).toMatch(/không cập nhật/)
+    expect(order).toEqual(['cpu', 'ram'])
+  })
+
+  it('requires a valid copied configuration before injecting into the create page', async () => {
+    vi.stubGlobal('chrome', { storage: { session: { get: vi.fn(async () => ({ [portalVmConfigKey]: { ...config, diskType: 'OS' } })) } }, scripting: { executeScript: vi.fn() } })
+    await expect(pasteServiceConfig(8, createUrl)).rejects.toThrow('Chưa có cấu hình hợp lệ')
+    expect(chrome.scripting.executeScript).not.toHaveBeenCalled()
+  })
+})

@@ -18,8 +18,8 @@ it('shows the standalone CMD, ZIP fallback and the installed Extension ID', asyn
 it('keeps both Agent download links in Settings for later use', async () => {
   document.body.innerHTML = '<div id="root"></div>'
   vi.stubGlobal('chrome', {
-    runtime: { id: 'abcdefghijklmnopabcdefghijklmnop', getManifest: () => ({ version: '0.1.3' }) },
-    storage: { local: { get: vi.fn(async () => ({})) } },
+    runtime: { id: 'abcdefghijklmnopabcdefghijklmnop', getManifest: () => ({ version: '0.1.4' }) },
+    storage: { local: { get: vi.fn(async () => ({})) }, onChanged: { addListener: vi.fn(), removeListener: vi.fn() } },
   })
   await import('../options/main')
   await vi.waitFor(() => expect(document.querySelector('#current-extension-id')).not.toBeNull())

@@ -1,12 +1,19 @@
-# IT Support Toolkit v0.1.3 — Windows x64 & Local Agent
+# IT Support Toolkit v0.1.4 — Edge Add-ons & Windows x64
 
-**Tải về:**
-- `ITSupportToolkit-Windows.zip`: bản cài Windows đầy đủ.
-- `Install.cmd`: bộ cài Agent độc lập cho người dùng đã cài extension từ Edge Add-ons. Tải ZIP Agent từ Release này, **kiểm tra SHA-256** rồi hỏi Extension ID để đăng ký Native Messaging trong HKCU.
-- `ITSupportToolkit-Agent-Windows.zip`: cách cài Agent không cần tải bằng CMD; giải nén toàn bộ và chạy `Install.cmd` bên trong.
+**Tải về:** `ITSupportToolkit-Windows.zip` là bộ cài Windows đầy đủ cho Chrome/Edge. Giải nén toàn bộ rồi chạy `Install.cmd`.
 
-**Không** tải ZIP dành cho Microsoft Edge Add-ons hoặc EXE lên Release. ZIP Add-ons được dựng riêng bằng `packaging/build-edge-store.ps1` để nộp Partner Center.
+Gói `ITSupportToolkit-Edge-Store.zip` được dựng và kiểm tra riêng để nộp Microsoft Partner Center, **không đính kèm GitHub Release**. Local Agent không thay đổi trong phiên bản này; người dùng bản Edge Add-ons tiếp tục dùng bộ cài Agent v0.1.3 được liên kết trong extension.
 
-**Thay đổi từ v0.1.2:** Extension v0.1.3 mở trang hướng dẫn Local Agent **chỉ khi cài mới**, hiển thị ID của bản đang cài cùng link tải CMD/ZIP Agent. Các link luôn có lại trong trang Cài đặt. Extension không thể tự thực thi CMD; người dùng phải tải và chạy trên Windows. Bộ cài giữ các Extension ID đã đăng ký trước đó, thêm ID vừa nhập; không cần Administrator, Node.js hay Go trên máy người dùng.
+## Thay đổi từ v0.1.3
 
-**Kiểm tra:** test extension, build production, test Go và mô phỏng cài Agent đạt. Chưa kiểm thử đầu-cuối trên profile Edge Add-ons thật hoặc xét duyệt từ Microsoft. Gói chưa ký số; Windows/Edge có thể cảnh báo khi tải/chạy CMD.
+- Làm lại trang Cài đặt theo từng nhóm rõ ràng và thêm lịch sử: tìm kiếm, xem chi tiết, xuất HTML, xóa có xác nhận.
+- Chuyển cấu hình từ trang Dịch vụ sang Tạo computing: chỉ lấy CORE, RAM, Internet và STORAGE; điền lần lượt CPU → RAM → Internet → Disk, chờ từng cập nhật PrimeFaces và không tự bấm Tạo VM.
+- Thêm nút **Thử lại** khi lấy Thông tin VM thất bại.
+- Khi MXToolbox chưa có API key, popup cho nhập và lưu key UUID trước khi kiểm tra. DNS `example.com` vẫn dùng thử không cần key.
+- Bỏ đoạn thông tin dài ở cuối trang Cài đặt.
+
+## Kiểm tra
+
+- 63/63 bài test extension đạt; TypeScript đạt.
+- Build production, ZIP Edge Add-ons và ZIP Windows được kiểm tra cấu trúc/checksum trước khi phát hành.
+- Đã đối chiếu bộ đọc/điền cấu hình với hai HTML Portal mẫu; chưa kiểm thử đầu-cuối trên phiên Portal đăng nhập thật.
