@@ -4,13 +4,13 @@ Extension Chrome/Edge Manifest V3 + Windows Local Agent (Go). Bản hiện tại
 
 ## Bản phát hành Windows x64
 
-**Tải [ITSupportToolkit-Windows.zip (v0.1.7)](https://github.com/thienhanaylai/Support-IT-Toolkit/releases/download/v0.1.7/ITSupportToolkit-Windows.zip)** từ GitHub Releases. Giải nén toàn bộ ZIP, đọc `readme.txt` và chạy `Install.cmd`. Trình cài tiếng Việt chép extension tới vị trí cố định, cài Agent và đăng ký Native Messaging trong HKCU; máy cài không cần Node.js/Go hay quyền Administrator. Lần cài đầu, chọn **Chrome**, **Edge** hoặc **cả hai**; bộ cài mở cửa sổ trình duyệt mới và dùng UI Automation để điều hướng đến `chrome://extensions/` hoặc `edge://extensions/`. Sau đó bật **Developer mode** → **Load unpacked** thư mục `%LOCALAPPDATA%\ITSupportToolkit\extension` → dán Extension ID vào cửa sổ cài. Có thể đăng ký cả Chrome và Edge bằng hai ID cách nhau dấu phẩy. Nếu tự động điều hướng thất bại, trình cài hiển thị địa chỉ để mở thủ công.
+**Tải [ITSupportToolkit-Windows.zip (v0.1.8)](https://github.com/thienhanaylai/Support-IT-Toolkit/releases/download/v0.1.8/ITSupportToolkit-Windows.zip)** từ GitHub Releases. Giải nén toàn bộ ZIP, đọc `readme.txt` và chạy `Install.cmd`. Trình cài tiếng Việt chép extension tới vị trí cố định, cài Agent và đăng ký Native Messaging trong HKCU; máy cài không cần Node.js/Go hay quyền Administrator. Lần cài đầu, chọn **Chrome**, **Edge** hoặc **cả hai**; bộ cài mở cửa sổ trình duyệt mới và dùng UI Automation để điều hướng đến `chrome://extensions/` hoặc `edge://extensions/`. Sau đó bật **Developer mode** → **Load unpacked** thư mục `%LOCALAPPDATA%\ITSupportToolkit\extension` → dán Extension ID vào cửa sổ cài. Có thể đăng ký cả Chrome và Edge bằng hai ID cách nhau dấu phẩy. Nếu tự động điều hướng thất bại, trình cài hiển thị địa chỉ để mở thủ công.
 
-**Giới hạn của trình duyệt:** Không thể tự động bật extension unpacked trong Chrome/Edge lần đầu trên máy cá nhân. Thao tác **Load unpacked** chỉ cần một lần; khi nâng cấp hãy chạy `Install.cmd` từ ZIP mới, xác nhận ID được gợi ý và tải lại extension. Không di chuyển thư mục extension đã cài. Nếu bản cũ nằm ở thư mục khác, chuyển sang bản mới sẽ tạo ID khác và **không tự chuyển lịch sử/API key**; có thể gỡ bản cũ sau khi kiểm tra bản mới. Xem [`packaging/INSTALL.md`](packaging/INSTALL.md).
+**Giới hạn của trình duyệt:** Bản **Load unpacked/dev không tự kiểm tra hoặc tải bản mới từ GitHub**, và không thể tự động bấm Reload trong Chrome/Edge trên máy cá nhân. Thao tác **Load unpacked** chỉ cần một lần. Khi nâng cấp bản dev, chạy EXE mới hoặc `Install.cmd` từ ZIP mới; bộ cài dùng lại ID đã đăng ký, cập nhật extension + Agent và dọn bundle build cũ. Không gỡ/Load unpacked lại: mở `chrome://extensions/` hoặc `edge://extensions/`, bấm **Reload/Tải lại** trên thẻ IT Support Toolkit, rồi refresh các tab Portal. Không di chuyển thư mục extension đã cài. Giữ cùng đường dẫn và Extension ID sẽ giữ dữ liệu `chrome.storage.local` gồm Authenticator, lịch sử, API key và tùy chọn; dữ liệu tạm trong `chrome.storage.session` có thể mất khi reload. Nếu bản cũ nằm ở thư mục khác, bản mới có thể có ID khác và dữ liệu không tự chuyển; chỉ gỡ bản cũ sau khi kiểm tra bản mới. Xem [`packaging/INSTALL.md`](packaging/INSTALL.md).
 
 Ở lần cài mới, bộ cài sao chép sẵn đường dẫn `%LOCALAPPDATA%\ITSupportToolkit\extension` vào clipboard và mở thư mục bằng File Explorer. Sau khi bấm **Load unpacked**, có thể nhấn `Ctrl+L`, `Ctrl+V`, `Enter` và **Select Folder** thay vì tự tìm thư mục. Edge vẫn yêu cầu người dùng xác nhận thao tác này.
 
-**Để nộp lên Microsoft Edge Add-ons**, dùng ZIP riêng theo [`packaging/EDGE_STORE.md`](packaging/EDGE_STORE.md), **không dùng gói Windows**. Sau khi cài bản Add-ons, trang chào mừng và Cài đặt liên kết [ZIP Agent](https://github.com/thienhanaylai/Support-IT-Toolkit/releases/download/v0.1.7/ITSupportToolkit-Agent-Windows.zip). Người dùng giải nén toàn bộ ZIP, chạy `Install.cmd` bên trong và nhập ID extension; extension không thể tự chạy CMD. ZIP nộp Edge Add-ons không đính kèm GitHub Release.
+**Để nộp lên Microsoft Edge Add-ons**, dùng ZIP riêng theo [`packaging/EDGE_STORE.md`](packaging/EDGE_STORE.md), **không dùng gói Windows**. Sau khi cài bản Add-ons, trang chào mừng và Cài đặt liên kết [ZIP Agent](https://github.com/thienhanaylai/Support-IT-Toolkit/releases/download/v0.1.8/ITSupportToolkit-Agent-Windows.zip). Người dùng giải nén toàn bộ ZIP, chạy `Install.cmd` bên trong và nhập ID extension; extension không thể tự chạy CMD. ZIP nộp Edge Add-ons không đính kèm GitHub Release.
 
 Muốn tự tạo lại EXE một file và ZIP từ mã nguồn (máy build cần Node.js/npm và Go):
 
@@ -47,6 +47,13 @@ Mở `chrome://extensions` (hoặc `edge://extensions`) → bật **Developer mo
 
 Nếu đã có file exe build sẵn, dùng `-AgentBinary 'C:\path\it-support-host.exe'` thay Go. Để dùng cả Chrome và Edge, truyền cả hai ID: `-ExtensionIds @('id_chrome', 'id_edge')`. Mỗi lần ID thay đổi phải chạy lại installer. Nếu PowerShell chặn script, chạy với `powershell -ExecutionPolicy Bypass -File .\packaging\install.ps1 -ExtensionIds id...` khi bạn tin tưởng mã nguồn. Khởi động lại trình duyệt nếu cần.
 
+### Cập nhật bản dev đã Load unpacked
+
+- Nếu đang Load unpacked trực tiếp từ `extension/dist`: chạy lại `npm run build` trong `extension`, giữ nguyên thư mục, rồi bấm **Reload/Tải lại** tại `chrome://extensions/` hoặc `edge://extensions/`. Không gỡ và không Load unpacked lại.
+- Nếu đang Load unpacked từ `%LOCALAPPDATA%\ITSupportToolkit\extension`: chạy EXE mới hoặc `Install.cmd` trong ZIP Windows mới. Bộ cài cập nhật extension + Agent bằng ID cũ; sau đó bấm **Reload/Tải lại** và refresh tab Portal.
+- Bản dev không tự tải update từ GitHub/Edge Add-ons. Chỉ bản cài từ cửa hàng mới được trình duyệt quản lý cập nhật tự động.
+- Giữ nguyên Extension ID sẽ giữ dữ liệu `chrome.storage.local`. Đổi ID hoặc gỡ rồi cài từ đường dẫn khác sẽ tạo vùng dữ liệu riêng.
+
 Khi cập nhật mã Agent (ví dụ thêm **Quét Port**), tải lại extension **và chạy lại lệnh `install.ps1` với cùng Extension ID** để thay file `.exe` đã cài. Chỉ build extension sẽ không nâng cấp Agent trên máy.
 
 Gỡ Agent và registry:
@@ -70,7 +77,7 @@ Header nhỏ ở đầu popup ghi **LongVanSupport Toolkit**, có ba tab **Authe
 
 ### Authenticator (TOTP)
 
-Tab **Auth** dùng `otpauth` để đọc liên kết `otpauth://totp/` và tạo mã TOTP. Form **Thêm** nhận một hoặc nhiều liên kết cùng lúc, mỗi liên kết trên một dòng. Ngoài ra có thể bấm **Quét QR** để quét bằng camera hoặc **Import ảnh/TXT**. Ảnh QR được đọc bằng `jsQR`; file TXT cũng có thể chứa nhiều liên kết. Danh sách hiển thị nhà cung cấp, tài khoản và mã hiện tại; bấm trực tiếp vào toàn bộ thẻ để sao chép. Dùng nút lên/xuống trên từng thẻ để sắp xếp và lưu thứ tự hiển thị; cũng có thể tìm kiếm hoặc xóa từng tài khoản.
+Tab **Auth** dùng `otpauth` để đọc liên kết `otpauth://totp/` và tạo mã TOTP. Form **Thêm** nhận một hoặc nhiều liên kết cùng lúc, mỗi liên kết trên một dòng. Ngoài ra có thể bấm **Quét QR** để quét bằng camera hoặc **Import ảnh/TXT**. Ảnh QR được đọc bằng `jsQR`; file TXT cũng có thể chứa nhiều liên kết. Danh sách hiển thị nhà cung cấp, tài khoản và mã hiện tại; bấm trực tiếp vào toàn bộ thẻ để sao chép. Giữ tay nắm bên trái và kéo toàn bộ thẻ để sắp xếp, lưu thứ tự hiển thị; cũng có thể tìm kiếm hoặc xóa từng tài khoản. Trang **Cài đặt → Sao lưu Authenticator** có thể xuất file TXT để import lại; file này chứa secret TOTP dạng đọc được nên phải được bảo vệ và xóa khi không còn cần.
 
 Trên hộp **Xác thực 2 lớp** của trang chi tiết computing, split button hiển thị trực tiếp theo dạng `LONGVAN-PT: 123456`; bấm phần chính để điền mã vào ô OTP, hoặc bấm mũi tên để chọn tài khoản khác. Mã trên nút tự làm mới khi chu kỳ TOTP đổi. Extension ưu tiên tài khoản Long Vân duy nhất; nếu không có lựa chọn duy nhất thì dùng thứ tự đã sắp xếp trong tab Auth. Content script chỉ nhận mã OTP hiện tại, không nhận secret.
 

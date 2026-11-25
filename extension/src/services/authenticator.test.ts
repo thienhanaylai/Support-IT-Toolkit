@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   authenticatorEncryptionKey, authenticatorRemainingSeconds, authenticatorVaultKey,
   generateAuthenticatorCode, loadAuthenticatorEntries, parseAuthenticatorURI,
-  parseAuthenticatorText, saveAuthenticatorEntries,
+  parseAuthenticatorText, renderAuthenticatorExport, saveAuthenticatorEntries,
 } from './authenticator'
 
 const uri = 'otpauth://totp/Example:alice%40example.com?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=Example&algorithm=SHA1&digits=8&period=30'
@@ -53,6 +53,19 @@ describe('Authenticator vault', () => {
     expect(() => parseAuthenticatorText('no authenticator links')).toThrow('Không tìm thấy')
     expect(() => parseAuthenticatorText('otpauth://hotp/Test?secret=JBSWY3DPEHPK3PXP&counter=1'))
       .toThrow('Chỉ hỗ trợ mã TOTP')
+  })
+
+  it('exports a re-importable TXT while preserving order and TOTP settings', () => {
+    const first = parseAuthenticatorURI(uri)
+    const second = parseAuthenticatorURI('otpauth://totp/Long%20Van%3Aadmin%2Bops?secret=JBSWY3DPEHPK3PXP&issuer=Long%20Van&algorithm=SHA256&digits=6&period=60')
+    const exported = renderAuthenticatorExport([second, first])
+    const restored = parseAuthenticatorText(exported)
+
+    expect(exported).toContain('# CANH BAO:')
+    expect(restored.map(({ id: _id, ...entry }) => entry)).toEqual([
+      { issuer: second.issuer, label: second.label, secret: second.secret, algorithm: second.algorithm, digits: second.digits, period: second.period },
+      { issuer: first.issuer, label: first.label, secret: first.secret, algorithm: first.algorithm, digits: first.digits, period: first.period },
+    ])
   })
 
   it('encrypts entries with AES-GCM and restores them without plaintext secrets', async () => {

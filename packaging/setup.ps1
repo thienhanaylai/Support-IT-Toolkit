@@ -15,6 +15,42 @@ $installedExtension = Join-Path $installRoot 'extension'
 $marker = Join-Path $installedExtension '.it-support-toolkit-installed'
 $hostManifest = Join-Path $installRoot 'com.itsupport.toolkit.json'
 
+function Get-ExtensionVersion {
+  param([Parameter(Mandatory = $true)][string]$ManifestPath)
+  try {
+    $manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
+    if ($manifest.version) { return [string]$manifest.version }
+  } catch {}
+  return 'không rõ'
+}
+
+function Remove-StaleExtensionAssets {
+  param(
+    [Parameter(Mandatory = $true)][string]$Source,
+    [Parameter(Mandatory = $true)][string]$Destination
+  )
+  $sourceRoot = [System.IO.Path]::GetFullPath((Join-Path $Source 'assets')).TrimEnd('\')
+  $destinationRoot = [System.IO.Path]::GetFullPath((Join-Path $Destination 'assets')).TrimEnd('\')
+  if (!(Test-Path -LiteralPath $sourceRoot -PathType Container) -or
+      !(Test-Path -LiteralPath $destinationRoot -PathType Container)) { return }
+  $currentFiles = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+  Get-ChildItem -LiteralPath $sourceRoot -File -Recurse -Force | ForEach-Object {
+    [void]$currentFiles.Add($_.FullName.Substring($sourceRoot.Length + 1))
+  }
+  Get-ChildItem -LiteralPath $destinationRoot -File -Recurse -Force | ForEach-Object {
+    $relative = $_.FullName.Substring($destinationRoot.Length + 1)
+    if (!$currentFiles.Contains($relative)) {
+      Remove-Item -LiteralPath $_.FullName -Force
+    }
+  }
+  Get-ChildItem -LiteralPath $destinationRoot -Directory -Recurse -Force |
+    Sort-Object { $_.FullName.Length } -Descending | ForEach-Object {
+      if (!(Get-ChildItem -LiteralPath $_.FullName -Force | Select-Object -First 1)) {
+        Remove-Item -LiteralPath $_.FullName -Force
+      }
+    }
+}
+
 function Open-ExtensionManagementPage {
   param(
     [Parameter(Mandatory = $true)][string]$Executable,
@@ -79,11 +115,21 @@ if ((Test-Path -LiteralPath $installedExtension) -and !(Test-Path -LiteralPath $
   throw "Thư mục đích không thuộc bộ cài này, sẽ không ghi đè: $installedExtension"
 }
 $previousInstall = Test-Path -LiteralPath $marker -PathType Leaf
+$previousVersion = if ($previousInstall -and (Test-Path -LiteralPath (Join-Path $installedExtension 'manifest.json') -PathType Leaf)) {
+  Get-ExtensionVersion (Join-Path $installedExtension 'manifest.json')
+} else { $null }
+$newVersion = Get-ExtensionVersion (Join-Path $sourceExtension 'manifest.json')
 
 New-Item -Path $installedExtension -ItemType Directory -Force | Out-Null
 Get-ChildItem -LiteralPath $sourceExtension -Force | Copy-Item -Destination $installedExtension -Recurse -Force
+Remove-StaleExtensionAssets -Source $sourceExtension -Destination $installedExtension
 [System.IO.File]::WriteAllText($marker, 'IT Support Toolkit installer', (New-Object System.Text.UTF8Encoding($false)))
-Write-Host "Đã chép extension vào: $installedExtension"
+if ($previousInstall) {
+  Write-Host "Đã cập nhật extension dev: $previousVersion -> $newVersion"
+} else {
+  Write-Host "Đã cài extension dev phiên bản $newVersion"
+}
+Write-Host "Thư mục extension: $installedExtension"
 
 if (!$ExtensionIds -or $ExtensionIds.Count -eq 0) {
   $existingIds = @()
@@ -186,4 +232,11 @@ foreach ($id in $ExtensionIds) {
 }
 & $agentInstaller -ExtensionIds $ExtensionIds -AgentBinary $agentBinary
 if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw 'Cài đặt Agent thất bại.' }
-Write-Host 'Đã sẵn sàng. Tải lại extension trong trình duyệt vừa chọn rồi thử Ping.'
+if ($ReuseExistingIds -and $previousInstall -and $existingIds.Count -gt 0) {
+  Write-Host 'BẢN DEV ĐÃ ĐƯỢC CẬP NHẬT. Không gỡ hoặc Load unpacked lại.'
+  Write-Host 'Chrome: mở chrome://extensions/ và bấm Reload tại IT Support Toolkit.'
+  Write-Host 'Edge: mở edge://extensions/ và bấm Tải lại/Reload tại IT Support Toolkit.'
+  Write-Host 'Sau đó refresh các tab Portal đang mở để nạp content script mới.'
+} else {
+  Write-Host 'Đã sẵn sàng. Tải lại extension trong trình duyệt vừa chọn rồi thử Ping.'
+}

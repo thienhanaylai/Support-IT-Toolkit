@@ -91,6 +91,41 @@ export function parseAuthenticatorText(value: string): AuthenticatorEntry[] {
   return unique
 }
 
+export function authenticatorEntryURI(entry: AuthenticatorEntry): string {
+  if (!validEntry(entry)) throw new Error('Mã Authenticator đã lưu không hợp lệ.')
+  const label = entry.issuer ? `${entry.issuer}:${entry.label}` : entry.label
+  const parameters = [
+    `secret=${encodeURIComponent(entry.secret)}`,
+    ...(entry.issuer ? [`issuer=${encodeURIComponent(entry.issuer)}`] : []),
+    `algorithm=${encodeURIComponent(entry.algorithm)}`,
+    `digits=${entry.digits}`,
+    `period=${entry.period}`,
+  ]
+  return `otpauth://totp/${encodeURIComponent(label)}?${parameters.join('&')}`
+}
+
+export function renderAuthenticatorExport(entries: AuthenticatorEntry[]): string {
+  if (!Array.isArray(entries) || entries.length > 100 || !entries.every(validEntry)) {
+    throw new Error('Danh sách Authenticator không hợp lệ.')
+  }
+  return [
+    '# IT Support Toolkit Authenticator export',
+    '# CANH BAO: File nay chua secret TOTP. Hay bao ve file va xoa sau khi sao luu.',
+    '# Import lai bang nut Import trong tab Auth.',
+    ...entries.map(authenticatorEntryURI),
+    '',
+  ].join('\n')
+}
+
+export function downloadAuthenticatorExport(entries: AuthenticatorEntry[]): void {
+  const content = renderAuthenticatorExport(entries)
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }))
+  link.download = `it-support-authenticator-${new Date().toISOString().slice(0, 10)}.txt`
+  link.click()
+  window.setTimeout(() => URL.revokeObjectURL(link.href), 1000)
+}
+
 export function generateAuthenticatorCode(entry: AuthenticatorEntry, timestamp = Date.now()): string {
   if (!validEntry(entry)) throw new Error('Mã Authenticator đã lưu không hợp lệ.')
   return OTPAuth.TOTP.generate({

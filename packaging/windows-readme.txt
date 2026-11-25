@@ -25,7 +25,13 @@ Cách cài từ ZIP:
 
 ITSupportToolkit-Windows.exe là lựa chọn một file, không cần giải nén;
 lần cài mới vẫn cần chọn trình duyệt, Load unpacked và nhập ID.
-Khi cập nhật trên cùng máy, EXE dùng lại ID đã đăng ký; tải lại extension.
+Khi cập nhật trên cùng máy, EXE hoặc Install.cmd từ ZIP mới dùng lại ID
+đã đăng ký và cập nhật cả extension + Agent. Không gỡ hoặc Load unpacked
+lại. Mở chrome://extensions/ hoặc edge://extensions/, bấm Reload/Tải lại
+trên thẻ IT Support Toolkit, rồi refresh các tab Portal đang mở.
+
+Giữ nguyên thư mục và Extension ID sẽ giữ Authenticator, lịch sử, API key
+và tùy chọn. Dữ liệu tạm trong phiên có thể mất khi tải lại trình duyệt.
 
 Gói gồm extension, Windows Local Agent và bộ cài Native Messaging.
 Không cần Node.js/Go hoặc quyền Administrator để cài. Không chạy bộ cài

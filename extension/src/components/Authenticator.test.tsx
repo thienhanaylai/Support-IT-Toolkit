@@ -57,7 +57,27 @@ it('adds an otpauth account, renders its current code and copies it when clicked
   expect(document.querySelectorAll('.auth-card')).toHaveLength(2)
   expect(document.body.textContent).toContain('LONGVAN-ADMIN')
   expect(document.body.textContent).toContain('Đã thêm 2 Authenticator')
-  document.querySelector<HTMLButtonElement>('.auth-card .auth-order[title="Đưa xuống"]')!.click()
+  expect(document.querySelector('.auth-toast[role="status"]')).not.toBeNull()
+  expect(document.querySelector('.auth-message')).toBeNull()
+  expect(document.querySelector('.auth-order')).toBeNull()
+  const cards = [...document.querySelectorAll<HTMLElement>('.auth-card')]
+  const handle = cards[0].querySelector<HTMLButtonElement>('.auth-drag-handle')!
+  const dataTransfer = { effectAllowed: '', dropEffect: '', setData: vi.fn(), setDragImage: vi.fn() }
+  const dragStart = new Event('dragstart', { bubbles: true, cancelable: true })
+  Object.defineProperty(dragStart, 'dataTransfer', { value: dataTransfer })
+  handle.dispatchEvent(dragStart)
+  expect(cards[0].querySelector('.auth-card-title')?.firstElementChild).toBe(handle)
+  expect(dataTransfer.setDragImage).toHaveBeenCalledWith(cards[0], 18, 18)
+  Object.defineProperty(cards[1], 'getBoundingClientRect', {
+    value: () => ({ top: 0, height: 100, bottom: 100, left: 0, right: 100, width: 100, x: 0, y: 0, toJSON: () => ({}) }),
+  })
+  const dragOver = new Event('dragover', { bubbles: true, cancelable: true })
+  Object.defineProperties(dragOver, { dataTransfer: { value: dataTransfer }, clientY: { value: 75 } })
+  cards[1].dispatchEvent(dragOver)
+  await vi.waitFor(() => expect(cards[1].classList.contains('is-drop-after')).toBe(true))
+  const drop = new Event('drop', { bubbles: true, cancelable: true })
+  Object.defineProperty(drop, 'dataTransfer', { value: dataTransfer })
+  cards[1].dispatchEvent(drop)
   await vi.waitFor(() => expect(document.querySelector('.auth-card-title')?.textContent).toContain('LONGVAN-ADMIN'))
   expect(document.body.textContent).toContain('Đã cập nhật thứ tự Authenticator')
   document.querySelector<HTMLElement>('.auth-card')!.click()

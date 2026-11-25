@@ -18,7 +18,7 @@ async function openSettings(initialHistory = records) {
   const permissionRequest = vi.fn(async () => { portalAllowed = true; return true })
   const permissionRemove = vi.fn(async () => { portalAllowed = false; return true })
   vi.stubGlobal('chrome', {
-    runtime: { id: 'abcdefghijklmnopabcdefghijklmnop', getManifest: () => ({ version: '0.1.7' }) },
+    runtime: { id: 'abcdefghijklmnopabcdefghijklmnop', getManifest: () => ({ version: '0.1.8' }) },
     storage: { local: { get, set, remove }, onChanged: {
       addListener: (listener: typeof onChanged) => { onChanged = listener },
       removeListener: vi.fn(),
@@ -56,6 +56,14 @@ describe('Settings history', () => {
     expect(document.querySelector(`a[href="${agentZipURL}"]`)).not.toBeNull()
     expect(document.querySelectorAll('a[href*="github.com/thienhanaylai/Support-IT-Toolkit/releases/download"]')).toHaveLength(1)
     expect(document.body.textContent).toContain('Không di chuyển hoặc chạy riêng Install.cmd')
+  })
+
+  it('offers Authenticator export from Settings with a secret warning', async () => {
+    await openSettings()
+    const section = document.querySelector('#authenticator-backup')
+    expect(section?.textContent).toContain('Export Auth')
+    expect(section?.textContent).toContain('secret TOTP dạng đọc được')
+    expect(document.querySelector('a[href="#authenticator-backup"]')).not.toBeNull()
   })
 
   it('shows saved records, filters them, and opens the selected result', async () => {

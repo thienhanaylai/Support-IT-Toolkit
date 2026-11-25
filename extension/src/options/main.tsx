@@ -5,6 +5,7 @@ import { Header } from '../components/Header'
 import { HistoryItem } from '../components/HistoryItem'
 import { Result } from '../components/Result'
 import { agentZipURL } from '../services/agentDownload'
+import { downloadAuthenticatorExport, loadAuthenticatorEntries } from '../services/authenticator'
 import { hasPortalAccess, removePortalAccess, requestPortalAccess } from '../services/portalAccess'
 import { downloadReport } from '../services/report'
 import { defaultSettings, getHistory, getSettings, type CheckRecord, type Settings } from '../services/storage'
@@ -23,6 +24,9 @@ function App() {
   const [portalAccess, setPortalAccess] = useState<boolean | null>(null)
   const [portalBusy, setPortalBusy] = useState(false)
   const [portalError, setPortalError] = useState('')
+  const [authExporting, setAuthExporting] = useState(false)
+  const [authExportStatus, setAuthExportStatus] = useState('')
+  const [authExportError, setAuthExportError] = useState('')
   const filtered = history.filter((item) =>
     `${item.tool} ${item.target} ${item.source}`.toLocaleLowerCase('vi-VN')
       .includes(query.trim().toLocaleLowerCase('vi-VN')),
@@ -90,12 +94,36 @@ function App() {
     } finally { setPortalBusy(false) }
   }
 
+  async function exportAuthenticators() {
+    if (authExporting) return
+    setAuthExporting(true)
+    setAuthExportStatus('')
+    setAuthExportError('')
+    try {
+      const entries = await loadAuthenticatorEntries()
+      if (!entries.length) {
+        setAuthExportError('Chưa có tài khoản Authenticator để xuất.')
+        return
+      }
+      const confirmed = window.confirm(
+        `Xuất ${entries.length} tài khoản Authenticator?\n\nFile TXT sẽ chứa secret TOTP dạng đọc được. Bất kỳ ai có file đều có thể tạo mã đăng nhập. Hãy lưu file ở nơi an toàn và xóa khi không còn cần.`,
+      )
+      if (!confirmed) return
+      downloadAuthenticatorExport(entries)
+      setAuthExportStatus(`Đã xuất ${entries.length} tài khoản Authenticator.`)
+    } catch (cause) {
+      setAuthExportError(cause instanceof Error ? cause.message : 'Không thể xuất Authenticator.')
+    } finally {
+      setAuthExporting(false)
+    }
+  }
+
   return <main className="panel options-page"><Header section="Cài đặt" /><div className="main-content">
     <div className="eyebrow">KHÔNG GIAN CỦA BẠN</div>
     <h1>Cài đặt <span>& lịch sử.</span></h1>
     <p className="intro">Tùy chỉnh cách kiểm tra và quản lý kết quả đã lưu trên thiết bị này.</p>
     <nav className="options-nav" aria-label="Mục cài đặt">
-      <a href="#preferences">Tùy chọn</a><a href="#portal-access">Quyền Portal</a><a href="#history">Lịch sử</a><a href="#agent">Local Agent</a>
+      <a href="#preferences">Tùy chọn</a><a href="#authenticator-backup">Authenticator</a><a href="#portal-access">Quyền Portal</a><a href="#history">Lịch sử</a><a href="#agent">Local Agent</a>
     </nav>
 
     <form id="preferences" className="options-section" onSubmit={(event) => void submit(event)}>
@@ -125,6 +153,19 @@ function App() {
       {settings.bknsApiKey && <div className="options-legacy"><strong>Key BKNS cũ (không còn sử dụng)</strong><p>WHOIS hiện dùng trang Long Vân. Bạn có thể xóa key này rồi lưu cài đặt.</p><button type="button" onClick={() => { setSaved(false); setSettings({ ...settings, bknsApiKey: '' }) }}>Xóa key BKNS cũ</button></div>}
       <div className="options-save"><button className="primary" type="submit">Lưu cài đặt</button>{saved && <span className="success" role="status">Đã lưu cài đặt.</span>}{saveError && <span className="options-error" role="alert">{saveError}</span>}</div>
     </form>
+
+    <section id="authenticator-backup" className="options-section" aria-labelledby="authenticator-backup-title">
+      <div className="options-section-heading"><span className="options-section-icon"><KeyRound size={19} /></span><div>
+        <h2 id="authenticator-backup-title">Sao lưu Authenticator</h2><p>Xuất các tài khoản TOTP để sao lưu hoặc import lại vào IT Support Toolkit.</p>
+      </div></div>
+      <div className="options-auth-export">
+        <div><strong>Xuất file TXT</strong><p>File giữ nguyên thứ tự và toàn bộ thiết lập TOTP. Có thể import lại bằng nút <strong>Import</strong> trong tab Auth.</p></div>
+        <button type="button" disabled={authExporting} onClick={() => void exportAuthenticators()}><Download size={16} /> {authExporting ? 'Đang xuất...' : 'Export Auth'}</button>
+      </div>
+      <p className="options-sensitive-note"><ShieldCheck size={15} /> File xuất chứa secret TOTP dạng đọc được. Không gửi file qua kênh công khai và không để file trên máy dùng chung.</p>
+      {authExportStatus && <p className="success" role="status">{authExportStatus}</p>}
+      {authExportError && <p className="options-error" role="alert">{authExportError}</p>}
+    </section>
 
     <section id="portal-access" className="options-section" aria-labelledby="portal-access-options-title">
       <div className="options-section-heading"><span className="options-section-icon"><ShieldCheck size={19} /></span><div>

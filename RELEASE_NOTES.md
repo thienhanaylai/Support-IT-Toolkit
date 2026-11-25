@@ -1,29 +1,27 @@
-# IT Support Toolkit v0.1.7 — Authenticator và tự động hóa Portal
+# IT Support Toolkit v0.1.8 — Sao lưu Authenticator và cập nhật bản dev
 
 **Tải về:** `ITSupportToolkit-Windows.zip` là bộ cài Windows đầy đủ cho Chrome/Edge. Giải nén toàn bộ rồi chạy `Install.cmd`. Có thể dùng `ITSupportToolkit-Windows.exe` để cài từ một file.
 
 Release này phát hành bộ cài Windows đầy đủ và ZIP Agent độc lập. Gói `ITSupportToolkit-Edge-Store.zip` được dựng riêng để nộp Microsoft Edge Add-ons và **không đính kèm GitHub Release**.
 
-## Thay đổi từ v0.1.6
+## Thay đổi từ v0.1.7
 
-- Thêm **Authenticator TOTP**: dán nhiều URI, quét camera, import ảnh/TXT, mã hóa AES-GCM, tìm kiếm, sắp xếp và bấm thẻ để sao chép.
-- Popup có ba tab riêng: **Authenticator**, **Mật khẩu** và **Công cụ**; Authenticator mở mặc định.
-- Thêm split button OTP trên hộp xác thực Portal, hiển thị `Nhà cung cấp: mã`, tự làm mới và cho phép chọn tài khoản khác.
-- Thêm nút **Sao chép thông tin VM** ngay trên trang chi tiết computing và nút lấy mới/sao chép trong popup.
-- Tạo và dán tên VM từ chủ sở hữu + mã dịch vụ.
-- Tự áp dụng Template trước CPU → RAM → Internet → Disk; lấy lại widget và thử lại CPU nếu Portal trả giá trị cũ sau AJAX.
-- Trình cài tự mở trang quản lý extension của Chrome/Edge và giữ lại hướng dẫn Load unpacked.
+- Thay nút lên/xuống của Authenticator bằng tay nắm kéo thả bên trái; kéo tay nắm sẽ di chuyển toàn bộ thẻ và lưu thứ tự mới.
+- Thông báo Authenticator đổi thành toast nổi tự biến mất, không còn đẩy hoặc làm vỡ bố cục danh sách.
+- Thêm **Cài đặt → Sao lưu Authenticator** để xuất file TXT chứa các URI TOTP, giữ nguyên thứ tự, issuer, tài khoản, thuật toán, số chữ số và chu kỳ; file có thể import lại từ tab Auth.
+- Cảnh báo và yêu cầu xác nhận trước khi export vì file TXT chứa secret TOTP dạng đọc được.
+- Cải thiện trình cài/cập nhật bản Load unpacked: giữ Extension ID đã đăng ký, cập nhật extension + Agent, dọn bundle cũ và hướng dẫn Reload/refresh Portal; không cần gỡ hoặc Load unpacked lại.
 
 ## Kiểm tra
 
-- 112/112 bài test extension đạt; TypeScript và production build đạt.
+- 114/114 bài test extension đạt; TypeScript và production build đạt.
 - `go test ./...` của Windows Local Agent đạt.
 - Bộ cài Windows ZIP/EXE, Agent ZIP và Edge Add-ons ZIP được kiểm tra cấu trúc và SHA-256.
 - `Install.cmd` độc lập không được tải lên GitHub Release.
 
 ## SHA-256
 
-- `ITSupportToolkit-Windows.zip`: `A9D5B1356F2FAFFD783030D9015767E23337C19AF614C6F3A3F119C51B44D10B`
-- `ITSupportToolkit-Windows.exe`: `9119D6A155562E1E647ADFE0EC2D05E32E6CE38094291A800211C21076DA7240`
-- `ITSupportToolkit-Agent-Windows.zip`: `24225092DBECF6232DDF9C907B9C2644DEF01DC8A1C6A0B3CDAA1058307405BF`
-- Gói nộp riêng `ITSupportToolkit-Edge-Store.zip`: `7BC98C1C28A263F1B9695DA0AD482190E94AA322E7BBC83B79D1AF58750CC236`
+- `ITSupportToolkit-Windows.zip`: `6B6E8C94B70893C8174F3215EE2C47F6AA8F7327C06EB62C44BFA4B4BF5EE9AD`
+- `ITSupportToolkit-Windows.exe`: `5B296312D9A0C630841F8114F39F006B3C16DFB988D84AFA812CC0E98C721601`
+- `ITSupportToolkit-Agent-Windows.zip`: `06820EC399918991C8E3A161C6D86FC29289293718A50E432CE5ACA1EAC1BCF9`
+- Gói nộp riêng `ITSupportToolkit-Edge-Store.zip`: `15A5E6272C98E256A554D695182B8E7812391D5C50C14A9620D022BC259CEAE7`

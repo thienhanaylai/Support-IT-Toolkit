@@ -8,7 +8,7 @@ echo.
 echo Bộ cài sẽ hỏi bạn chọn Chrome hoặc Edge và hướng dẫn
 echo tải extension vào đúng trình duyệt đã chọn.
 echo.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup.ps1" -ReuseExistingIds
 set "installExit=%errorlevel%"
 if not "%installExit%"=="0" (
   echo.

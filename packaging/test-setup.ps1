@@ -100,10 +100,45 @@ try {
     Write-Host "Installer $($test.browser): PASS"
   }
 
+  $env:LOCALAPPDATA = Join-Path $root 'update'
+  $updateBundle = Join-Path $env:LOCALAPPDATA 'bundle'
+  $updateSource = Join-Path $updateBundle 'extension'
+  $updateInstalled = Join-Path $env:LOCALAPPDATA 'ITSupportToolkit\extension'
+  New-Item -Path (Join-Path $updateSource 'assets'), (Join-Path $updateBundle 'agent'), (Join-Path $updateInstalled 'assets') -ItemType Directory -Force | Out-Null
+  Copy-Item -LiteralPath (Join-Path $source 'setup.ps1') -Destination $updateBundle
+  Set-Content -LiteralPath (Join-Path $updateSource 'manifest.json') -Value '{"version":"0.1.8"}'
+  Set-Content -LiteralPath (Join-Path $updateSource 'assets\current.js') -Value 'current bundle'
+  Set-Content -LiteralPath (Join-Path $updateBundle 'agent\it-support-host.exe') -Value 'new agent'
+  Set-Content -LiteralPath (Join-Path $updateInstalled 'manifest.json') -Value '{"version":"0.1.6"}'
+  Set-Content -LiteralPath (Join-Path $updateInstalled 'assets\stale.js') -Value 'stale bundle'
+  Set-Content -LiteralPath (Join-Path $updateInstalled '.it-support-toolkit-installed') -Value 'IT Support Toolkit installer'
+  New-Item -Path (Join-Path $env:LOCALAPPDATA 'ITSupportToolkit') -ItemType Directory -Force | Out-Null
+  Set-Content -LiteralPath (Join-Path $env:LOCALAPPDATA 'ITSupportToolkit\com.itsupport.toolkit.json') `
+    -Value "{`"allowed_origins`": [`"chrome-extension://$id/`"]}"
+  Set-Content -LiteralPath (Join-Path $updateBundle 'install-agent.ps1') `
+    -Value 'param([string[]]$ExtensionIds,[string]$AgentBinary) [IO.File]::WriteAllText((Join-Path $env:LOCALAPPDATA "update-ids.txt"),($ExtensionIds -join ","))'
+  $global:answers = @()
+  $updateOutput = & (Join-Path $updateBundle 'setup.ps1') -ReuseExistingIds -SkipOpenExtensionFolder 6>&1 | Out-String
+  if ((Get-Content -LiteralPath (Join-Path $env:LOCALAPPDATA 'update-ids.txt') -Raw) -ne $id) {
+    throw 'Dev update did not reuse the existing Extension ID.'
+  }
+  if (Test-Path -LiteralPath (Join-Path $updateInstalled 'assets\stale.js')) {
+    throw 'Dev update did not remove a stale extension bundle.'
+  }
+  if (!(Test-Path -LiteralPath (Join-Path $updateInstalled 'assets\current.js')) -or
+      !(Test-Path -LiteralPath (Join-Path $updateInstalled '.it-support-toolkit-installed'))) {
+    throw 'Dev update did not install the current bundle or preserve its installer marker.'
+  }
+  if (!$updateOutput.Contains('0.1.6 -> 0.1.8') -or !$updateOutput.Contains('Không gỡ hoặc Load unpacked lại') -or
+      !$updateOutput.Contains('chrome://extensions/') -or !$updateOutput.Contains('edge://extensions/')) {
+    throw 'Dev update instructions are incomplete.'
+  }
+  Write-Host 'Installer dev update: PASS'
+
   $cmdBundle = Join-Path $root 'cmd'
   New-Item -Path $cmdBundle -ItemType Directory -Force | Out-Null
   Copy-Item -LiteralPath (Join-Path $source 'Install.cmd') -Destination $cmdBundle
-  [IO.File]::WriteAllText((Join-Path $cmdBundle 'setup.ps1'), "Write-Host 'HƯỚNG DẪN MICROSOFT EDGE'", (New-Object Text.UTF8Encoding($true)))
+  [IO.File]::WriteAllText((Join-Path $cmdBundle 'setup.ps1'), "param([switch]`$ReuseExistingIds); if (!`$ReuseExistingIds) { throw 'missing update flag' }; Write-Host 'HƯỚNG DẪN MICROSOFT EDGE'", (New-Object Text.UTF8Encoding($true)))
   [IO.File]::WriteAllText((Join-Path $cmdBundle 'input.txt'), "x`r`n")
   $cmdPath = Join-Path $cmdBundle 'Install.cmd'
   $outputPath = Join-Path $cmdBundle 'output.txt'

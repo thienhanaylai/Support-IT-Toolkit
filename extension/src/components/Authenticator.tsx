@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, ChevronDown, ChevronUp, Plus, Trash2, Upload, X } from 'lucide-react'
+import { Camera, CircleAlert, CircleCheck, GripVertical, Plus, Trash2, Upload, X } from 'lucide-react'
 import jsQR from 'jsqr'
 import {
   authenticatorRemainingSeconds, generateAuthenticatorCode, loadAuthenticatorEntries,
@@ -48,9 +48,12 @@ export function Authenticator() {
   const [cameraOpen, setCameraOpen] = useState(false)
   const [cameraStatus, setCameraStatus] = useState('')
   const [copiedId, setCopiedId] = useState('')
+  const [draggedId, setDraggedId] = useState('')
+  const [dropTarget, setDropTarget] = useState<{ id: string; position: 'before' | 'after' } | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const scanLocked = useRef(false)
+  const draggedIdRef = useRef('')
 
   useEffect(() => {
     let mounted = true
@@ -61,6 +64,15 @@ export function Authenticator() {
     const timer = window.setInterval(() => setNow(Date.now()), 1000)
     return () => { mounted = false; window.clearInterval(timer) }
   }, [])
+
+  useEffect(() => {
+    if (!error && !notice) return
+    const timer = window.setTimeout(() => {
+      setError('')
+      setNotice('')
+    }, error ? 4500 : 2400)
+    return () => window.clearTimeout(timer)
+  }, [error, notice])
 
   const addURI = useCallback(async (value: string) => {
     const entry = parseAuthenticatorURI(value)
@@ -250,6 +262,45 @@ export function Authenticator() {
     }
   }
 
+  function clearDragState() {
+    draggedIdRef.current = ''
+    setDraggedId('')
+    setDropTarget(null)
+  }
+
+  async function reorderEntry(sourceId: string, targetId: string, position: 'before' | 'after') {
+    if (saving || sourceId === targetId) return
+    const sourceIndex = entries.findIndex((item) => item.id === sourceId)
+    if (sourceIndex < 0 || !entries.some((item) => item.id === targetId)) return
+    const next = [...entries]
+    const [source] = next.splice(sourceIndex, 1)
+    const targetIndex = next.findIndex((item) => item.id === targetId)
+    next.splice(targetIndex + (position === 'after' ? 1 : 0), 0, source)
+    if (next.every((item, index) => item.id === entries[index]?.id)) return
+    try {
+      setSaving(true)
+      await saveAuthenticatorEntries(next)
+      setEntries(next)
+      setNotice('Đã cập nhật thứ tự Authenticator.')
+      setError('')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function dragOverEntry(event: React.DragEvent<HTMLElement>, targetId: string) {
+    const sourceId = draggedIdRef.current
+    if (!sourceId || sourceId === targetId) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const position = event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after'
+    setDropTarget((current) => current?.id === targetId && current.position === position
+      ? current : { id: targetId, position })
+  }
+
   async function copyCode(entry: AuthenticatorEntry) {
     try {
       const code = generateAuthenticatorCode(entry)
@@ -286,8 +337,11 @@ export function Authenticator() {
       </div>
     </form>}
 
-    {error && <p className="auth-message auth-error" role="alert">{error}</p>}
-    {notice && !error && <p className="auth-message" role="status">{notice}</p>}
+    {(error || notice) && <div className={`auth-toast${error ? ' auth-error' : ''}`}
+      role={error ? 'alert' : 'status'} aria-live={error ? 'assertive' : 'polite'}>
+      {error ? <CircleAlert size={16} /> : <CircleCheck size={16} />}
+      <span>{error || notice}</span>
+    </div>}
 
     <div className="auth-search">
       <input type="search" aria-label="Tìm Authenticator" placeholder="Tìm tài khoản..." value={query}
@@ -299,20 +353,41 @@ export function Authenticator() {
         const code = generateAuthenticatorCode(entry, now)
         const remaining = authenticatorRemainingSeconds(entry, now)
         const percent = Math.max(0, Math.min(100, remaining / entry.period * 100))
-        const entryIndex = entries.findIndex((item) => item.id === entry.id)
-        return <article className={`auth-card${copiedId === entry.id ? ' is-copied' : ''}`} key={entry.id}
-          title="Bấm vào thẻ để sao chép mã" onClick={() => void copyCode(entry)}>
-          <div className="auth-card-title"><div><strong>{displayIssuer(entry)}</strong><small>{displayAccount(entry)}</small></div>
-            <div className="auth-card-actions">
-              <button type="button" className="auth-order" title="Đưa lên" aria-label={`Đưa ${displayIssuer(entry)} lên`}
-                disabled={saving || entryIndex <= 0}
-                onClick={(event) => { event.stopPropagation(); void moveEntry(entry, -1) }}><ChevronUp size={15} /></button>
-              <button type="button" className="auth-order" title="Đưa xuống" aria-label={`Đưa ${displayIssuer(entry)} xuống`}
-                disabled={saving || entryIndex < 0 || entryIndex >= entries.length - 1}
-                onClick={(event) => { event.stopPropagation(); void moveEntry(entry, 1) }}><ChevronDown size={15} /></button>
+        const dropPosition = dropTarget?.id === entry.id ? dropTarget.position : ''
+        return <article className={`auth-card${copiedId === entry.id ? ' is-copied' : ''}${draggedId === entry.id ? ' is-dragging' : ''}${dropPosition ? ` is-drop-${dropPosition}` : ''}`} key={entry.id}
+          title="Bấm vào thẻ để sao chép mã" onClick={() => void copyCode(entry)}
+          onDragOver={(event) => dragOverEntry(event, entry.id)}
+          onDrop={(event) => {
+            event.preventDefault()
+            const sourceId = draggedIdRef.current
+            const position = dropTarget?.id === entry.id ? dropTarget.position : 'before'
+            clearDragState()
+            if (sourceId) void reorderEntry(sourceId, entry.id, position)
+          }}>
+          <div className="auth-card-title">
+            <button type="button" className="auth-drag-handle" title="Giữ và kéo thẻ để thay đổi thứ tự"
+              aria-label={`Kéo để sắp xếp ${displayIssuer(entry)}`} draggable={!saving}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+                event.preventDefault()
+                event.stopPropagation()
+                void moveEntry(entry, event.key === 'ArrowUp' ? -1 : 1)
+              }}
+              onDragStart={(event) => {
+                event.stopPropagation()
+                draggedIdRef.current = entry.id
+                setDraggedId(entry.id)
+                setDropTarget(null)
+                event.dataTransfer.effectAllowed = 'move'
+                event.dataTransfer.setData('text/plain', entry.id)
+                const card = event.currentTarget.closest<HTMLElement>('.auth-card')
+                if (card) event.dataTransfer.setDragImage(card, 18, 18)
+              }}
+              onDragEnd={clearDragState}><GripVertical size={17} /></button>
+            <div className="auth-card-identity"><strong>{displayIssuer(entry)}</strong><small>{displayAccount(entry)}</small></div>
             <button type="button" className="auth-delete" title="Xóa Authenticator" aria-label={`Xóa ${displayIssuer(entry)}`}
               disabled={saving} onClick={(event) => { event.stopPropagation(); void removeEntry(entry) }}><Trash2 size={15} /></button>
-            </div>
           </div>
           <div className="auth-code-row">
             <span className="auth-code-value">{code}</span>
