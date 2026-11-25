@@ -32,6 +32,9 @@ it('registers Portal content scripts only after optional access is granted', asy
   await import('../background/index')
   await vi.waitFor(() => expect(mock.registerContentScripts).toHaveBeenCalledWith([expect.objectContaining({
     id: 'longvan-portal-tools', js: ['portal.js'], css: ['portal.css'],
+    matches: expect.arrayContaining([
+      'https://portal.longvan.vn/computing-manager/manager/computing/computing_detail.xhtml*',
+    ]),
   })]))
   expect(mock.unregisterContentScripts).not.toHaveBeenCalled()
 })

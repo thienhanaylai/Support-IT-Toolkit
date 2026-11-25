@@ -61,6 +61,7 @@ describe('context menu popup', () => {
       cpu: 2, ramGB: 4, internetMbps: 200, diskGB: 50, diskType: 'NVME_STORAGE',
       os: 'Windows Server 2022 Standard (64-bit)', osId: '118498',
       siteProvider: 'HCM', siteProviderId: '106066',
+      ownerName: 'Chu Xuân Hà', serviceCode: '20.2985.9322',
     }
     const executeScript = vi.fn(async (options: { world?: string }) =>
       options.world === 'MAIN' ? [{ result: { applied: ['CPU', 'RAM', 'Internet', 'Disk'] } }] : [{ result: config }])
@@ -87,9 +88,17 @@ describe('context menu popup', () => {
       { tab: { id: 9, url: 'https://portal.longvan.vn/cloud-service-manager/manager/cloud-service-detail.xhtml?id=1' } },
       copied,
     )).toBe(true)
-    await vi.waitFor(() => expect(copied).toHaveBeenCalledWith({ config }))
+    await vi.waitFor(() => expect(copied).toHaveBeenCalledWith({
+      config, vmName: 'chuxuanha-20.2985.9322',
+    }))
     expect(set).toHaveBeenCalledWith({ portalVmConfig: config })
     expect(executeScript).toHaveBeenCalledWith(expect.objectContaining({ target: { tabId: 9 } }))
+
+    const fetched = vi.fn()
+    expect(portalListener({ type: 'toolkit:get-vm-config' }, {}, fetched)).toBe(true)
+    await vi.waitFor(() => expect(fetched).toHaveBeenCalledWith({
+      config, vmName: 'chuxuanha-20.2985.9322',
+    }))
 
     const pasted = vi.fn()
     expect(portalListener(

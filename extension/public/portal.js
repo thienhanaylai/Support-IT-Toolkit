@@ -1,8 +1,9 @@
 (() => {
   const servicePath = '/cloud-service-manager/manager/cloud-service-detail.xhtml'
   const createPath = '/computing-manager/manager/computing/computing_create.xhtml'
+  const detailPath = '/computing-manager/manager/computing/computing_detail.xhtml'
   if (location.origin !== 'https://portal.longvan.vn' ||
-      (location.pathname !== servicePath && location.pathname !== createPath)) return
+      (location.pathname !== servicePath && location.pathname !== createPath && location.pathname !== detailPath)) return
 
   const state = {
     busy: false, text: '', kind: '', config: null,
@@ -10,6 +11,10 @@
     passwordOptions: null, passwordOptionsExpanded: false, passwordOptionsLoading: false,
     passwordOptionsDraft: null, passwordOptionsSaving: false, passwordOptionsNotice: '',
     passwordValue: '', passwordCopied: false,
+    vmName: '', vmNameBusy: false, vmNameText: '', vmNameKind: '',
+    vmInfoBusy: false, vmInfoCopied: false, vmInfoText: '', vmInfoKind: '',
+    otpBusy: false, otpLoaded: false, otpCodes: [], otpSelectedId: '',
+    otpMenuOpen: false, otpText: '', otpKind: '',
   }
   const defaultPasswordOptions = {
     length: 16, numbers: true, lowercase: true, uppercase: true, special: true,
@@ -17,6 +22,8 @@
   }
   let renderQueued = false
   let stopped = false
+  let vmInfoToastTimer = 0
+  let otpRefreshTimer = 0
 
   function element(tag, className, text) {
     const node = document.createElement(tag)
@@ -27,7 +34,8 @@
 
   function configText(config) {
     const describe = (name, id) => name && id && name !== id ? `${name} (${id})` : name || id || 'Không có'
-    return `${config.cpu} Core · ${config.ramGB} GB RAM · ${config.internetMbps} Mb/s · ${config.diskGB} GB ${config.diskType.replace('_STORAGE', '')} · OS: ${describe(config.os, config.osId)} · Site Provider: ${describe(config.siteProvider, config.siteProviderId)}`
+    const vmName = state.vmName ? ` · Tên VM: ${state.vmName}` : ''
+    return `${config.cpu} Core · ${config.ramGB} GB RAM · ${config.internetMbps} Mb/s · ${config.diskGB} GB ${config.diskType.replace('_STORAGE', '')} · OS: ${describe(config.os, config.osId)} · Site Provider: ${describe(config.siteProvider, config.siteProviderId)}${vmName}`
   }
 
   function setStatus(text, kind = '') {
@@ -73,6 +81,7 @@
       const response = await sendMessage({ type: 'toolkit:copy-vm-config' })
       if (response?.error) throw new Error(response.error)
       state.config = response.config
+      state.vmName = typeof response?.vmName === 'string' ? response.vmName.trim() : ''
       setStatus(`Đã sao chép: ${configText(response.config)}. Mở trang Tạo computing để dán.`, 'success')
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error), 'error')
@@ -80,6 +89,129 @@
       state.busy = false
       scheduleRender()
     }
+  }
+
+  async function copyCurrentVmInfo() {
+    if (state.vmInfoBusy) return
+    state.vmInfoBusy = true
+    state.vmInfoCopied = false
+    state.vmInfoText = 'Đang đọc VM...'
+    state.vmInfoKind = 'working'
+    scheduleRender()
+    try {
+      const response = await sendMessage({ type: 'toolkit:get-current-vm-info' })
+      if (response?.error) throw new Error(response.error)
+      if (!response?.text) throw new Error('Không có thông tin VM để sao chép.')
+      await navigator.clipboard.writeText(response.text)
+      state.vmInfoText = `Đã sao chép ${response.info?.computingName || 'thông tin VM'}`
+      state.vmInfoKind = 'success'
+      state.vmInfoCopied = true
+    } catch (error) {
+      state.vmInfoText = error instanceof Error ? error.message : String(error)
+      state.vmInfoKind = 'error'
+    } finally {
+      state.vmInfoBusy = false
+      scheduleRender()
+    }
+  }
+
+  function otpControl() {
+    const labels = [...document.querySelectorAll('label, strong, span, div')]
+    const label = labels.find((node) =>
+      (node.textContent ?? '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN') === 'nhập mã otp')
+    if (!label) return null
+    const dialog = label.closest('[role="dialog"], .ui-dialog, .modal, .p-dialog') ||
+      label.parentElement?.parentElement
+    const linked = label instanceof HTMLLabelElement && label.htmlFor
+      ? document.getElementById(label.htmlFor) : null
+    let input = linked instanceof HTMLInputElement ? linked : null
+    if (!input) {
+      let sibling = label.nextElementSibling
+      while (sibling && !input) {
+        if (sibling instanceof HTMLInputElement) input = sibling
+        else input = sibling.querySelector('input')
+        sibling = sibling.nextElementSibling
+      }
+    }
+    if (!input && dialog) {
+      const candidates = [...dialog.querySelectorAll('input:not([type="hidden"]):not([disabled])')]
+      input = candidates.find((candidate) =>
+        Boolean(label.compareDocumentPosition(candidate) & Node.DOCUMENT_POSITION_FOLLOWING)) ?? null
+    }
+    return input ? { label, input, dialog } : null
+  }
+
+  function selectedOtpCode() {
+    return state.otpCodes.find((item) => item.id === state.otpSelectedId) ?? state.otpCodes[0] ?? null
+  }
+
+  function fillOtpCode(item) {
+    const control = otpControl()
+    if (!control) throw new Error('Không tìm thấy ô nhập mã OTP.')
+    setInputValue(control.input, item.code)
+    control.input.focus()
+    state.otpSelectedId = item.id
+    state.otpMenuOpen = false
+    state.otpText = 'Đã điền mã OTP.'
+    state.otpKind = 'success'
+    scheduleRender()
+  }
+
+  async function loadAuthenticatorCodes(openMenu = false) {
+    if (state.otpBusy) return selectedOtpCode()
+    state.otpBusy = true
+    state.otpText = ''
+    state.otpKind = 'working'
+    scheduleRender()
+    try {
+      const response = await sendMessage({ type: 'toolkit:get-authenticator-codes' })
+      if (response?.error) throw new Error(response.error)
+      const codes = Array.isArray(response?.codes)
+        ? response.codes.filter((item) => item && typeof item.code === 'string' && /^\d{6,8}$/.test(item.code))
+        : []
+      if (!codes.length) throw new Error('Chưa có mã Authenticator. Hãy thêm mã trong extension.')
+      const longVan = codes.filter((item) =>
+        /long\s*van|longvan/i.test(`${item.issuer ?? ''} ${item.label ?? ''}`))
+      const selected = codes.find((item) => item.id === state.otpSelectedId) ||
+        (longVan.length === 1 ? longVan[0] : codes[0])
+      state.otpCodes = codes
+      state.otpSelectedId = selected.id
+      state.otpLoaded = true
+      state.otpMenuOpen = openMenu
+      state.otpText = ''
+      state.otpKind = ''
+      window.clearTimeout(otpRefreshTimer)
+      const remaining = Math.max(1, Math.min(...codes.map((item) =>
+        Number.isFinite(item.remaining) ? Math.max(1, item.remaining) : 30)))
+      otpRefreshTimer = window.setTimeout(() => {
+        state.otpLoaded = false
+        if (otpControl()) void loadAuthenticatorCodes(state.otpMenuOpen)
+      }, remaining * 1000 + 150)
+      return selected
+    } catch (error) {
+      state.otpLoaded = true
+      state.otpText = error instanceof Error ? error.message : String(error)
+      state.otpKind = 'error'
+      return null
+    } finally {
+      state.otpBusy = false
+      scheduleRender()
+    }
+  }
+
+  async function pasteAuthenticatorCode() {
+    const selected = await loadAuthenticatorCodes(false)
+    if (selected) fillOtpCode(selected)
+  }
+
+  async function toggleAuthenticatorCodes() {
+    if (state.otpBusy) return
+    if (state.otpMenuOpen) {
+      state.otpMenuOpen = false
+      scheduleRender()
+      return
+    }
+    await loadAuthenticatorCodes(true)
   }
 
   function markContextMismatches(messages) {
@@ -101,7 +233,7 @@
   async function pasteConfig() {
     if (state.busy) return
     state.busy = true
-    setStatus('Đang điền CPU → RAM → Internet → Disk. Vui lòng không thao tác trên form...', 'working')
+    setStatus('Đang điền Template (nếu cần) → CPU → RAM → Internet → Disk. Vui lòng không thao tác trên form...', 'working')
     try {
       const response = await sendMessage({ type: 'toolkit:paste-vm-config' })
       markContextMismatches(response?.mismatches)
@@ -118,7 +250,9 @@
         setStatus(`${completed}OS/Site không khớp: ${response.mismatches.join(' ')}`, 'error')
         return
       }
-      setStatus('Đã điền CPU → RAM → Internet → Disk. Hãy kiểm tra lại trước khi tạo VM.', 'success')
+      const completed = Array.isArray(response?.applied) && response.applied.length
+        ? response.applied.join(' → ') : 'cấu hình'
+      setStatus(`Đã điền ${completed}. Hãy kiểm tra lại trước khi tạo VM.`, 'success')
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error), 'error')
     } finally {
@@ -140,6 +274,80 @@
       ? linked
       : container?.querySelector('input[type="password"]:not([disabled]), input[type="text"]:not([disabled])')
     return input && container ? { input, container } : null
+  }
+
+  function computingNameControl() {
+    const form = document.getElementById('frmMain')
+    const label = [...(form?.querySelectorAll('label') ?? [])].find((node) =>
+      (node.textContent ?? '').replace(/\*/g, '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN') === 'tên')
+    const container = label?.closest('.ui-g-12, [class*="p-col"]') || label?.parentElement
+    const input = [...(container?.querySelectorAll('input[type="text"]:not([disabled])') ?? [])]
+      .find((node) => node.id && !node.readOnly)
+    return input && container ? { input, container } : null
+  }
+
+  function setInputValue(input, value, dispatchChange = true) {
+    const prototype = input.ownerDocument.defaultView?.HTMLInputElement?.prototype
+    const setter = prototype && Object.getOwnPropertyDescriptor(prototype, 'value')?.set
+    if (setter) setter.call(input, value)
+    else input.value = value
+    const EventClass = input.ownerDocument.defaultView?.Event ?? Event
+    input.dispatchEvent(new EventClass('input', { bubbles: true }))
+    if (dispatchChange) input.dispatchEvent(new EventClass('change', { bubbles: true }))
+  }
+
+  async function pasteVmName() {
+    if (state.vmNameBusy) return
+    state.vmNameBusy = true
+    state.vmNameText = 'Đang lấy tên VM...'
+    state.vmNameKind = 'working'
+    scheduleRender()
+    try {
+      let vmName = state.vmName
+      if (!vmName) {
+        const response = await sendMessage({ type: 'toolkit:get-vm-config' })
+        if (response?.error) throw new Error(response.error)
+        state.config = response?.config ?? state.config
+        state.vmName = typeof response?.vmName === 'string' ? response.vmName.trim() : ''
+        vmName = state.vmName
+      }
+      if (!vmName) throw new Error('Chưa có tên VM. Hãy bấm Sao chép thông số ở trang Dịch vụ trước.')
+      const control = computingNameControl()
+      if (!control) throw new Error('Không tìm thấy ô Tên của computing.')
+      setInputValue(control.input, vmName, false)
+      state.vmNameText = `Đã điền: ${vmName}`
+      state.vmNameKind = 'success'
+    } catch (error) {
+      state.vmNameText = error instanceof Error ? error.message : String(error)
+      state.vmNameKind = 'error'
+    } finally {
+      state.vmNameBusy = false
+      scheduleRender()
+    }
+  }
+
+  function renderVmNameTool() {
+    const control = computingNameControl()
+    if (!control) return
+    let root = control.container.querySelector(':scope > .it-toolkit-vm-name-tools')
+    if (!root) {
+      root = element('div', 'it-toolkit-vm-name-tools')
+      const button = element('button', 'it-toolkit-vm-name-button', 'Dán tên VM')
+      button.type = 'button'
+      button.title = 'Điền tên chủ sở hữu (không dấu, chữ thường) và mã dịch vụ vào ô Tên'
+      button.addEventListener('click', pasteVmName)
+      root.append(button, element('span', 'it-toolkit-vm-name-status'))
+      control.input.after(root)
+    }
+    const button = root.querySelector('.it-toolkit-vm-name-button')
+    const status = root.querySelector('.it-toolkit-vm-name-status')
+    if (button) button.disabled = state.vmNameBusy
+    if (status) {
+      if (status.textContent !== state.vmNameText) status.textContent = state.vmNameText
+      status.classList.remove('is-success', 'is-error', 'is-working')
+      if (state.vmNameKind) status.classList.add(`is-${state.vmNameKind}`)
+      status.hidden = !state.vmNameText
+    }
   }
 
   function normalizePasswordOptions(value) {
@@ -251,13 +459,7 @@
       state.passwordOptions = normalizePasswordOptions(response.options)
       const control = passwordControl()
       if (!control) throw new Error('Không còn tìm thấy ô Password trên form.')
-      const prototype = control.input.ownerDocument.defaultView?.HTMLInputElement?.prototype
-      const setter = prototype && Object.getOwnPropertyDescriptor(prototype, 'value')?.set
-      if (setter) setter.call(control.input, response.password)
-      else control.input.value = response.password
-      const EventClass = control.input.ownerDocument.defaultView?.Event ?? Event
-      control.input.dispatchEvent(new EventClass('input', { bubbles: true }))
-      control.input.dispatchEvent(new EventClass('change', { bubbles: true }))
+      setInputValue(control.input, response.password)
       state.passwordValue = response.password
       setPasswordStatus(`Đã tạo pass: ${response.password}`, 'success')
     } catch (error) {
@@ -490,6 +692,7 @@
 
   function renderCreate() {
     renderPasswordTool()
+    renderVmNameTool()
     const fieldset = resourceFieldset()
     const content = fieldset?.querySelector('.ui-fieldset-content')
     if (!fieldset || !content) return
@@ -512,11 +715,129 @@
     applyStatus(root)
   }
 
+  function renderDetail() {
+    const heading = [...document.querySelectorAll('#frmMain .card .mb-1')]
+      .find((node) => node.querySelector('span')?.textContent?.trim() === 'Thông tin')
+    if (!heading) return
+    let root = heading.querySelector(':scope > .it-toolkit-vm-info-copy')
+    if (!root) {
+      root = element('div', 'it-toolkit-vm-info-copy')
+      const button = element('button', 'it-toolkit-vm-info-copy-button', 'Sao chép thông tin VM')
+      button.type = 'button'
+      button.title = 'Sao chép toàn bộ thông tin VM đang xem'
+      button.addEventListener('click', copyCurrentVmInfo)
+      root.append(button)
+      heading.append(root)
+    }
+    let status = document.getElementById('it-toolkit-vm-info-toast')
+    if (!status) {
+      status = element('div', 'it-toolkit-vm-info-copy-status')
+      status.id = 'it-toolkit-vm-info-toast'
+      status.setAttribute('role', 'status')
+      status.setAttribute('aria-live', 'polite')
+      document.body.append(status)
+    }
+    const button = root.querySelector('.it-toolkit-vm-info-copy-button')
+    if (button) {
+      button.disabled = state.vmInfoBusy
+      button.classList.toggle('is-copied', state.vmInfoCopied)
+      button.classList.toggle('is-error', state.vmInfoKind === 'error')
+      const label = state.vmInfoBusy ? 'Đang lấy...' : state.vmInfoCopied ? '✓ Đã sao chép' : 'Sao chép thông tin VM'
+      if (button.textContent !== label) button.textContent = label
+    }
+    if (status) {
+      if (status.textContent !== state.vmInfoText) status.textContent = state.vmInfoText
+      status.classList.remove('is-success', 'is-error', 'is-working')
+      if (state.vmInfoKind) status.classList.add(`is-${state.vmInfoKind}`)
+      status.hidden = !state.vmInfoText
+      if (state.vmInfoText && state.vmInfoKind !== 'working') {
+        window.clearTimeout(vmInfoToastTimer)
+        vmInfoToastTimer = window.setTimeout(() => {
+          state.vmInfoText = ''
+          scheduleRender()
+        }, 2600)
+      }
+    }
+  }
+
+  function renderOtpTool() {
+    const control = otpControl()
+    if (!control) return
+    let anchor = control.dialog?.querySelector('.it-toolkit-otp-anchor')
+    if (!anchor) {
+      const candidates = [...(control.dialog?.querySelectorAll('label, strong, span, div, p') ?? [])]
+      anchor = candidates.find((node) =>
+        (node.textContent ?? '').replace(/\s+/g, ' ').trim() === 'Nhập mã xác thực để truy cập console') ||
+        control.label
+      anchor.classList.add('it-toolkit-otp-anchor')
+    }
+    let root = anchor.querySelector(':scope > .it-toolkit-otp-tools')
+    if (!root) {
+      root = element('div', 'it-toolkit-otp-tools')
+      const button = element('button', 'it-toolkit-otp-button', 'Đang tải mã...')
+      button.type = 'button'
+      button.title = 'Điền mã OTP đang hiển thị'
+      button.addEventListener('click', pasteAuthenticatorCode)
+      const picker = element('button', 'it-toolkit-otp-picker', '▾')
+      picker.type = 'button'
+      picker.title = 'Chọn mã Authenticator khác'
+      picker.setAttribute('aria-label', 'Chọn mã Authenticator khác')
+      picker.addEventListener('click', toggleAuthenticatorCodes)
+      root.append(button, picker, element('div', 'it-toolkit-otp-menu'), element('span', 'it-toolkit-otp-status'))
+      anchor.append(root)
+    }
+    if (!state.otpLoaded && !state.otpBusy) void loadAuthenticatorCodes(false)
+    const selected = selectedOtpCode()
+    const button = root.querySelector('.it-toolkit-otp-button')
+    if (button) {
+      button.disabled = state.otpBusy
+      const account = selected ? selected.issuer || selected.label || 'Authenticator' : ''
+      const label = selected ? `${account}: ${selected.code}` :
+        state.otpBusy ? 'Đang tải mã...' : 'Chọn mã OTP'
+      if (button.textContent !== label) button.textContent = label
+      button.classList.toggle('is-success', state.otpKind === 'success')
+    }
+    const picker = root.querySelector('.it-toolkit-otp-picker')
+    if (picker) {
+      picker.disabled = state.otpBusy
+      picker.setAttribute('aria-expanded', String(state.otpMenuOpen))
+    }
+    const menu = root.querySelector('.it-toolkit-otp-menu')
+    if (menu) {
+      menu.hidden = !state.otpMenuOpen
+      const signature = `${state.otpSelectedId}|${state.otpCodes.map((item) => `${item.id}:${item.code}`).join('|')}`
+      if (menu.dataset.signature !== signature) {
+        menu.dataset.signature = signature
+        menu.replaceChildren(...state.otpCodes.map((item) => {
+          const itemButton = element('button', 'it-toolkit-otp-account')
+          itemButton.type = 'button'
+          itemButton.append(
+            element('strong', '', `${item.issuer || 'Authenticator'}: ${item.code}`),
+            element('small', '', item.label || ''),
+          )
+          itemButton.classList.toggle('is-selected', item.id === state.otpSelectedId)
+          itemButton.addEventListener('click', () => fillOtpCode(item))
+          return itemButton
+        }))
+      }
+    }
+    const status = root.querySelector('.it-toolkit-otp-status')
+    if (status) {
+      if (status.textContent !== state.otpText) status.textContent = state.otpText
+      status.classList.toggle('is-error', state.otpKind === 'error')
+      status.hidden = !state.otpText || state.otpKind === 'success'
+    }
+  }
+
   function render() {
     renderQueued = false
     if (stopped) return
     if (location.pathname === servicePath) renderService()
     if (location.pathname === createPath) renderCreate()
+    if (location.pathname === detailPath) {
+      renderDetail()
+      renderOtpTool()
+    }
   }
 
   function scheduleRender() {
@@ -529,6 +850,7 @@
     sendMessage({ type: 'toolkit:get-vm-config' }).then((response) => {
       if (response?.config) state.config = response.config
       else if (response?.error) setStatus(response.error, 'error')
+      state.vmName = typeof response?.vmName === 'string' ? response.vmName.trim() : ''
       scheduleRender()
     }).catch((error) => setStatus(error instanceof Error ? error.message : String(error), 'error'))
     void loadPasswordOptions()
@@ -536,6 +858,7 @@
       if (!document.hidden) {
         sendMessage({ type: 'toolkit:get-vm-config' }).then((response) => {
           state.config = response?.config ?? null
+          state.vmName = typeof response?.vmName === 'string' ? response.vmName.trim() : ''
           scheduleRender()
         }).catch((error) => setStatus(error instanceof Error ? error.message : String(error), 'error'))
       }
@@ -555,6 +878,9 @@
     document.removeEventListener('keydown', handlePasswordOptionsKey)
     document.removeEventListener('scroll', scheduleRender, true)
     window.removeEventListener('resize', scheduleRender)
+    window.clearTimeout(vmInfoToastTimer)
+    window.clearTimeout(otpRefreshTimer)
+    document.getElementById('it-toolkit-vm-info-toast')?.remove()
     document.getElementById('it-toolkit-password-options-popover')?.remove()
   }, { once: true })
   scheduleRender()

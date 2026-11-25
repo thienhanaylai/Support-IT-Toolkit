@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Check, Copy } from 'lucide-react'
+import { Check, Copy, RefreshCw } from 'lucide-react'
 import { formatLAN, getCopyText, getRawOutput, publicIP } from '../services/formatRecord'
 import { formatMXToolbox, formatWHOIS } from '../services/domainLookup'
 import { formatVMInfo } from '../services/vmInfo'
@@ -7,7 +7,12 @@ import type { CheckRecord } from '../services/storage'
 import { WhoisResult } from './WhoisResult'
 import { TlsResult } from './TlsResult'
 
-export function Result({ record }: { record: CheckRecord }) {
+export function Result({ record, onCopyCurrentVM, copyingCurrentVM = false, copiedCurrentVM = false }: {
+  record: CheckRecord
+  onCopyCurrentVM?: () => Promise<void>
+  copyingCurrentVM?: boolean
+  copiedCurrentVM?: boolean
+}) {
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState(false)
   const rawOutput = getRawOutput(record.result)
@@ -34,13 +39,21 @@ export function Result({ record }: { record: CheckRecord }) {
   }
 
   const details = rawOutput ? Object.fromEntries(Object.entries(record.result).filter(([key]) => key !== 'raw' && key !== 'ipconfig')) : record.result
-  const copyButton = <button type="button" className="copy-button" onClick={() => void copy()}>{copied ? <Check size={14} /> : <Copy size={14} />}{copied ? 'Đã sao chép' : record.tool === 'IP Public' ? 'Sao chép IP' : isVMInfo ? 'Sao chép thông tin VM' : rawOutput ? 'Sao chép dòng lệnh' : 'Sao chép kết quả'}</button>
+  const copyButton = <button type="button" className="copy-button" onClick={() => void copy()}>{copied ? <Check size={14} /> : <Copy size={14} />}{copied ? 'Đã sao chép' : record.tool === 'IP Public' ? 'Sao chép IP' : isVMInfo ? 'Sao chép kết quả này' : rawOutput ? 'Sao chép dòng lệnh' : 'Sao chép kết quả'}</button>
+  const vmCopyButtons = isVMInfo && onCopyCurrentVM ? <div className="vm-copy-actions">
+    {copyButton}
+    <button type="button" className="copy-button copy-current-vm" disabled={copyingCurrentVM}
+      onClick={() => void onCopyCurrentVM().catch(() => setCopyError(true))}>
+      {copiedCurrentVM ? <Check size={14} /> : <RefreshCw size={14} className={copyingCurrentVM ? 'spin' : ''} />}
+      {copyingCurrentVM ? 'Đang lấy VM...' : copiedCurrentVM ? 'Đã lấy & sao chép' : 'Lấy mới & sao chép'}
+    </button>
+  </div> : copyButton
 
   return <section className={`result result-${record.status}`}>
     <div className="result-heading"><span className="status-dot" /><strong>{record.tool}</strong><span className="result-time">{new Date(record.at).toLocaleString('vi-VN')}</span></div>
     <div className="result-target">{record.target}</div>
     {!isPingWithOutput && <div className="source">{record.source}</div>}
-    {!rawOutput && copyButton}
+    {!rawOutput && vmCopyButtons}
     {isPingWithOutput || (isLAN && rawOutput) ? null : record.tool === 'WHOIS' ? <WhoisResult result={record.result} /> : record.tool === 'SSL / TLS' ? <TlsResult result={record.result} /> : isLAN ? <pre>{formatLAN(record.result)}</pre> : isVMInfo || isDomainLookup ? <pre>{isVMInfo ? formatVMInfo(record.result) : record.tool === 'MXToolbox' ? formatMXToolbox(record.result) : formatWHOIS(record.result)}</pre> : scanRows ? <>
       <div className="scan-summary"><strong>{String(record.result.openCount ?? 0)} mở</strong><span>{String(record.result.closedCount ?? 0)} đóng</span><span>{String(record.result.timeoutCount ?? 0)} timeout</span></div>
       <div className="scan-address">IP kiểm tra: {String(record.result.resolvedIp ?? record.target)}</div>

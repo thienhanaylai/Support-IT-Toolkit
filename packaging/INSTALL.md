@@ -4,7 +4,7 @@ Gói này được build cho **Windows 10/11 x64** với Chrome hoặc Edge.
 
 **Dùng một file:** mở `ITSupportToolkit-Windows.exe`. Không cần giải nén, Node.js, Go hoặc quyền Administrator. File tự giải nén vào thư mục tạm, chạy trình cài và xóa thư mục tạm sau khi kết thúc.
 
-1. Lần đầu, trình cài chép extension vào `%LOCALAPPDATA%\ITSupportToolkit\extension` và hỏi chọn **Chrome**, **Edge** hoặc **xem hướng dẫn cho cả hai**. Bộ cài không tự mở trang nội bộ vì Chrome/Edge chỉ tạo tab New Tab khi nhận địa chỉ `chrome://`/`edge://` từ dòng lệnh. Hãy tự nhập địa chỉ của trình duyệt đã chọn vào thanh địa chỉ và nhấn Enter:
+1. Lần đầu, trình cài chép extension vào `%LOCALAPPDATA%\ITSupportToolkit\extension` và hỏi chọn **Chrome**, **Edge** hoặc **cả hai**. Bộ cài mở cửa sổ trình duyệt mới, dùng UI Automation để nhập trang quản lý extension vào thanh địa chỉ và điều hướng tự động. Nếu thao tác này thất bại, hãy mở địa chỉ thủ công:
    - **Chrome:** vào `chrome://extensions/`, bật **Developer mode** ở góc trên bên phải, bấm **Load unpacked** ở góc trên bên trái.
    - **Edge:** vào `edge://extensions/`, bật **Developer mode** ở thanh bên trái, bấm **Load unpacked**.
    - Chọn đúng thư mục `%LOCALAPPDATA%\ITSupportToolkit\extension`.

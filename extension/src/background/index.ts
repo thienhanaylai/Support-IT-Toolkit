@@ -1,12 +1,16 @@
 import { registerJobs } from './jobs'
 import {
-  copyServiceConfig, isPortalCreateUrl, isPortalVmConfig,
+  buildVmName, copyServiceConfig, isPortalCreateUrl, isPortalVmConfig,
   pasteServiceConfig, portalVmConfigKey,
 } from '../services/portalVmConfig'
 import { portalOriginPattern } from '../services/portalAccess'
 import {
   generatePassword, normalizePasswordOptions, passwordOptionsKey, passwordRecentKey,
 } from '../services/passwordGenerator'
+import { formatVMInfo, getVMInfoFromTab, isPortalVMUrl } from '../services/vmInfo'
+import {
+  authenticatorRemainingSeconds, generateAuthenticatorCode, loadAuthenticatorEntries,
+} from '../services/authenticator'
 
 registerJobs()
 
@@ -14,6 +18,7 @@ const portalScriptId = 'longvan-portal-tools'
 const portalMatches = [
   'https://portal.longvan.vn/cloud-service-manager/manager/cloud-service-detail.xhtml*',
   'https://portal.longvan.vn/computing-manager/manager/computing/computing_create.xhtml*',
+  'https://portal.longvan.vn/computing-manager/manager/computing/computing_detail.xhtml*',
 ]
 
 async function syncPortalContentScript(): Promise<void> {
@@ -22,7 +27,11 @@ async function syncPortalContentScript(): Promise<void> {
     chrome.permissions.contains({ origins: [portalOriginPattern] }),
     chrome.scripting.getRegisteredContentScripts({ ids: [portalScriptId] }),
   ])
-  if (allowed && !registered.length) {
+  const currentMatches = registered[0]?.matches ?? []
+  const registrationOutdated = registered.length > 0 &&
+    (currentMatches.length !== portalMatches.length || portalMatches.some((match) => !currentMatches.includes(match)))
+  if (allowed && (!registered.length || registrationOutdated)) {
+    if (registered.length) await chrome.scripting.unregisterContentScripts({ ids: [portalScriptId] })
     await chrome.scripting.registerContentScripts([{
       id: portalScriptId, matches: portalMatches, js: ['portal.js'], css: ['portal.css'], runAt: 'document_idle',
     }])
@@ -64,18 +73,47 @@ chrome.contextMenus.onClicked.addListener((info) => {
   }))
 })
 
-chrome.runtime.onMessage.addListener((message: { type?: string; options?: unknown }, sender, respond) => {
+chrome.runtime.onMessage.addListener((message: { type?: string; options?: unknown; tabId?: unknown }, sender, respond) => {
   const tabId = sender.tab?.id
   const url = sender.tab?.url
   if (message?.type === 'toolkit:get-vm-config') {
-    void chrome.storage.session.get(portalVmConfigKey).then((saved) =>
-      respond({ config: isPortalVmConfig(saved[portalVmConfigKey]) ? saved[portalVmConfigKey] : null }),
-    (error) => respond({ error: error instanceof Error ? error.message : String(error) }))
+    void chrome.storage.session.get(portalVmConfigKey).then((saved) => {
+      const config = isPortalVmConfig(saved[portalVmConfigKey]) ? saved[portalVmConfigKey] : null
+      respond({ config, vmName: config ? buildVmName(config.ownerName, config.serviceCode) : '' })
+    }, (error) => respond({ error: error instanceof Error ? error.message : String(error) }))
+    return true
+  }
+  if (message?.type === 'toolkit:get-current-vm-info') {
+    const requestedTabId = sender.tab?.id ?? (Number.isInteger(message.tabId) ? message.tabId as number : undefined)
+    if (requestedTabId === undefined) {
+      respond({ error: 'Không tìm thấy tab chi tiết computing đang mở.' })
+      return false
+    }
+    void getVMInfoFromTab(requestedTabId).then((info) =>
+      respond({ info, text: formatVMInfo(info as unknown as Record<string, unknown>) }),
+      (error) => respond({ error: error instanceof Error ? error.message : String(error) }))
+    return true
+  }
+  if (message?.type === 'toolkit:get-authenticator-codes') {
+    if (!url || !isPortalVMUrl(url)) {
+      respond({ error: 'Chỉ có thể điền OTP tại trang chi tiết computing của Portal.' })
+      return false
+    }
+    void loadAuthenticatorEntries().then((entries) => respond({
+      codes: entries.map((entry) => ({
+        id: entry.id,
+        issuer: entry.issuer,
+        label: entry.label,
+        code: generateAuthenticatorCode(entry),
+        remaining: authenticatorRemainingSeconds(entry),
+      })),
+    }), (error) => respond({ error: error instanceof Error ? error.message : String(error) }))
     return true
   }
   if (message?.type === 'toolkit:copy-vm-config') {
     if (tabId === undefined || !url) { respond({ error: 'Không xác định được tab Dịch vụ.' }); return false }
-    void copyServiceConfig(tabId, url).then((config) => respond({ config }),
+    void copyServiceConfig(tabId, url).then((config) =>
+      respond({ config, vmName: buildVmName(config.ownerName, config.serviceCode) }),
       (error) => respond({ error: error instanceof Error ? error.message : String(error) }))
     return true
   }

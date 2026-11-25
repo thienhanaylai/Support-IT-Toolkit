@@ -6,12 +6,13 @@ IT SUPPORT TOOLKIT - GÓI CÀI THỦ CÔNG TRÊN WINDOWS
 Cách cài từ ZIP:
 1. Giải nén toàn bộ ITSupportToolkit-Windows.zip.
 2. Chạy Install.cmd trong thư mục vừa giải nén.
-3. Chọn Chrome, Edge hoặc xem hướng dẫn cho cả hai trình duyệt.
-   Tự mở trình duyệt, nhập địa chỉ sau vào thanh địa chỉ và nhấn Enter:
+3. Chọn Chrome, Edge hoặc cả hai trình duyệt. Bộ cài tự mở cửa sổ
+   trình duyệt mới và điều hướng đến trang quản lý extension:
    - Chrome: chrome://extensions/; bật Developer mode ở góc trên
      bên phải, nhấn Load unpacked ở góc trên bên trái.
    - Edge: edge://extensions/; bật Developer mode ở thanh bên
      trái, nhấn Load unpacked.
+   Nếu tự động điều hướng thất bại, hãy nhập địa chỉ trên thủ công.
 4. Chọn thư mục hiện trong cửa sổ cài:
    %LOCALAPPDATA%\ITSupportToolkit\extension
    Bộ cài tự sao chép đường dẫn này vào clipboard và mở sẵn thư mục.

@@ -1,9 +1,10 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ArrowRight, ClipboardCopy, Clock3, Globe2, HardDrive, MailSearch, Monitor, Network, Radio, RotateCw, ScanSearch, Search, Server, Settings2, ShieldCheck, UserRoundSearch, Zap } from 'lucide-react'
+import { ArrowRight, ClipboardCopy, Clock3, Globe2, HardDrive, KeyRound, LockKeyhole, MailSearch, Monitor, Network, Radio, RotateCw, ScanSearch, Search, Server, Settings2, ShieldCheck, UserRoundSearch, Wrench, Zap } from 'lucide-react'
 import { HistoryItem } from '../components/HistoryItem'
 import { Result } from '../components/Result'
 import { PasswordGenerator } from '../components/PasswordGenerator'
+import { Authenticator } from '../components/Authenticator'
 import { labels, toolRequiresAgent, type Tool } from '../services/checks'
 import { getHistory, getSettings, type CheckRecord } from '../services/storage'
 import { commonPorts, parseScanPorts } from '../services/scanPorts'
@@ -12,7 +13,8 @@ import { longVanWhoisURL } from '../services/longVanWhois'
 import { grantHost } from '../services/hostAccess'
 import { parseInput } from '../services/validation'
 import { draftKey, jobKey, type CheckJob, type PopupDraft } from '../services/work'
-import { copyServiceConfig, isPortalServiceUrl, isPortalVmConfig, portalVmConfigKey, type PortalVmConfig } from '../services/portalVmConfig'
+import { buildVmName, copyServiceConfig, isPortalServiceUrl, isPortalVmConfig, portalVmConfigKey, type PortalVmConfig } from '../services/portalVmConfig'
+import type { VMInfo } from '../services/vmInfo'
 import '../style.css'
 
 const tools: { id: Tool; icon: React.ReactNode; detail: string }[] = [
@@ -33,6 +35,7 @@ const vmTools = tools.filter((item) => item.id === 'vm_info')
 const networkInfoTools = tools.filter((item) => ['local_interfaces', 'public_ip'].includes(item.id))
 
 function App() {
+  const [activeTab, setActiveTab] = useState<'tools' | 'auth' | 'password'>('auth')
   const [input, setInput] = useState('')
   const [port, setPort] = useState(443)
   const [pingCount, setPingCount] = useState(4)
@@ -58,6 +61,8 @@ function App() {
   const [mxKeyError, setMxKeyError] = useState('')
   const [mxKeySaving, setMxKeySaving] = useState(false)
   const [mxKeySaved, setMxKeySaved] = useState(false)
+  const [copyingCurrentVM, setCopyingCurrentVM] = useState(false)
+  const [copiedCurrentVM, setCopiedCurrentVM] = useState(false)
   const resultRef = useRef<HTMLDivElement>(null)
   const progressRef = useRef<HTMLPreElement>(null)
   const busy = starting || job?.status === 'running'
@@ -138,13 +143,12 @@ function App() {
   }, [ready, input, port, pingCount, maxHops, scanMode, customPorts, mxCommand, tool])
 
   useEffect(() => {
-    if (busy || record || error) {
-      resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    }
-  }, [busy, record, error])
-  useEffect(() => {
     progressRef.current?.scrollTo({ top: progressRef.current.scrollHeight })
   }, [progress])
+
+  function scrollToResult() {
+    requestAnimationFrame(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
 
   async function run(selectedTool: Tool | null = tool) {
     if (!ready || busy) return
@@ -154,6 +158,7 @@ function App() {
     void chrome.storage.session.remove('displayedRecord')
     if (!selectedTool) {
       setError('Hãy chọn một công cụ trước khi kiểm tra')
+      scrollToResult()
       return
     }
     let scanPorts = commonPorts
@@ -163,6 +168,7 @@ function App() {
       if (selectedTool === 'port_scan' && scanMode === 'custom') scanPorts = parseScanPorts(customPorts)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
+      scrollToResult()
       return
     }
     if (selectedTool === 'mxtoolbox') {
@@ -177,11 +183,13 @@ function App() {
         }
       } catch {
         setError('Không thể đọc API key MXToolbox. Hãy thử lại.')
+        scrollToResult()
         return
       }
     }
     setTool(selectedTool)
     setStarting(true)
+    scrollToResult()
     try {
       if (selectedTool === 'whois') await grantHost(longVanWhoisURL(registrationDomain(input)))
       if (selectedTool === 'mxtoolbox') {
@@ -197,8 +205,10 @@ function App() {
       if (response.error) throw new Error(response.error)
       if (response.job) setJob((current) =>
         current && current.id === response.job?.id && current.status !== 'running' ? current : response.job!)
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
-    finally { setStarting(false) }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      scrollToResult()
+    } finally { setStarting(false) }
   }
 
   function showRecord(item: CheckRecord) {
@@ -250,6 +260,46 @@ function App() {
     } finally { setConfigBusy(false) }
   }
 
+  async function copyCurrentVM() {
+    if (copyingCurrentVM) return
+    setCopyingCurrentVM(true)
+    setCopiedCurrentVM(false)
+    setError('')
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+      if (!tab?.id) throw new Error('Không tìm thấy tab chi tiết computing đang mở.')
+      const response = await chrome.runtime.sendMessage({
+        type: 'toolkit:get-current-vm-info', tabId: tab.id,
+      }) as { info?: VMInfo; text?: string; error?: string }
+      if (response.error) throw new Error(response.error)
+      if (!response.info || !response.text) throw new Error('Không có thông tin VM để sao chép.')
+      await navigator.clipboard.writeText(response.text)
+      const info = response.info
+      const complete = info.vmName && info.vmp && info.host && info.resourcePool && info.group
+      const next: CheckRecord = {
+        id: crypto.randomUUID(),
+        at: new Date().toISOString(),
+        tool: labels.vm_info,
+        target: info.computingName,
+        source: 'Tab hiện tại · Portal nội bộ',
+        status: complete ? 'ok' : 'warn',
+        result: { ...info },
+      }
+      setTool('vm_info')
+      setRecord(next)
+      setRecent((items) => [next, ...items.filter((item) => item.id !== next.id)].slice(0, 5))
+      await chrome.storage.session.set({ displayedRecord: next })
+      setCopiedCurrentVM(true)
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Không thể lấy và sao chép VM hiện tại.'
+      setError(message)
+      setCopiedCurrentVM(false)
+      throw cause
+    } finally {
+      setCopyingCurrentVM(false)
+    }
+  }
+
   function toolOutput(groupTools: Tool[]) {
     if (!tool || !groupTools.includes(tool)) return null
     return <div className="tool-group-output" ref={resultRef}>
@@ -266,7 +316,8 @@ function App() {
           <RotateCw size={14} /> Thử lại
         </button>}
       </div>}
-      {record && <Result record={record} />}
+      {record && <Result record={record} onCopyCurrentVM={record.tool === labels.vm_info ? copyCurrentVM : undefined}
+        copyingCurrentVM={copyingCurrentVM} copiedCurrentVM={copiedCurrentVM} />}
     </div>
   }
 
@@ -277,8 +328,21 @@ function App() {
       <div className="popup-brand"><img src="/icons/icon-32.png" width="24" height="24" alt="" /><strong>LongVanSupport Toolkit</strong></div>
       <a className="popup-settings" href="options.html" target="_blank" rel="noreferrer"><Settings2 size={16} /> Cài đặt</a>
     </header>
-    <div className="main-content">
-      <PasswordGenerator />
+    <nav className="popup-tabs" role="tablist" aria-label="Chức năng">
+      <button type="button" role="tab" aria-selected={activeTab === 'auth'}
+        className={activeTab === 'auth' ? 'active' : ''} onClick={() => setActiveTab('auth')}>
+        <KeyRound size={18} /> Authenticator
+      </button>
+      <button type="button" role="tab" aria-selected={activeTab === 'password'}
+        className={activeTab === 'password' ? 'active' : ''} onClick={() => setActiveTab('password')}>
+        <LockKeyhole size={18} /> Mật khẩu
+      </button>
+      <button type="button" role="tab" aria-selected={activeTab === 'tools'}
+        className={activeTab === 'tools' ? 'active' : ''} onClick={() => setActiveTab('tools')}>
+        <Wrench size={18} /> Công cụ
+      </button>
+    </nav>
+    {activeTab === 'tools' ? <div className="main-content">
       <section className="tool-section popup-tool-group domain-tool-section" aria-labelledby="input-tools-heading">
         <div className="section-title" id="input-tools-heading"><span>CÔNG CỤ DÙNG DOMAIN / IP</span></div>
         {(!tool || !instantTools.includes(tool)) && <div className="input-panel">
@@ -339,15 +403,17 @@ function App() {
       </section>
       {isServicePage && <section className="vm-transfer" aria-label="Sao chép cấu hình từ trang Dịch vụ">
         <div className="vm-transfer-title">CẤU HÌNH VM <span>PORTAL</span></div>
-        <p>Lấy CORE, RAM, Internet và STORAGE để dán VM; hiển thị thêm OS và Site Provider để kiểm tra. Không lấy IP hoặc Backup.</p>
-        {vmConfig && <p>Đã lưu tạm: {vmConfig.cpu} Core · {vmConfig.ramGB} GB RAM · {vmConfig.internetMbps} Mb/s · {vmConfig.diskGB} GB {vmConfig.diskType.replace('_STORAGE', '')} · OS: {vmConfig.os || vmConfig.osId || 'Không có'} · Site Provider: {vmConfig.siteProvider || vmConfig.siteProviderId || 'Không có'}.</p>}
+        <p>Lấy OS, CORE, RAM, Internet và STORAGE để dán VM; Site Provider chỉ dùng đối chiếu Khu vực. Không lấy IP hoặc Backup.</p>
+        {vmConfig && <p>
+          Đã lưu tạm: {vmConfig.cpu} Core · {vmConfig.ramGB} GB RAM · {vmConfig.internetMbps} Mb/s · {vmConfig.diskGB} GB {vmConfig.diskType.replace('_STORAGE', '')} · OS: {vmConfig.os || vmConfig.osId || 'Không có'} · Site Provider: {vmConfig.siteProvider || vmConfig.siteProviderId || 'Không có'}{buildVmName(vmConfig.ownerName, vmConfig.serviceCode) ? ` · Tên VM: ${buildVmName(vmConfig.ownerName, vmConfig.serviceCode)}` : ''}.
+        </p>}
         <button type="button" disabled={configBusy || busy} onClick={() => void copyPortalConfig()}><ClipboardCopy size={15} /> {configBusy ? 'Đang sao chép...' : 'Sao chép thông số'}</button>
         {configMessage && <p className={`vm-transfer-message${configFailed ? ' vm-transfer-error' : ''}`} role={configFailed ? 'alert' : 'status'}>{configMessage}</p>}
       </section>}
       {!tool && <div className="source-hint"><span className="hint-icon"><Globe2 size={15} /></span>Chọn một công cụ để bắt đầu</div>}
       <div className="section-title history-title"><span>GẦN ĐÂY</span><button className="history-link" onClick={() => { void chrome.windows.getCurrent().then((w) => chrome.sidePanel.open({ windowId: w.id! })).catch(() => chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel.html') })) }}>Xem tất cả <ArrowRight size={13} /></button></div>
       {recent.length ? recent.map((item) => <HistoryItem key={item.id} record={item} selected={record?.id === item.id} onClick={() => showRecord(item)} />) : <p className="empty"><Clock3 size={16} /> Chưa có lượt kiểm tra nào.</p>}
-    </div>
+    </div> : activeTab === 'password' ? <div className="password-tab-content"><PasswordGenerator standalone /></div> : <Authenticator />}
   </main>
 }
 createRoot(document.getElementById('root')!).render(<App />)

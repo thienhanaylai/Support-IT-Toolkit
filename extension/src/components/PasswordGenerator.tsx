@@ -5,7 +5,7 @@ import {
   passwordOptionsKey, passwordRecentKey, validatePasswordOptions, type PasswordOptions,
 } from '../services/passwordGenerator'
 
-export function PasswordGenerator() {
+export function PasswordGenerator({ standalone = false }: { standalone?: boolean }) {
   const [options, setOptions] = useState(defaultPasswordOptions)
   const [lengthText, setLengthText] = useState(String(defaultPasswordOptions.length))
   const [password, setPassword] = useState('')
@@ -76,7 +76,7 @@ export function PasswordGenerator() {
     } catch { setError('Không thể sao chép mật khẩu vào clipboard.') }
   }
 
-  return <section className={`password-generator${expanded ? ' is-expanded' : ''}`} aria-labelledby="password-generator-title">
+  return <section className={`password-generator${expanded ? ' is-expanded' : ''}${standalone ? ' password-generator-standalone' : ''}`} aria-labelledby="password-generator-title">
     <div className="password-heading"><span className="tool-icon"><KeyRound size={16} /></span><div className="password-heading-copy"><strong id="password-generator-title">Tạo mật khẩu</strong></div>
       <div className="password-heading-actions"><button type="button" className="password-options-toggle" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>{expanded ? 'Thu gọn' : 'Tùy chọn'}</button>
         {recent.length > 0 && <button type="button" className="password-history-toggle" aria-expanded={showHistory} onClick={() => setShowHistory(!showHistory)}><Clock3 size={13} /> {showHistory ? 'Đóng' : `Lịch sử (${recent.length})`}</button>}

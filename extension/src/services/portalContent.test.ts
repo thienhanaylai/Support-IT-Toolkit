@@ -11,11 +11,14 @@ const config = {
   siteProvider: 'HCM', siteProviderId: '106066',
 }
 
-async function execute(url: string, body: string, sendMessage: ReturnType<typeof vi.fn>) {
+async function execute(url: string, body: string, sendMessage: ReturnType<typeof vi.fn>, writeText = vi.fn(async () => {})) {
   const dom = new JSDOM(`<!doctype html><body>${body}</body>`, { url, runScripts: 'outside-only' })
   Object.defineProperty(dom.window, 'chrome', { value: { runtime: { sendMessage } } })
+  Object.defineProperty(dom.window.navigator, 'clipboard', { value: { writeText }, configurable: true })
   dom.window.eval(script)
-  await vi.waitFor(() => expect(dom.window.document.querySelector('.it-toolkit-portal-button')).not.toBeNull())
+  await vi.waitFor(() => expect(dom.window.document.querySelector(
+    '.it-toolkit-portal-button, .it-toolkit-vm-info-copy-button, .it-toolkit-otp-button',
+  )).not.toBeNull())
   return dom
 }
 
@@ -44,6 +47,75 @@ it('places Copy configuration beside the Service attribute panel actions', async
   dom.window.close()
 })
 
+it('places a quick VM copy button in the Information heading', async () => {
+  const text = 'Link VM: https://portal.longvan.vn/vm\n\nTên computing: COMPUTING-A\nVMID: 663312104'
+  const sendMessage = vi.fn(async () => ({ info: { computingName: 'COMPUTING-A' }, text }))
+  const writeText = vi.fn(async () => {})
+  const dom = await execute(
+    'https://portal.longvan.vn/computing-manager/manager/computing/computing_detail.xhtml?id=1',
+    `<form id="frmMain"><div class="card">
+      <div class="mb-1"><span>Thông tin</span></div>
+      <div class="ui-g-12">Tên computing: <span class="FontBold">COMPUTING-A</span></div>
+    </div></form>`,
+    sendMessage,
+    writeText,
+  )
+  const button = dom.window.document.querySelector<HTMLButtonElement>('.it-toolkit-vm-info-copy-button')!
+  expect(button.textContent).toBe('Sao chép thông tin VM')
+  expect(button.closest('.mb-1')?.textContent).toContain('Thông tin')
+  button.click()
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ type: 'toolkit:get-current-vm-info' }))
+  await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(text))
+  await vi.waitFor(() => expect(button.textContent).toBe('✓ Đã sao chép'))
+  expect(button.classList.contains('is-copied')).toBe(true)
+  expect(dom.window.document.querySelector('.it-toolkit-vm-info-copy-status')?.textContent)
+    .toContain('Đã sao chép COMPUTING-A')
+  dom.window.dispatchEvent(new dom.window.Event('pagehide'))
+  dom.window.close()
+})
+
+it('fills the Portal OTP field from the matching Long Van Authenticator', async () => {
+  const sendMessage = vi.fn(async (message: { type: string }) => message.type === 'toolkit:get-authenticator-codes'
+    ? {
+        codes: [
+          { id: 'github', issuer: 'GitHub', label: 'user', code: '111111' },
+          { id: 'longvan', issuer: 'LONGVAN-PT', label: '0917580860', code: '654321' },
+        ],
+      }
+    : {})
+  const dom = await execute(
+    'https://portal.longvan.vn/computing-manager/manager/computing/computing_detail.xhtml?id=1',
+    `<div class="ui-dialog" role="dialog">
+      <strong>Nhập mã xác thực để truy cập console</strong>
+      <label for="portal-otp">Nhập mã OTP</label>
+      <input id="portal-otp" type="text" value="">
+    </div>`,
+    sendMessage,
+  )
+  const input = dom.window.document.querySelector<HTMLInputElement>('#portal-otp')!
+  const onInput = vi.fn()
+  const onChange = vi.fn()
+  input.addEventListener('input', onInput)
+  input.addEventListener('change', onChange)
+  const button = dom.window.document.querySelector<HTMLButtonElement>('.it-toolkit-otp-button')!
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ type: 'toolkit:get-authenticator-codes' }))
+  await vi.waitFor(() => expect(button.textContent).toBe('LONGVAN-PT: 654321'))
+  button.click()
+  await vi.waitFor(() => expect(input.value).toBe('654321'))
+  expect(onInput).toHaveBeenCalledOnce()
+  expect(onChange).toHaveBeenCalledOnce()
+  const picker = dom.window.document.querySelector<HTMLButtonElement>('.it-toolkit-otp-picker')!
+  picker.click()
+  await vi.waitFor(() => expect(dom.window.document.querySelector<HTMLElement>('.it-toolkit-otp-menu')?.hidden).toBe(false))
+  const github = [...dom.window.document.querySelectorAll<HTMLButtonElement>('.it-toolkit-otp-account')]
+    .find((item) => item.textContent?.includes('GitHub'))!
+  github.click()
+  await vi.waitFor(() => expect(input.value).toBe('111111'))
+  expect(button.textContent).toBe('GitHub: 111111')
+  dom.window.dispatchEvent(new dom.window.Event('pagehide'))
+  dom.window.close()
+})
+
 it('places Paste configuration inside Resources and reports the required order', async () => {
   const sendMessage = vi.fn(async (message: { type: string }) =>
     message.type === 'toolkit:get-vm-config' ? { config } : { applied: ['CPU', 'RAM', 'Internet', 'Disk'] })
@@ -62,6 +134,58 @@ it('places Paste configuration inside Resources and reports the required order',
   await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ type: 'toolkit:paste-vm-config' }))
   await vi.waitFor(() => expect(dom.window.document.querySelector('.it-toolkit-portal-status')?.textContent)
     .toContain('CPU → RAM → Internet → Disk'))
+  dom.window.dispatchEvent(new dom.window.Event('pagehide'))
+  dom.window.close()
+})
+
+it('fills the computing name from the owner name and service code', async () => {
+  const sendMessage = vi.fn(async (message: { type: string }) =>
+    message.type === 'toolkit:get-vm-config'
+      ? { config, vmName: 'chuxuanha-20.2985.9322' }
+      : {})
+  const dom = await execute(
+    'https://portal.longvan.vn/computing-manager/manager/computing/computing_create.xhtml?id=1',
+    `<form id="frmMain">
+      <div class="ui-g-12 ui-md-12 name-field"><label>Tên</label><i>*</i><input id="computing-name" type="text" value=""></div>
+      <fieldset><legend>Tài nguyên</legend><div class="ui-fieldset-content"></div></fieldset>
+    </form>`,
+    sendMessage,
+  )
+  const button = await vi.waitFor(() => {
+    const found = dom.window.document.querySelector<HTMLButtonElement>('.it-toolkit-vm-name-button')
+    expect(found).not.toBeNull()
+    return found!
+  })
+  expect(button.textContent).toBe('Dán tên VM')
+  button.click()
+  await vi.waitFor(() => expect(dom.window.document.querySelector<HTMLInputElement>('#computing-name')?.value)
+    .toBe('chuxuanha-20.2985.9322'))
+  expect(dom.window.document.querySelector('.it-toolkit-vm-name-status')?.textContent)
+    .toContain('Đã điền: chuxuanha-20.2985.9322')
+  dom.window.dispatchEvent(new dom.window.Event('pagehide'))
+  dom.window.close()
+})
+
+it('reports when there is no copied VM name to paste', async () => {
+  const sendMessage = vi.fn(async (message: { type: string }) =>
+    message.type === 'toolkit:get-vm-config' ? { config, vmName: '' } : {})
+  const dom = await execute(
+    'https://portal.longvan.vn/computing-manager/manager/computing/computing_create.xhtml?id=1',
+    `<form id="frmMain">
+      <div class="ui-g-12 ui-md-12 name-field"><label>Tên</label><i>*</i><input id="computing-name" type="text" value=""></div>
+      <fieldset><legend>Tài nguyên</legend><div class="ui-fieldset-content"></div></fieldset>
+    </form>`,
+    sendMessage,
+  )
+  const button = await vi.waitFor(() => {
+    const found = dom.window.document.querySelector<HTMLButtonElement>('.it-toolkit-vm-name-button')
+    expect(found).not.toBeNull()
+    return found!
+  })
+  button.click()
+  await vi.waitFor(() => expect(dom.window.document.querySelector('.it-toolkit-vm-name-status')?.textContent)
+    .toContain('Chưa có tên VM'))
+  expect(dom.window.document.querySelector<HTMLInputElement>('#computing-name')?.value).toBe('')
   dom.window.dispatchEvent(new dom.window.Event('pagehide'))
   dom.window.close()
 })

@@ -17,8 +17,14 @@ try {
   }
   function global:Start-Process {
     [CmdletBinding()]
-    param([string]$FilePath, [object[]]$ArgumentList)
+    param(
+      [string]$FilePath,
+      [object[]]$ArgumentList,
+      [switch]$Wait,
+      [switch]$PassThru
+    )
     $global:openedPaths += "$FilePath|$($ArgumentList -join ' ')"
+    if ($PassThru) { return [pscustomobject]@{ ExitCode = 0 } }
   }
   function global:Read-Host {
     param([string]$Prompt)
@@ -41,14 +47,41 @@ try {
     Set-Content -LiteralPath (Join-Path $bundle 'agent\it-support-host.exe') -Value 'test agent'
     Set-Content -LiteralPath (Join-Path $bundle 'install-agent.ps1') -Value 'param([string[]]$ExtensionIds,[string]$AgentBinary) [IO.File]::WriteAllText((Join-Path $env:LOCALAPPDATA "ids.txt"),($ExtensionIds -join ","))'
     $global:answers = @($test.choice, $id)
+    $openedBefore = $global:openedPaths.Count
     $output = & (Join-Path $bundle 'setup.ps1') 6>&1 | Out-String
     if ((Get-Content -LiteralPath (Join-Path $env:LOCALAPPDATA 'ids.txt') -Raw) -ne $id) {
       throw "Wrong Extension ID for $($test.browser)"
     }
     if ($global:answers.Count -ne 0) { throw "Unused prompt answers for $($test.browser)" }
     $expectedPath = Join-Path $env:LOCALAPPDATA 'ITSupportToolkit\extension'
-    if ($global:copiedPaths[-1] -ne $expectedPath -or $global:openedPaths[-1] -notlike "explorer.exe|*$expectedPath*") {
+    $opened = @($global:openedPaths | Select-Object -Skip $openedBefore)
+    if ($global:copiedPaths[-1] -ne $expectedPath -or !($opened | Where-Object { $_ -like "explorer.exe|*$expectedPath*" })) {
       throw "Installer did not copy and open the extension path for $($test.browser)"
+    }
+    $navigation = @($opened | Where-Object { $_ -like 'powershell.exe|*' })
+    $expectedNavigationCount = if ($test.browser -eq 'None') { 2 } else { 1 }
+    if ($navigation.Count -ne $expectedNavigationCount) {
+      throw "Installer did not launch the expected browser navigation for $($test.browser)"
+    }
+    $decodedScripts = @($navigation | ForEach-Object {
+      $encoded = ($_ -split ' ')[-1]
+      [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($encoded))
+    })
+    if ($navigation | Where-Object { $_ -notmatch '\|-NoProfile -STA -EncodedCommand ' }) {
+      throw "Browser navigation did not use PowerShell STA for $($test.browser)"
+    }
+    if ($test.browser -eq 'Chrome' -and
+        !($decodedScripts | Where-Object { $_.Contains("'chrome.exe'") -and $_.Contains("'chrome://extensions/'") })) {
+      throw 'Chrome navigation script is missing its executable or extension page.'
+    }
+    if ($test.browser -eq 'Edge' -and
+        !($decodedScripts | Where-Object { $_.Contains("'msedge.exe'") -and $_.Contains("'edge://extensions/'") })) {
+      throw 'Edge navigation script is missing its executable or extension page.'
+    }
+    if ($test.browser -eq 'None' -and
+        (!($decodedScripts | Where-Object { $_.Contains("'chrome.exe'") -and $_.Contains("'chrome://extensions/'") }) -or
+         !($decodedScripts | Where-Object { $_.Contains("'msedge.exe'") -and $_.Contains("'edge://extensions/'") }))) {
+      throw 'Both-browser choice did not create Chrome and Edge navigation scripts.'
     }
     if ($test.browser -eq 'None') {
       if (!$output.Contains('chrome://extensions/') -or !$output.Contains('edge://extensions/')) {

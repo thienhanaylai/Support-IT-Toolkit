@@ -8,9 +8,26 @@ export type PortalVmConfig = {
   osId: string
   siteProvider: string
   siteProviderId: string
+  ownerName: string
+  serviceCode: string
 }
 
 export const portalVmConfigKey = 'portalVmConfig'
+
+export function normalizeOwnerName(value: string): string {
+  return value.normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd')
+    .toLocaleLowerCase('vi-VN')
+    .replace(/[^a-z0-9]+/g, '')
+    .slice(0, 80)
+}
+
+export function buildVmName(ownerName: string, serviceCode: string): string {
+  const owner = normalizeOwnerName(ownerName)
+  const code = serviceCode.replace(/\s+/g, '').slice(0, 200)
+  return owner && code ? `${owner}-${code}` : ''
+}
 
 const portalOrigin = 'https://portal.longvan.vn'
 const servicePath = '/cloud-service-manager/manager/cloud-service-detail.xhtml'
@@ -48,7 +65,9 @@ export function isPortalVmConfig(value: unknown): value is PortalVmConfig {
     typeof data.os === 'string' && data.os.length <= 300 &&
     typeof data.osId === 'string' && data.osId.length <= 300 &&
     typeof data.siteProvider === 'string' && data.siteProvider.length <= 300 &&
-    typeof data.siteProviderId === 'string' && data.siteProviderId.length <= 300
+    typeof data.siteProviderId === 'string' && data.siteProviderId.length <= 300 &&
+    typeof data.ownerName === 'string' && data.ownerName.length <= 300 &&
+    typeof data.serviceCode === 'string' && data.serviceCode.length <= 300
 }
 
 // Runs in the service tab. Read only the displayed attribute cells, never hidden editors.
@@ -90,10 +109,36 @@ export function extractServiceConfigFromDOM(): PortalVmConfig | null {
   if (cpu === null || ramGB === null || internetMbps === null || diskGB === null) return null
   const os = values.get('#OS')
   const provider = values.get('#SITE_PROVIDER') ?? values.get('#SITEPROVIDER') ?? values.get('#PROVINCE')
+
+  function labelledValue(scope: Element | null | undefined, label: string): string {
+    if (!scope) return ''
+    const target = `${label.toLocaleLowerCase('vi-VN')}:`
+    for (const node of scope.querySelectorAll('div, span')) {
+      if (node.children.length) continue
+      const text = (node.textContent ?? '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN')
+      if (text !== target) continue
+      const value = (node.nextElementSibling?.textContent ?? '')
+        .replace(/\s+/g, ' ').trim().slice(0, 300)
+      if (value) return value
+    }
+    return ''
+  }
+  const serviceInfo = document.getElementById('frm-info-service:componentInfoService:resourceService')
+  const ownerPanel = document.getElementById('frm-info-service:componentInfoService:panelContact')
+  const ownerTitle = [...(ownerPanel?.querySelectorAll('.ui-panel-title') ?? [])].find((node) =>
+    (node.textContent ?? '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN') === 'sở hữu')
+  const ownerLink = ownerPanel?.querySelector('a[href*="ownerId="]')
+  const ownerScope = ownerTitle?.closest('.ui-g') ?? ownerLink?.closest('.ui-g') ?? ownerPanel
+  const serviceCode = labelledValue(serviceInfo, 'mã') ||
+    (document.querySelector('#frm-page-header .copy-block')?.textContent ?? '')
+      .replace(/\s+/g, ' ').trim().slice(0, 300)
+  const ownerName = labelledValue(ownerScope, 'tên')
+
   return {
     cpu, ramGB, internetMbps, diskGB, diskType: diskCodes[0].slice(1),
     os: os?.name ?? '', osId: os?.value ?? '',
     siteProvider: provider?.name ?? '', siteProviderId: provider?.value ?? '',
+    ownerName, serviceCode,
   }
 }
 
@@ -140,6 +185,7 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
     widgets: Record<string, {
       input?: { 0?: Element }
       autonumeric?: { set: (value: string) => void }
+      setValue?: (value: string | number) => void
       copyValueToHiddenInput?: () => string
       getValue?: () => string
       selectValue?: (value: string) => void
@@ -156,32 +202,60 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
   function normalizedLabel(value: string | null | undefined): string {
     return (value ?? '').replace(/\*/g, '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN')
   }
-  function currentChoice(label: string): { name: string; id: string } | null {
+  function choiceField(label: string): { field: Element; select: HTMLSelectElement } | null {
     const form = document.getElementById('frmMain')
     const fieldLabel = [...(form?.querySelectorAll('label') ?? [])]
       .find((node) => normalizedLabel(node.textContent) === normalizedLabel(label))
     const field = fieldLabel?.closest('.ui-g-12, [class*="p-col"]') ?? fieldLabel?.parentElement
-    if (!field) return null
-    const select = field.querySelector<HTMLSelectElement>('select:not([disabled])')
-    const selected = select?.selectedOptions[0]
-    const display = field.querySelector<HTMLElement>(
+    const select = field?.querySelector<HTMLSelectElement>('select:not([disabled])')
+    return field && select ? { field, select } : null
+  }
+  function currentChoice(label: string): { name: string; id: string } | null {
+    const found = choiceField(label)
+    if (!found) return null
+    const selected = found.select.selectedOptions[0]
+    const display = found.field.querySelector<HTMLElement>(
       '.ui-selectonemenu-label, .p-dropdown-label, [role="combobox"] input, input:not([type="hidden"])',
     )
     const name = (selected?.textContent || ('value' in (display ?? {}) ? (display as HTMLInputElement).value : display?.textContent) || '')
       .replace(/\s+/g, ' ').trim().slice(0, 300)
-    const id = (selected?.value || select?.value || '').trim().slice(0, 300)
+    const id = (selected?.value || found.select.value || '').trim().slice(0, 300)
     return name ? { name, id } : null
   }
   function normalizedChoice(value: string): string {
     return value.normalize('NFKC').replace(/[‐‑–—]/g, '-').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN')
   }
-  function compareChoice(label: string, expectedName: string, expectedId: string): void {
+  function normalizedOsName(value: string): string {
+    // The Portal and service page may spell the same architecture as 64bit, 64-bit or 64 bit.
+    return normalizedChoice(value).replace(/(\d+)\s*-?\s*bits?\b/g, '$1bit')
+  }
+  function osMatchesCurrent(): boolean {
+    const current = currentChoice('Template')
+    if (!current) return false
+    return (!!config.os && normalizedOsName(current.name) === normalizedOsName(config.os)) ||
+      (!config.os && !!config.osId && !!current.id && current.id === config.osId)
+  }
+  function osOption(select: HTMLSelectElement): HTMLOptionElement | null {
+    if (config.os) {
+      const expected = normalizedOsName(config.os)
+      return [...select.options].find((option) =>
+        normalizedOsName(option.textContent ?? '') === expected) ?? null
+    }
+    if (config.osId) return [...select.options].find((option) => option.value === config.osId) ?? null
+    return null
+  }
+  function compareChoice(
+    label: string, expectedName: string, expectedId: string,
+    normalizeName: (value: string) => string = normalizedChoice,
+  ): void {
+    // A service page without this attribute has nothing to compare; do not flag the form.
+    if (!expectedName && !expectedId) return
     const current = currentChoice(label)
     if (!current) {
       mismatches.push(`Không xác định được ${label} hiện tại để đối chiếu.`)
       return
     }
-    const namesMatch = !!expectedName && normalizedChoice(current.name) === normalizedChoice(expectedName)
+    const namesMatch = !!expectedName && normalizeName(current.name) === normalizeName(expectedName)
     const idsMatch = !expectedName && !!expectedId && !!current.id && current.id === expectedId
     if (!namesMatch && !idsMatch) {
       const expected = expectedName || expectedId || 'Không có'
@@ -189,7 +263,6 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
       mismatches.push(`${label} không khớp: cần "${expected}", hiện tại "${actual}".`)
     }
   }
-  compareChoice('Template', config.os, config.osId)
   compareChoice('Khu vực', config.siteProvider, config.siteProviderId)
   function container(label: string): Element | null {
     const field = [...(resourceSection()?.querySelectorAll('label') ?? [])]
@@ -218,20 +291,6 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
     const compatible = [...select.options].filter((option) => storageSignature(option.value) === signature)
     return compatible.length === 1 ? compatible[0] : null
   }
-  const disk = container('Disk')
-  const missing = ['CPU', 'RAM', 'Internet', 'Disk'].filter((label) => !numberInput(label))
-  if (missing.length) return error(`Không tìm thấy ô ${missing.join(', ')} trong phần Tài nguyên. Chưa thay đổi dữ liệu.`)
-  const initialDiskSelect = diskSelect()
-  if (!disk || !initialDiskSelect) return error('Không tìm thấy ô chọn loại Disk. Chưa thay đổi dữ liệu.')
-  const initialDiskOption = diskOption(initialDiskSelect)
-  if (!initialDiskOption) {
-    const available = [...initialDiskSelect.options].map((option) => option.textContent?.trim() || option.value).filter(Boolean).join(', ')
-    return error(`Loại Disk ${config.diskType} không tương thích với trang Tạo computing${available ? ` (đang có: ${available})` : ''}. Chưa thay đổi dữ liệu.`)
-  }
-  const diskInputs = [...disk.querySelectorAll<HTMLInputElement>('input:not([type="hidden"])')]
-    .filter((input) => input.id.endsWith('_input') && (input.closest('.ui-inputnumber') || input.inputMode === 'numeric'))
-  if (diskInputs.length !== 1) return error('Không xác định duy nhất ô dung lượng Disk. Chưa thay đổi dữ liệu.')
-
   function waitForUpdate(source: string, change: () => void): Promise<void> {
     return new Promise((resolve, reject) => {
       const events = jq!(document)
@@ -268,29 +327,83 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
   }
 
   async function setNumber(label: string, value: number): Promise<void> {
-    const input = numberInput(label)
-    if (!input) throw new Error(`Không tìm thấy ô ${label} sau khi Portal cập nhật.`)
-    const widget = widgetFor(input)
-    if (!widget?.autonumeric?.set || !widget.copyValueToHiddenInput || !widget.getValue) {
-      throw new Error(`Ô ${label} chưa sẵn sàng.`)
-    }
-    if (Number(widget.getValue()) !== value) {
+    // PrimeFaces may replace the InputNumber once more immediately after a Template update,
+    // or return the old server value on the first resource AJAX request. Always reacquire the
+    // current control and retry once instead of continuing with a detached widget.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const input = numberInput(label)
+      if (!input) throw new Error(`Không tìm thấy ô ${label} sau khi Portal cập nhật.`)
+      const widget = widgetFor(input)
+      if ((!widget?.setValue && !widget?.autonumeric?.set) || !widget?.copyValueToHiddenInput || !widget?.getValue) {
+        throw new Error(`Ô ${label} chưa sẵn sàng.`)
+      }
+      if (Number(widget.getValue()) === value) return
       await waitForUpdate(input.id.slice(0, -'_input'.length), () => {
-        widget.autonumeric!.set(String(value))
-        // PrimeFaces InputNumber compares its prior hidden value on change.
-        // A normal keyup updates that hidden value first; programmatic edits must do the same.
+        if (widget.setValue) widget.setValue(value)
+        else widget.autonumeric!.set(String(value))
+        // InputNumber keeps a formatted visible input and a submitted hidden input. Trigger its
+        // normal typing hooks, then explicitly synchronize the hidden value before p:ajax change.
+        jq!(input).trigger('input')
+        jq!(input).trigger('keyup')
         widget.copyValueToHiddenInput!()
+        const hidden = document.getElementById(input.id.replace(/_input$/, '_hinput')) as HTMLInputElement | null
+        if (hidden && Number(hidden.value) !== value) hidden.value = String(value)
+        if (Number(widget.getValue!()) !== value) {
+          throw new Error(`Ô ${label} không nhận giá trị ${value}.`)
+        }
         jq!(input).trigger('change')
       })
+      await Promise.resolve()
+      const current = numberInput(label)
+      const currentWidget = current && widgetFor(current)
+      if (currentWidget?.getValue && Number(currentWidget.getValue()) === value) return
     }
-    const current = numberInput(label)
-    const currentWidget = current && widgetFor(current)
-    if (!currentWidget?.getValue || Number(currentWidget.getValue()) !== value) {
-      throw new Error(`Portal chưa giữ giá trị ${label} vừa nhập.`)
-    }
+    throw new Error(`Portal chưa giữ giá trị ${label} vừa nhập sau 2 lần thử.`)
   }
 
   try {
+    // Apply Template first: changing OS rerenders the form, so resources must be filled afterwards.
+    if (config.os || config.osId) {
+      const template = choiceField('Template')
+      if (!template) {
+        mismatches.push('Không xác định được Template hiện tại để đối chiếu.')
+      } else if (!osMatchesCurrent()) {
+        const desired = osOption(template.select)
+        if (!desired) {
+          const current = currentChoice('Template')
+          const actual = current?.name || current?.id || 'Không có'
+          mismatches.push(`Template không khớp: cần "${config.os || config.osId}", hiện tại "${actual}".`)
+        } else {
+          const widget = widgetFor(template.select)
+          if (!widget?.selectValue || !widget.triggerChange) throw new Error('Ô chọn Template chưa sẵn sàng.')
+          const source = template.select.id.endsWith('_input')
+            ? template.select.id.slice(0, -'_input'.length) : template.select.id
+          await waitForUpdate(source, () => {
+            widget.selectValue!(desired.value)
+            widget.triggerChange!()
+          })
+          if (!osMatchesCurrent()) throw new Error('Portal chưa giữ Template vừa chọn.')
+          applied.push('Template')
+        }
+      }
+    }
+    // Template changes can replace the entire resource form and its available disk types.
+    // Validate only after Portal has finished applying the desired OS.
+    const missing = ['CPU', 'RAM', 'Internet', 'Disk'].filter((label) => !numberInput(label))
+    if (missing.length) throw new Error(`Không tìm thấy ô ${missing.join(', ')} trong phần Tài nguyên.`)
+    const disk = container('Disk')
+    const initialDiskSelect = diskSelect()
+    if (!disk || !initialDiskSelect) throw new Error('Không tìm thấy ô chọn loại Disk.')
+    const initialDiskOption = diskOption(initialDiskSelect)
+    if (!initialDiskOption) {
+      const available = [...initialDiskSelect.options]
+        .map((option) => option.textContent?.trim() || option.value).filter(Boolean).join(', ')
+      throw new Error(`Loại Disk ${config.diskType} không tương thích với trang Tạo computing${available ? ` (đang có: ${available})` : ''}.`)
+    }
+    const diskInputs = [...disk.querySelectorAll<HTMLInputElement>('input:not([type="hidden"])')]
+      .filter((input) => input.id.endsWith('_input') && (input.closest('.ui-inputnumber') || input.inputMode === 'numeric'))
+    if (diskInputs.length !== 1) throw new Error('Không xác định duy nhất ô dung lượng Disk.')
+
     await setNumber('CPU', config.cpu)
     applied.push('CPU')
     await setNumber('RAM', config.ramGB)

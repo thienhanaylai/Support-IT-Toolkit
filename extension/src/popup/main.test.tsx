@@ -5,9 +5,19 @@ import { portalVmConfigKey } from '../services/portalVmConfig'
 
 afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); document.body.innerHTML = '' })
 
+async function showTools() {
+  await vi.waitFor(() => expect([...document.querySelectorAll<HTMLButtonElement>('.popup-tabs button')]
+    .find((button) => button.textContent?.includes('Công cụ'))).toBeDefined())
+  const toolsTab = [...document.querySelectorAll<HTMLButtonElement>('.popup-tabs button')]
+    .find((button) => button.textContent?.includes('Công cụ'))!
+  toolsTab.click()
+  await vi.waitFor(() => expect(document.querySelector('.main-content')).not.toBeNull())
+}
+
 it('restores the form and live progress after the popup is reopened, then shows the completed result', async () => {
   document.body.innerHTML = '<div id="root"></div>'
-  Element.prototype.scrollIntoView = vi.fn()
+  const scrollIntoView = vi.fn()
+  Element.prototype.scrollIntoView = scrollIntoView
   Element.prototype.scrollTo = vi.fn()
   const running = { id: 'job-1', tool: 'ping', status: 'running', progress: [{ text: 'Reply 1/4' }] }
   const draft = {
@@ -32,8 +42,8 @@ it('restores the form and live progress after the popup is reopened, then shows 
     },
   })
   await import('./main')
+  await showTools()
   await vi.waitFor(() => expect((document.querySelector('#target') as HTMLInputElement)?.value).toBe('example.com'))
-  const password = document.querySelector('.password-generator')!
   const domainTools = document.querySelector('.domain-tool-section')!
   const vmTools = document.querySelector('.vm-tool-section')!
   const networkTools = document.querySelector('.network-info-section')!
@@ -48,7 +58,6 @@ it('restores the form and live progress after the popup is reopened, then shows 
   expect(networkTools.textContent).toContain('Mạng LAN')
   expect(networkTools.textContent).toContain('IP Public')
   expect(networkTools.textContent).not.toContain('Thông tin VM')
-  expect(password.compareDocumentPosition(domainTools) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(domainTools.compareDocumentPosition(vmTools) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(vmTools.compareDocumentPosition(networkTools) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(document.body.textContent).toContain('Reply 1/4')
@@ -56,6 +65,7 @@ it('restores the form and live progress after the popup is reopened, then shows 
   expect(domainTools.querySelector('.checking')?.textContent).toContain('Đang kiểm tra Ping')
   expect(vmTools.querySelector('.checking')).toBeNull()
   expect(networkTools.querySelector('.checking')).toBeNull()
+  expect(scrollIntoView).not.toHaveBeenCalled()
 
   const record = {
     id: 'record-1', at: new Date().toISOString(), tool: 'Ping', target: 'example.com',
@@ -64,6 +74,47 @@ it('restores the form and live progress after the popup is reopened, then shows 
   onChanged?.({ [jobKey]: { newValue: { ...running, status: 'done', record } } }, 'session')
   await vi.waitFor(() => expect(document.body.textContent).toContain('Reply from example.com'))
   expect(domainTools.querySelector('.result')?.textContent).toContain('Reply from example.com')
+  expect(scrollIntoView).not.toHaveBeenCalled()
+})
+
+it('scrolls to the result when the user starts a check, not when the popup reopens', async () => {
+  document.body.innerHTML = '<div id="root"></div>'
+  const scrollIntoView = vi.fn()
+  Element.prototype.scrollIntoView = scrollIntoView
+  const draft = {
+    input: 'example.com', port: 443, pingCount: 4, maxHops: 20,
+    scanMode: 'common', customPorts: '22,80,443', mxCommand: 'dns', tool: 'ping',
+  }
+  const sendMessage = vi.fn(async (message: { type: string }) =>
+    message.type === 'toolkit:get-job'
+      ? {}
+      : { job: { id: 'new', tool: 'ping', status: 'running', progress: [] } })
+  vi.stubGlobal('chrome', {
+    runtime: { sendMessage },
+    tabs: { query: vi.fn(async () => []) },
+    storage: {
+      session: {
+        get: vi.fn(async () => ({ [draftKey]: draft })),
+        set: vi.fn(async () => {}),
+        remove: vi.fn(async () => {}),
+      },
+      local: { get: vi.fn(async () => ({ history: [] })) },
+      onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
+    },
+  })
+  await import('./main')
+  await showTools()
+  const check = await vi.waitFor(() => {
+    const button = document.querySelector<HTMLButtonElement>('.inline-check')
+    expect(button).not.toBeNull()
+    return button!
+  })
+  expect(scrollIntoView).not.toHaveBeenCalled()
+
+  check.click()
+
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ type: 'toolkit:start-job' })))
+  await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1))
 })
 
 it('offers copy only on the Service tab and includes OS and Site Provider for review', async () => {
@@ -72,6 +123,7 @@ it('offers copy only on the Service tab and includes OS and Site Provider for re
     cpu: 2, ramGB: 4, internetMbps: 200, diskGB: 50, diskType: 'NVME_STORAGE',
     os: 'Windows Server 2022 Standard (64-bit)', osId: '118498',
     siteProvider: 'HCM', siteProviderId: '106066',
+    ownerName: 'Chu Xuân Hà', serviceCode: '20.2985.9322',
   }
   const set = vi.fn(async () => {})
   const executeScript = vi.fn(async () => [{ result: config }])
@@ -86,12 +138,14 @@ it('offers copy only on the Service tab and includes OS and Site Provider for re
     },
   })
   await import('./main')
+  await showTools()
   await vi.waitFor(() => expect(document.querySelector('.vm-transfer button')).not.toBeNull())
   document.querySelector<HTMLButtonElement>('.vm-transfer button')!.click()
   await vi.waitFor(() => expect(set).toHaveBeenCalledWith({ [portalVmConfigKey]: config }))
   expect(document.querySelector('.vm-transfer')?.textContent).toContain('Đã sao chép cấu hình')
   expect(document.querySelector('.vm-transfer')?.textContent).toContain('Windows Server 2022 Standard')
   expect(document.querySelector('.vm-transfer')?.textContent).toContain('HCM')
+  expect(document.querySelector('.vm-transfer')?.textContent).toContain('chuxuanha-20.2985.9322')
   expect(executeScript).toHaveBeenCalledWith(expect.objectContaining({ target: { tabId: 4 } }))
 })
 
@@ -101,6 +155,7 @@ it('does not show the popup transfer section on the Create computing tab', async
     cpu: 2, ramGB: 4, internetMbps: 200, diskGB: 50, diskType: 'NVME_STORAGE',
     os: 'Windows Server 2022 Standard (64-bit)', osId: '118498',
     siteProvider: 'HCM', siteProviderId: '106066',
+    ownerName: 'Chu Xuân Hà', serviceCode: '20.2985.9322',
   }
   const executeScript = vi.fn(async () => [{ result: { applied: ['CPU', 'RAM', 'Internet', 'Disk'] } }])
   vi.stubGlobal('chrome', {
@@ -114,6 +169,7 @@ it('does not show the popup transfer section on the Create computing tab', async
     },
   })
   await import('./main')
+  await showTools()
   await vi.waitFor(() => expect(document.querySelector('.popup-header')).not.toBeNull())
   expect(document.querySelector('.vm-transfer')).toBeNull()
   expect(executeScript).not.toHaveBeenCalled()
@@ -147,6 +203,7 @@ it('retries a failed VM lookup using the currently active Portal tab', async () 
     },
   })
   await import('./main')
+  await showTools()
   const retry = await vi.waitFor(() => {
     const button = document.querySelector<HTMLButtonElement>('.retry-vm')
     expect(button).not.toBeNull()
@@ -177,6 +234,7 @@ it('does not show VM retry for an unrelated failed check', async () => {
     },
   })
   await import('./main')
+  await showTools()
   await vi.waitFor(() => expect(document.querySelector('.error')?.textContent).toContain('Ping thất bại'))
   expect(document.querySelector('.retry-vm')).toBeNull()
 })
@@ -198,6 +256,7 @@ it('opens a recent result inside the matching tool group', async () => {
     },
   })
   await import('./main')
+  await showTools()
   const recent = await vi.waitFor(() => {
     const button = document.querySelector<HTMLButtonElement>('.recent')
     expect(button).not.toBeNull()
@@ -207,6 +266,42 @@ it('opens a recent result inside the matching tool group', async () => {
   await vi.waitFor(() => expect(document.querySelector('.network-info-section .result')?.textContent).toContain('Ethernet 192.168.1.2'))
   expect(document.querySelector('.domain-tool-section .result')).toBeNull()
   expect(document.querySelector('.vm-tool-section .result')).toBeNull()
+})
+
+it('switches between the Tools and Authenticator feature tabs', async () => {
+  document.body.innerHTML = '<div id="root"></div>'
+  vi.stubGlobal('chrome', {
+    runtime: { sendMessage: vi.fn(async () => ({})) },
+    tabs: { query: vi.fn(async () => []) },
+    storage: {
+      session: { get: vi.fn(async () => ({})), set: vi.fn(async () => {}), remove: vi.fn(async () => {}) },
+      local: { get: vi.fn(async (key: string) => key === 'history' ? { history: [] } : {}) },
+      onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
+    },
+  })
+  await import('./main')
+  await vi.waitFor(() => expect([...document.querySelectorAll<HTMLButtonElement>('.popup-tabs button')]
+    .find((button) => button.textContent?.includes('Auth'))).toBeDefined())
+  const authTab = [...document.querySelectorAll<HTMLButtonElement>('.popup-tabs button')]
+    .find((button) => button.textContent?.includes('Auth'))!
+  expect(document.querySelector<HTMLButtonElement>('.popup-tabs button')?.textContent).toContain('Auth')
+  await vi.waitFor(() => expect(document.querySelector('.auth-content')).not.toBeNull())
+  expect(authTab.getAttribute('aria-selected')).toBe('true')
+  expect(document.querySelector('.main-content')).toBeNull()
+
+  const toolsTab = [...document.querySelectorAll<HTMLButtonElement>('.popup-tabs button')]
+    .find((button) => button.textContent?.includes('Công cụ'))!
+  toolsTab.click()
+  await vi.waitFor(() => expect(document.querySelector('.main-content')).not.toBeNull())
+  expect(document.querySelector('.auth-content')).toBeNull()
+
+  const passwordTab = [...document.querySelectorAll<HTMLButtonElement>('.popup-tabs button')]
+    .find((button) => button.textContent?.includes('Mật khẩu'))!
+  passwordTab.click()
+  await vi.waitFor(() => expect(document.querySelector('.password-tab-content .password-generator')).not.toBeNull())
+  expect(document.querySelector('.main-content')).toBeNull()
+  expect(document.querySelector('.auth-content')).toBeNull()
+  expect(document.querySelectorAll('.popup-tabs button')[1]?.textContent).toContain('Mật khẩu')
 })
 
 async function openMXPopup(domain: string, failed = false) {
@@ -236,6 +331,7 @@ async function openMXPopup(domain: string, failed = false) {
     },
   })
   await import('./main')
+  await showTools()
   await vi.waitFor(() => expect(document.querySelector('.mx-key-prompt')).not.toBeNull())
   return { set, sendMessage, settings }
 }

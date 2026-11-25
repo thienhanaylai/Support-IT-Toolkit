@@ -15,6 +15,61 @@ $installedExtension = Join-Path $installRoot 'extension'
 $marker = Join-Path $installedExtension '.it-support-toolkit-installed'
 $hostManifest = Join-Path $installRoot 'com.itsupport.toolkit.json'
 
+function Open-ExtensionManagementPage {
+  param(
+    [Parameter(Mandatory = $true)][string]$Executable,
+    [Parameter(Mandatory = $true)][string]$Page,
+    [Parameter(Mandatory = $true)][string]$DisplayName
+  )
+
+  # Chromium browsers turn internal URLs passed on the command line into a New Tab page.
+  # Open a normal window, focus the omnibox and navigate with UI Automation instead.
+  $navigationScript = @'
+Start-Process '__EXECUTABLE__' -ArgumentList '--new-window','about:blank'
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName UIAutomationClient
+Add-Type -AssemblyName UIAutomationTypes
+Start-Sleep -Milliseconds 300
+[System.Windows.Forms.SendKeys]::SendWait('{F4}')
+$a = $null
+for ($i = 0; $i -lt 30; $i++) {
+  $a = [System.Windows.Automation.AutomationElement]::FocusedElement
+  if ($a.Current.ClassName -eq 'OmniboxViewViews' -or $a.Current.AutomationId -eq 'addressEditBox') { break }
+  Start-Sleep -Milliseconds 50
+}
+if (!$a -or ($a.Current.ClassName -ne 'OmniboxViewViews' -and $a.Current.AutomationId -ne 'addressEditBox')) {
+  throw 'Address bar not focused'
+}
+Set-Clipboard '__PAGE__'
+[System.Windows.Forms.SendKeys]::SendWait('^a')
+[System.Windows.Forms.SendKeys]::SendWait('^v')
+$v = $a.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+for ($i = 0; $i -lt 20; $i++) {
+  if ($a.Current.HasKeyboardFocus -and $v.Current.Value -eq '__PAGE__') {
+    [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
+    exit 0
+  }
+  Start-Sleep -Milliseconds 50
+}
+throw 'Navigation cancelled'
+'@
+  $navigationScript = $navigationScript.Replace('__EXECUTABLE__', $Executable).Replace('__PAGE__', $Page)
+  $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($navigationScript))
+  try {
+    $process = Start-Process -FilePath 'powershell.exe' `
+      -ArgumentList @('-NoProfile', '-STA', '-EncodedCommand', $encoded) `
+      -Wait -PassThru -ErrorAction Stop
+    if ($process -and $process.ExitCode -ne 0) {
+      throw "$DisplayName navigation exited with code $($process.ExitCode)."
+    }
+    Write-Host "Đã tự động mở $Page trên $DisplayName."
+    return $true
+  } catch {
+    Write-Host "Không thể tự động mở $Page trên $DisplayName; hãy mở thủ công."
+    return $false
+  }
+}
+
 foreach ($file in @((Join-Path $sourceExtension 'manifest.json'), $agentBinary, $agentInstaller)) {
   if (!(Test-Path -LiteralPath $file -PathType Leaf)) {
     throw "Gói cài thiếu file: $file"
@@ -50,7 +105,7 @@ if (!$ExtensionIds -or $ExtensionIds.Count -eq 0) {
       Write-Host 'Chọn trình duyệt cần cài extension:'
       Write-Host '  1. Google Chrome'
       Write-Host '  2. Microsoft Edge'
-      Write-Host '  3. Xem hướng dẫn cho cả hai trình duyệt'
+      Write-Host '  3. Cả Google Chrome và Microsoft Edge'
       do {
         $selection = (Read-Host 'Nhập 1, 2 hoặc 3').Trim()
         if ($selection -notin @('1', '2', '3')) {
@@ -61,28 +116,45 @@ if (!$ExtensionIds -or $ExtensionIds.Count -eq 0) {
     }
     if (!$SkipOpenExtensionFolder) {
       try {
-        Set-Clipboard -Value $installedExtension -ErrorAction Stop
-        Write-Host 'Đã sao chép đường dẫn thư mục extension vào clipboard.'
-      } catch {
-        Write-Host 'Không thể tự sao chép đường dẫn; hãy sao chép thủ công đường dẫn hiển thị ở trên.'
-      }
-      try {
         Start-Process -FilePath 'explorer.exe' -ArgumentList "`"$installedExtension`"" -ErrorAction Stop | Out-Null
         Write-Host 'Đã mở sẵn thư mục extension trong File Explorer.'
       } catch {
         Write-Host 'Không thể tự mở File Explorer; hãy mở thủ công thư mục hiển thị ở trên.'
       }
     }
+    $browserTargets = if ($Browser -eq 'Chrome') {
+      @(@{ Executable = 'chrome.exe'; Page = 'chrome://extensions/'; DisplayName = 'Google Chrome' })
+    } elseif ($Browser -eq 'Edge') {
+      @(@{ Executable = 'msedge.exe'; Page = 'edge://extensions/'; DisplayName = 'Microsoft Edge' })
+    } else {
+      @(
+        @{ Executable = 'chrome.exe'; Page = 'chrome://extensions/'; DisplayName = 'Google Chrome' },
+        @{ Executable = 'msedge.exe'; Page = 'edge://extensions/'; DisplayName = 'Microsoft Edge' }
+      )
+    }
+    foreach ($target in $browserTargets) {
+      Open-ExtensionManagementPage @target | Out-Null
+    }
+    if (!$SkipOpenExtensionFolder) {
+      try {
+        # The navigation helper temporarily puts the internal URL on the clipboard.
+        # Restore the extension folder so Ctrl+V works in the Load unpacked dialog.
+        Set-Clipboard -Value $installedExtension -ErrorAction Stop
+        Write-Host 'Đã sao chép đường dẫn thư mục extension vào clipboard.'
+      } catch {
+        Write-Host 'Không thể tự sao chép đường dẫn; hãy sao chép thủ công đường dẫn hiển thị ở trên.'
+      }
+    }
     if ($Browser -ne 'None') {
       $page = if ($Browser -eq 'Chrome') { 'chrome://extensions/' } else { 'edge://extensions/' }
       if ($Browser -eq 'Chrome') {
         Write-Host 'HƯỚNG DẪN GOOGLE CHROME:'
-        Write-Host "  1. Mở Chrome, nhập $page vào thanh địa chỉ rồi nhấn Enter."
+        Write-Host "  1. Trang $page đã được tự động mở trên Chrome."
         Write-Host '  2. Bật Chế độ dành cho nhà phát triển (Developer mode) ở góc trên bên phải.'
         Write-Host '  3. Nhấn Tải tiện ích đã giải nén (Load unpacked) ở góc trên bên trái.'
       } else {
         Write-Host 'HƯỚNG DẪN MICROSOFT EDGE:'
-        Write-Host "  1. Mở Edge, nhập $page vào thanh địa chỉ rồi nhấn Enter."
+        Write-Host "  1. Trang $page đã được tự động mở trên Edge."
         Write-Host '  2. Bật Chế độ nhà phát triển (Developer mode) ở thanh bên trái.'
         Write-Host '  3. Nhấn Tải tiện ích đã giải nén (Load unpacked).'
       }
@@ -93,8 +165,9 @@ if (!$ExtensionIds -or $ExtensionIds.Count -eq 0) {
       Write-Host '  6. Sao chép ID của extension trên trang quản lý, quay lại cửa sổ cài để nhập.'
     } else {
       Write-Host 'HƯỚNG DẪN CHO CẢ HAI TRÌNH DUYỆT:'
-      Write-Host '  Chrome: nhập chrome://extensions/ vào thanh địa chỉ; bật Developer mode ở góc trên bên phải.'
-      Write-Host '  Edge: nhập edge://extensions/ vào thanh địa chỉ; bật Developer mode ở thanh bên trái.'
+      Write-Host '  Đã thử tự động mở chrome://extensions/ và edge://extensions/.'
+      Write-Host '  Chrome: bật Developer mode ở góc trên bên phải.'
+      Write-Host '  Edge: bật Developer mode ở thanh bên trái.'
       Write-Host '  Nhấn Load unpacked; trong cửa sổ chọn thư mục, nhấn Ctrl+L, Ctrl+V rồi Enter.'
       Write-Host "  Đường dẫn đã sao chép: $installedExtension"
       Write-Host '  Sao chép Extension ID và quay lại cửa sổ cài để nhập.'
