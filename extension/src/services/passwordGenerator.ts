@@ -9,6 +9,32 @@ export type PasswordOptions = {
 }
 
 export const passwordRecentKey = 'passwordGeneratorRecent'
+export const passwordOptionsKey = 'passwordGeneratorOptions'
+
+export const defaultPasswordOptions: PasswordOptions = {
+  length: 16,
+  numbers: true,
+  lowercase: true,
+  uppercase: true,
+  special: true,
+  excludeEnabled: false,
+  excludeChars: '',
+}
+
+export function normalizePasswordOptions(value: unknown): PasswordOptions {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ...defaultPasswordOptions }
+  const item = value as Partial<PasswordOptions>
+  return {
+    length: Number.isSafeInteger(item.length) && item.length! >= 4 && item.length! <= 128
+      ? item.length! : defaultPasswordOptions.length,
+    numbers: typeof item.numbers === 'boolean' ? item.numbers : defaultPasswordOptions.numbers,
+    lowercase: typeof item.lowercase === 'boolean' ? item.lowercase : defaultPasswordOptions.lowercase,
+    uppercase: typeof item.uppercase === 'boolean' ? item.uppercase : defaultPasswordOptions.uppercase,
+    special: typeof item.special === 'boolean' ? item.special : defaultPasswordOptions.special,
+    excludeEnabled: typeof item.excludeEnabled === 'boolean' ? item.excludeEnabled : defaultPasswordOptions.excludeEnabled,
+    excludeChars: typeof item.excludeChars === 'string' ? item.excludeChars.slice(0, 256) : '',
+  }
+}
 
 const characterSets = {
   numbers: '0123456789',
@@ -57,12 +83,21 @@ function pools(options: PasswordOptions): { name: string; value: string }[] {
   return selected
 }
 
-export function generatePassword(options: PasswordOptions): string {
+function validatedPools(options: PasswordOptions): { name: string; value: string }[] {
   if (!Number.isSafeInteger(options.length) || options.length < 4 || options.length > 128) {
     throw new Error('Độ dài mật khẩu phải từ 4 đến 128 ký tự.')
   }
   const selected = pools(options)
   if (options.length < selected.length) throw new Error(`Độ dài phải ít nhất ${selected.length} để chứa đủ các nhóm ký tự.`)
+  return selected
+}
+
+export function validatePasswordOptions(options: PasswordOptions): void {
+  void validatedPools(options)
+}
+
+export function generatePassword(options: PasswordOptions): string {
+  const selected = validatedPools(options)
   const result = selected.map((item) => pick(item.value))
   const all = unique(selected.map((item) => item.value).join(''))
   while (result.length < options.length) result.push(pick(all))

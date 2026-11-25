@@ -156,12 +156,16 @@ describe('external domain lookups', () => {
     expect(html).toContain('&lt;script&gt;private&lt;/script&gt;')
   })
   it('does not report success when the public-IP service returns an invalid address', async () => {
+    const messages: Record<string, unknown>[] = []
     vi.stubGlobal('chrome', {
-      permissions: { contains: async () => true },
       storage: { local: { get: async () => ({ settings: { saveHistory: false } }) } },
+      runtime: { sendNativeMessage: async (_host: string, message: Record<string, unknown>) => {
+        messages.push(message)
+        return { success: true, ip: 'not-an-ip' }
+      } },
     })
-    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ ip: 'not-an-ip' }), { status: 200 }))
     await expect(runCheck('public_ip', '', 443)).rejects.toThrow('địa chỉ IP hợp lệ')
+    expect(messages).toMatchObject([{ action: 'public_ip' }])
   })
   it('sends the chosen Ping count and Traceroute hop limit to the Local Agent', async () => {
     const messages: Record<string, unknown>[] = []

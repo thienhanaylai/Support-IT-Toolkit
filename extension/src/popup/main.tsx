@@ -188,7 +188,6 @@ function App() {
         const settings = await getSettings()
         await grantHost(settings.mxtoolboxApiKey.trim() ? 'https://api.mxtoolbox.com/' : 'https://mxtoolbox.com/')
       }
-      if (selectedTool === 'public_ip') await grantHost('https://api.ipify.org/')
       const [tab] = selectedTool === 'vm_info' ?
         await chrome.tabs.query({ active: true, currentWindow: true }) : [undefined]
       const response = await chrome.runtime.sendMessage({

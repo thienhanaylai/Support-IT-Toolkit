@@ -1,6 +1,7 @@
 ﻿param(
   [string[]]$ExtensionIds,
   [switch]$ReuseExistingIds,
+  [switch]$SkipOpenExtensionFolder,
   [ValidateSet('Chrome', 'Edge', 'None')][string]$Browser
 )
 
@@ -58,6 +59,20 @@ if (!$ExtensionIds -or $ExtensionIds.Count -eq 0) {
       } until ($selection -in @('1', '2', '3'))
       $Browser = @{ '1' = 'Chrome'; '2' = 'Edge'; '3' = 'None' }[$selection]
     }
+    if (!$SkipOpenExtensionFolder) {
+      try {
+        Set-Clipboard -Value $installedExtension -ErrorAction Stop
+        Write-Host 'Đã sao chép đường dẫn thư mục extension vào clipboard.'
+      } catch {
+        Write-Host 'Không thể tự sao chép đường dẫn; hãy sao chép thủ công đường dẫn hiển thị ở trên.'
+      }
+      try {
+        Start-Process -FilePath 'explorer.exe' -ArgumentList "`"$installedExtension`"" -ErrorAction Stop | Out-Null
+        Write-Host 'Đã mở sẵn thư mục extension trong File Explorer.'
+      } catch {
+        Write-Host 'Không thể tự mở File Explorer; hãy mở thủ công thư mục hiển thị ở trên.'
+      }
+    }
     if ($Browser -ne 'None') {
       $page = if ($Browser -eq 'Chrome') { 'chrome://extensions/' } else { 'edge://extensions/' }
       if ($Browser -eq 'Chrome') {
@@ -71,13 +86,17 @@ if (!$ExtensionIds -or $ExtensionIds.Count -eq 0) {
         Write-Host '  2. Bật Chế độ nhà phát triển (Developer mode) ở thanh bên trái.'
         Write-Host '  3. Nhấn Tải tiện ích đã giải nén (Load unpacked).'
       }
-      Write-Host "  4. Chọn thư mục: $installedExtension"
-      Write-Host '  5. Sao chép ID của extension trên trang quản lý, quay lại cửa sổ cài để nhập.'
+      Write-Host '  4. Trong cửa sổ chọn thư mục, nhấn Ctrl+L, Ctrl+V rồi Enter.'
+      Write-Host '     Đường dẫn đã được sao chép và thư mục cũng đã mở sẵn trong File Explorer.'
+      Write-Host "     Nếu cần, chọn thủ công: $installedExtension"
+      Write-Host '  5. Nhấn Chọn thư mục (Select Folder).'
+      Write-Host '  6. Sao chép ID của extension trên trang quản lý, quay lại cửa sổ cài để nhập.'
     } else {
       Write-Host 'HƯỚNG DẪN CHO CẢ HAI TRÌNH DUYỆT:'
       Write-Host '  Chrome: nhập chrome://extensions/ vào thanh địa chỉ; bật Developer mode ở góc trên bên phải.'
       Write-Host '  Edge: nhập edge://extensions/ vào thanh địa chỉ; bật Developer mode ở thanh bên trái.'
-      Write-Host "  Nhấn Load unpacked, chọn: $installedExtension"
+      Write-Host '  Nhấn Load unpacked; trong cửa sổ chọn thư mục, nhấn Ctrl+L, Ctrl+V rồi Enter.'
+      Write-Host "  Đường dẫn đã sao chép: $installedExtension"
       Write-Host '  Sao chép Extension ID và quay lại cửa sổ cài để nhập.'
     }
     $default = $existingIds -join ','

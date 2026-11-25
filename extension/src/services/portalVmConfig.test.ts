@@ -29,7 +29,10 @@ function serviceTable() {
 }
 
 function createForm() {
-  document.body.innerHTML = `<form id="frmMain"><fieldset><legend>Tài nguyên</legend>
+  document.body.innerHTML = `<form id="frmMain">
+    <div class="ui-g-12 ui-md-4"><label>Template *</label><select id="template-select"><option value="118498" selected>Windows Server 2022 Standard (64-bit)</option></select></div>
+    <div class="ui-g-12 ui-md-4"><label>Khu vực *</label><select id="site-select"><option value="106066" selected>HCM</option></select></div>
+    <fieldset><legend>Tài nguyên</legend>
     ${[['CPU', 'cpu', '1'], ['RAM', 'ram', '2'], ['Internet', 'internet', '100']].map(([label, id, value]) =>
       `<div class="ui-g-12 ui-md-4"><label>${label}</label><span class="ui-inputnumber"><input id="${id}_input" value="${value}"><input id="${id}_hinput" type="hidden" value="${value}"></span></div>`).join('')}
     <div class="ui-g-12 p-0"><label>Disk</label><select id="disk_type_input"><option value="SSD_STORAGE" selected>SSD</option><option value="NVME_STORAGE">NVMe</option></select>
@@ -203,6 +206,26 @@ describe('Create computing form', () => {
     expect((document.getElementById('disk_type_input') as HTMLSelectElement).value).toBe('NVME_STORAGE')
     expect(['cpu', 'ram', 'internet', 'disk'].map((id) => (document.getElementById(`${id}_input`) as HTMLInputElement).value))
       .toEqual(['8', '8', '700', '300'])
+  })
+
+  it('reports OS and Site mismatches in red-result data without changing either field', async () => {
+    createForm()
+    const template = document.getElementById('template-select') as HTMLSelectElement
+    const site = document.getElementById('site-select') as HTMLSelectElement
+    template.innerHTML = '<option value="other-os" selected>Ubuntu 22.04 (64-bit)</option>'
+    site.innerHTML = '<option value="other-site" selected>HN</option>'
+    const order = mockPrimeFaces()
+
+    const result = await pasteServiceConfigIntoDOM(config)
+
+    expect(result.applied).toEqual(['CPU', 'RAM', 'Internet', 'Disk'])
+    expect(result.mismatches).toEqual([
+      'Template không khớp: cần "Windows Server 2022 Standard (64-bit)", hiện tại "Ubuntu 22.04 (64-bit)".',
+      'Khu vực không khớp: cần "HCM", hiện tại "HN".',
+    ])
+    expect(order).toEqual(['cpu', 'ram', 'internet', 'disk_type', 'disk'])
+    expect((document.getElementById('template-select') as HTMLSelectElement).value).toBe('other-os')
+    expect((document.getElementById('site-select') as HTMLSelectElement).value).toBe('other-site')
   })
 
   it('reports an unsupported disk type before changing any resource value', async () => {

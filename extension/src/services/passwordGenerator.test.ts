@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { generatePassword, type PasswordOptions } from './passwordGenerator'
+import {
+  defaultPasswordOptions, generatePassword, normalizePasswordOptions, type PasswordOptions,
+} from './passwordGenerator'
 
 const defaults: PasswordOptions = {
   length: 16, numbers: true, lowercase: true, uppercase: true, special: true,
@@ -35,5 +37,17 @@ describe('password generator', () => {
   it('validates length and requires at least one character class', () => {
     expect(() => generatePassword({ ...defaults, length: 3 })).toThrow('4 đến 128')
     expect(() => generatePassword({ ...defaults, numbers: false, lowercase: false, uppercase: false, special: false })).toThrow('ít nhất một')
+  })
+
+  it('normalizes persisted options without trusting malformed storage values', () => {
+    expect(normalizePasswordOptions({
+      length: 24, numbers: false, lowercase: true, uppercase: false, special: true,
+      excludeEnabled: true, excludeChars: '0O',
+    })).toEqual({
+      length: 24, numbers: false, lowercase: true, uppercase: false, special: true,
+      excludeEnabled: true, excludeChars: '0O',
+    })
+    expect(normalizePasswordOptions({ length: 999, numbers: 'yes', excludeChars: 123 }))
+      .toEqual(defaultPasswordOptions)
   })
 })

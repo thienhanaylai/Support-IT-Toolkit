@@ -1,6 +1,6 @@
 export const HOST_NAME = 'com.itsupport.toolkit'
 
-export type NativeAction = 'ping' | 'traceroute' | 'tcp_check' | 'port_scan' | 'tls_check' | 'local_interfaces'
+export type NativeAction = 'ping' | 'traceroute' | 'tcp_check' | 'port_scan' | 'tls_check' | 'local_interfaces' | 'public_ip'
 export type NativeProgress = { text: string; completed?: number; total?: number }
 
 export async function nativeRequest(action: NativeAction, params: Record<string, unknown> = {}, onProgress?: (event: NativeProgress) => void): Promise<Record<string, unknown>> {
@@ -43,8 +43,9 @@ export async function nativeRequest(action: NativeAction, params: Record<string,
         catch (error) { finish(undefined, error instanceof Error ? error : new Error(String(error))) }
       })
       : await chrome.runtime.sendNativeMessage(HOST_NAME, { action, ...params }) as Record<string, unknown> | undefined
-    if (action === 'port_scan' && result?.success === false && /action không được hỗ trợ/i.test(String(result.error))) {
-      throw new Error('Local Agent đã cũ, chưa hỗ trợ Quét Port. Chạy lại packaging/install.ps1 với Extension ID hiện tại để cập nhật Agent.')
+    if (['port_scan', 'public_ip'].includes(action) && result?.success === false && /action không được hỗ trợ/i.test(String(result.error))) {
+      const feature = action === 'port_scan' ? 'Quét Port' : 'IP Public qua curl ifconfig.me'
+      throw new Error(`Local Agent đã cũ, chưa hỗ trợ ${feature}. Chạy lại bộ cài Agent với Extension ID hiện tại để cập nhật.`)
     }
     if (!result || result.success === false) throw new Error(String(result?.error || 'Agent trả về lỗi'))
     return result

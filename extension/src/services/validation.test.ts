@@ -60,7 +60,7 @@ describe('target validation', () => {
   it('copies only a valid public IP, never the JSON wrapper or extra fields', () => {
     const record = {
       id: 'ip', at: '2026-11-23T00:00:00Z', tool: 'IP Public', target: 'Đường truyền hiện tại',
-      source: 'ipify', status: 'ok' as const,
+      source: 'Máy người dùng · curl ifconfig.me', status: 'ok' as const,
       result: { ip: '118.69.52.166', extra: 'DO-NOT-COPY' },
     }
     expect(getCopyText(record)).toBe('118.69.52.166')

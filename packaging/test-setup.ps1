@@ -8,6 +8,18 @@ $id = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 
 try {
   New-Item -Path $root -ItemType Directory -Force | Out-Null
+  $global:copiedPaths = @()
+  $global:openedPaths = @()
+  function global:Set-Clipboard {
+    [CmdletBinding()]
+    param([string]$Value)
+    $global:copiedPaths += $Value
+  }
+  function global:Start-Process {
+    [CmdletBinding()]
+    param([string]$FilePath, [object[]]$ArgumentList)
+    $global:openedPaths += "$FilePath|$($ArgumentList -join ' ')"
+  }
   function global:Read-Host {
     param([string]$Prompt)
     if (!$global:answers.Count) { throw 'Unexpected installer prompt.' }
@@ -34,6 +46,10 @@ try {
       throw "Wrong Extension ID for $($test.browser)"
     }
     if ($global:answers.Count -ne 0) { throw "Unused prompt answers for $($test.browser)" }
+    $expectedPath = Join-Path $env:LOCALAPPDATA 'ITSupportToolkit\extension'
+    if ($global:copiedPaths[-1] -ne $expectedPath -or $global:openedPaths[-1] -notlike "explorer.exe|*$expectedPath*") {
+      throw "Installer did not copy and open the extension path for $($test.browser)"
+    }
     if ($test.browser -eq 'None') {
       if (!$output.Contains('chrome://extensions/') -or !$output.Contains('edge://extensions/')) {
         throw 'None should show instructions for both browsers.'
@@ -43,6 +59,9 @@ try {
       $otherPage = if ($test.browser -eq 'Chrome') { 'edge://extensions/' } else { 'chrome://extensions/' }
       if (!$output.Contains($heading) -or !$output.Contains($test.page) -or $output.Contains($otherPage)) {
         throw "Missing localized instructions for $($test.browser)"
+      }
+      if (!$output.Contains('Ctrl+L, Ctrl+V') -or !$output.Contains('Chọn thư mục')) {
+        throw "Missing paste-path instructions for $($test.browser)"
       }
     }
     Write-Host "Installer $($test.browser): PASS"
@@ -79,6 +98,10 @@ try {
   $env:ProgramFiles = $savedProgramFiles
   ${env:ProgramFiles(x86)} = $savedProgramFilesX86
   Remove-Item Function:Read-Host -ErrorAction SilentlyContinue
+  Remove-Item Function:Set-Clipboard -ErrorAction SilentlyContinue
+  Remove-Item Function:Start-Process -ErrorAction SilentlyContinue
   Remove-Variable answers -Scope Global -ErrorAction SilentlyContinue
+  Remove-Variable copiedPaths -Scope Global -ErrorAction SilentlyContinue
+  Remove-Variable openedPaths -Scope Global -ErrorAction SilentlyContinue
   if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
 }

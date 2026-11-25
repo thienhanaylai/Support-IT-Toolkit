@@ -14,6 +14,9 @@ Cách cài từ ZIP:
      trái, nhấn Load unpacked.
 4. Chọn thư mục hiện trong cửa sổ cài:
    %LOCALAPPDATA%\ITSupportToolkit\extension
+   Bộ cài tự sao chép đường dẫn này vào clipboard và mở sẵn thư mục.
+   Trong cửa sổ Load unpacked, có thể nhấn Ctrl+L, Ctrl+V, Enter rồi
+   nhấn Chọn thư mục (Select Folder).
 5. Sao chép Extension ID trên trang quản lý, dán vào cửa sổ cài
    rồi nhấn Enter. Nếu cần đăng ký cả hai trình duyệt, nhập
    cả hai ID cách nhau bằng dấu phẩy.

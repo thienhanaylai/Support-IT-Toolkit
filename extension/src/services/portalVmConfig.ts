@@ -113,14 +113,18 @@ export async function copyServiceConfig(tabId: number, url: string): Promise<Por
   return config
 }
 
-export type PasteResult = { applied: string[]; error?: string }
+export type PasteResult = { applied: string[]; error?: string; mismatches?: string[] }
 
 // Runs in the create tab's MAIN world to use the page's PrimeFaces widgets.
 // Wait for each PrimeFaces AJAX update before finding the next field in the rerendered form.
 // Never clicks Save/Create, and stops on the first missing field or failed update.
 export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise<PasteResult> {
   const applied: string[] = []
-  const error = (message: string): PasteResult => ({ applied, error: message })
+  const mismatches: string[] = []
+  const result = (extra: Omit<PasteResult, 'applied' | 'mismatches'> = {}): PasteResult => ({
+    applied, ...(mismatches.length ? { mismatches } : {}), ...extra,
+  })
+  const error = (message: string): PasteResult => result({ error: message })
   const numbers = [config.cpu, config.ramGB, config.internetMbps, config.diskGB]
   if (numbers.some((value) => !Number.isSafeInteger(value) || value <= 0) ||
       !/^(?:[A-Z0-9]+_)*STORAGE$/.test(config.diskType) || config.diskType.length > 80) {
@@ -152,6 +156,41 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
   function normalizedLabel(value: string | null | undefined): string {
     return (value ?? '').replace(/\*/g, '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN')
   }
+  function currentChoice(label: string): { name: string; id: string } | null {
+    const form = document.getElementById('frmMain')
+    const fieldLabel = [...(form?.querySelectorAll('label') ?? [])]
+      .find((node) => normalizedLabel(node.textContent) === normalizedLabel(label))
+    const field = fieldLabel?.closest('.ui-g-12, [class*="p-col"]') ?? fieldLabel?.parentElement
+    if (!field) return null
+    const select = field.querySelector<HTMLSelectElement>('select:not([disabled])')
+    const selected = select?.selectedOptions[0]
+    const display = field.querySelector<HTMLElement>(
+      '.ui-selectonemenu-label, .p-dropdown-label, [role="combobox"] input, input:not([type="hidden"])',
+    )
+    const name = (selected?.textContent || ('value' in (display ?? {}) ? (display as HTMLInputElement).value : display?.textContent) || '')
+      .replace(/\s+/g, ' ').trim().slice(0, 300)
+    const id = (selected?.value || select?.value || '').trim().slice(0, 300)
+    return name ? { name, id } : null
+  }
+  function normalizedChoice(value: string): string {
+    return value.normalize('NFKC').replace(/[‐‑–—]/g, '-').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN')
+  }
+  function compareChoice(label: string, expectedName: string, expectedId: string): void {
+    const current = currentChoice(label)
+    if (!current) {
+      mismatches.push(`Không xác định được ${label} hiện tại để đối chiếu.`)
+      return
+    }
+    const namesMatch = !!expectedName && normalizedChoice(current.name) === normalizedChoice(expectedName)
+    const idsMatch = !expectedName && !!expectedId && !!current.id && current.id === expectedId
+    if (!namesMatch && !idsMatch) {
+      const expected = expectedName || expectedId || 'Không có'
+      const actual = current.name || current.id || 'Không có'
+      mismatches.push(`${label} không khớp: cần "${expected}", hiện tại "${actual}".`)
+    }
+  }
+  compareChoice('Template', config.os, config.osId)
+  compareChoice('Khu vực', config.siteProvider, config.siteProviderId)
   function container(label: string): Element | null {
     const field = [...(resourceSection()?.querySelectorAll('label') ?? [])]
       .find((node) => normalizedLabel(node.textContent) === normalizedLabel(label))
@@ -276,7 +315,7 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
     }
     await setNumber('Disk', config.diskGB)
     applied.push('Disk')
-    return { applied }
+    return result()
   } catch (cause) {
     return error(cause instanceof Error ? cause.message : 'Không thể điền cấu hình vào Portal.')
   }

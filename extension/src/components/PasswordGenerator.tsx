@@ -1,19 +1,13 @@
 import React, { useEffect, useState } from 'react'
 import { Check, Clock3, Copy, KeyRound, RefreshCw } from 'lucide-react'
-import { generatePassword, passwordRecentKey, type PasswordOptions } from '../services/passwordGenerator'
-
-const defaults: PasswordOptions = {
-  length: 16,
-  numbers: true,
-  lowercase: true,
-  uppercase: true,
-  special: true,
-  excludeEnabled: false,
-  excludeChars: '',
-}
+import {
+  defaultPasswordOptions, generatePassword, normalizePasswordOptions,
+  passwordOptionsKey, passwordRecentKey, validatePasswordOptions, type PasswordOptions,
+} from '../services/passwordGenerator'
 
 export function PasswordGenerator() {
-  const [options, setOptions] = useState(defaults)
+  const [options, setOptions] = useState(defaultPasswordOptions)
+  const [lengthText, setLengthText] = useState(String(defaultPasswordOptions.length))
   const [password, setPassword] = useState('')
   const [recent, setRecent] = useState<string[]>([])
   const [expanded, setExpanded] = useState(false)
@@ -23,9 +17,16 @@ export function PasswordGenerator() {
 
   useEffect(() => {
     let mounted = true
-    void chrome.storage.session.get(passwordRecentKey).then((saved) => {
-      const values = saved[passwordRecentKey]
-      if (mounted && Array.isArray(values)) setRecent(values.filter((item): item is string => typeof item === 'string').slice(0, 3))
+    void Promise.all([
+      chrome.storage.session.get(passwordRecentKey),
+      chrome.storage.local.get(passwordOptionsKey),
+    ]).then(([savedRecent, savedOptions]) => {
+      const values = savedRecent[passwordRecentKey]
+      if (!mounted) return
+      if (Array.isArray(values)) setRecent(values.filter((item): item is string => typeof item === 'string').slice(0, 3))
+      const restored = normalizePasswordOptions(savedOptions[passwordOptionsKey])
+      setOptions(restored)
+      setLengthText(String(restored.length))
     }).catch(() => {})
     return () => { mounted = false }
   }, [])
@@ -35,10 +36,29 @@ export function PasswordGenerator() {
     setError('')
   }
 
+  function currentOptions(): PasswordOptions {
+    return { ...options, length: Number(lengthText) }
+  }
+
+  async function saveOptions() {
+    try {
+      const next = currentOptions()
+      validatePasswordOptions(next)
+      await chrome.storage.local.set({ [passwordOptionsKey]: next })
+      setOptions(next)
+      setLengthText(String(next.length))
+      setError('')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Không thể lưu tùy chọn.')
+    }
+  }
+
   function create() {
     try {
-      const next = generatePassword(options)
+      const current = currentOptions()
+      const next = generatePassword(current)
       const nextRecent = [next, ...recent.filter((item) => item !== next)].slice(0, 3)
+      setOptions(current)
       setPassword(next)
       setRecent(nextRecent)
       setError('')
@@ -68,8 +88,9 @@ export function PasswordGenerator() {
         <label><input type="checkbox" checked={options.uppercase} onChange={(event) => update('uppercase', event.target.checked)} /> Chữ hoa</label>
         <label><input type="checkbox" checked={options.special} onChange={(event) => update('special', event.target.checked)} /> Ký tự đặc biệt</label>
       </div>
-      <label className="password-length">Độ dài <input type="number" min={4} max={128} value={options.length} onChange={(event) => update('length', Number(event.target.value))} /></label>
+      <label className="password-length">Độ dài <input type="number" inputMode="numeric" min={4} max={128} step={1} value={lengthText} onChange={(event) => { setLengthText(event.target.value); setError('') }} /></label>
       <label className="password-extra"><span><input type="checkbox" checked={options.excludeEnabled} onChange={(event) => update('excludeEnabled', event.target.checked)} /> Loại trừ ký tự</span>{options.excludeEnabled && <input aria-label="Ký tự loại trừ" value={options.excludeChars} onChange={(event) => update('excludeChars', event.target.value)} placeholder="Ví dụ: 0O1Il" />}</label>
+      <div className="password-save-row"><button type="button" className="password-save-options" onClick={() => void saveOptions()}><Check size={13} /> Lưu tùy chọn</button></div>
     </div>}
     {error && <p className="password-error" role="alert">{error}</p>}
     {password && <div className="password-result">

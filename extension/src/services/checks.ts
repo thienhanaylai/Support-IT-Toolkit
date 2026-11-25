@@ -1,6 +1,5 @@
 import { nativeRequest, type NativeProgress } from './nativeHost'
 import { domainOnly, mxToolboxLookup, registrationDomain, type MXCommand } from './domainLookup'
-import { grantHost } from './hostAccess'
 import { publicIP } from './formatRecord'
 import { commonPorts } from './scanPorts'
 import { getVMInfoFromTab } from './vmInfo'
@@ -15,16 +14,8 @@ export const labels: Record<Tool, string> = {
   local_interfaces: 'Mạng LAN', public_ip: 'IP Public', vm_info: 'Thông tin VM',
   mxtoolbox: 'MXToolbox', whois: 'WHOIS',
 }
-const external = new Set<Tool>(['public_ip', 'mxtoolbox', 'whois'])
+const external = new Set<Tool>(['mxtoolbox', 'whois'])
 const browser = new Set<Tool>(['vm_info', ...external])
-
-async function fetchJSON(url: string, timeoutMs: number, onProgress?: (event: NativeProgress) => void): Promise<Record<string, unknown>> {
-  await grantHost(url)
-  onProgress?.({ text: 'Đang chờ phản hồi IP Public...' })
-  const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), cache: 'no-store', headers: { Accept: 'application/json' } })
-  if (!response.ok) throw new Error(`Dịch vụ trả về HTTP ${response.status}`)
-  return await response.json() as Record<string, unknown>
-}
 
 export async function runCheck(tool: Tool, input: string, portInput: number, scanPorts: number[] = commonPorts, mxCommand: MXCommand = 'dns', pingCount = 4, maxHops = 20, onProgress?: (event: NativeProgress) => void, tabId?: number): Promise<CheckRecord> {
   onProgress?.({ text: 'Đang đọc cài đặt...' })
@@ -48,11 +39,6 @@ export async function runCheck(tool: Tool, input: string, portInput: number, sca
     target = registrationDomain(host)
     result = await longVanWhoisLookup(target, timeoutMs, (text) => onProgress?.({ text }))
     source = 'Trang WHOIS Long Vân'
-  } else if (tool === 'public_ip') {
-    onProgress?.({ text: 'Đang xin quyền truy cập ipify...' })
-    result = await fetchJSON('https://api.ipify.org?format=json', timeoutMs, onProgress)
-    if (!publicIP(result)) throw new Error('Dịch vụ IP Public không trả về địa chỉ IP hợp lệ')
-    source = 'Dịch vụ bên ngoài · ipify'
   } else {
     const params: Record<string, unknown> = { timeoutMs }
     if (tool === 'ping') Object.assign(params, { target: host, count: safePingCount(pingCount) })
@@ -60,12 +46,17 @@ export async function runCheck(tool: Tool, input: string, portInput: number, sca
     if (tool === 'tcp_check') Object.assign(params, { target: host, port: safePort(portInput) })
     if (tool === 'port_scan') Object.assign(params, { target: host, ports: scanPorts, timeoutMs: Math.min(timeoutMs, 2000) })
     if (tool === 'tls_check') Object.assign(params, { host, port: safePort(portInput) })
-    onProgress?.({ text: tool === 'local_interfaces' ? 'Đang đọc cấu hình mạng...' :
+    onProgress?.({ text: tool === 'public_ip' ? 'Đang chạy curl ifconfig.me...' :
+      tool === 'local_interfaces' ? 'Đang đọc cấu hình mạng...' :
       tool === 'tls_check' ? 'Đang kết nối TLS và kiểm tra chứng chỉ...' :
       tool === 'tcp_check' ? 'Đang thử kết nối TCP...' :
       tool === 'port_scan' ? 'Đang quét các cổng TCP...' :
       tool === 'ping' ? 'Đang gửi gói Ping...' : 'Đang theo dõi các hop...' })
     result = await nativeRequest(tool, params, onProgress)
+    if (tool === 'public_ip') {
+      if (!publicIP(result)) throw new Error('ifconfig.me không trả về địa chỉ IP hợp lệ')
+      source = 'Máy người dùng · curl ifconfig.me'
+    }
   }
   onProgress?.({ text: 'Đang hoàn tất kết quả...' })
   const status: CheckRecord['status'] = result.open === false || (typeof result.status === 'number' && result.status >= 400) ||

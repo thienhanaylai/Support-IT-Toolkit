@@ -54,4 +54,11 @@ describe('Native Messaging streaming', () => {
     expect(await pending).toMatchObject({ success: true, raw: 'Reply from 127.0.0.1' })
     expect(progress).not.toHaveBeenCalled()
   })
+
+  it('explains that IP Public requires the updated Local Agent', async () => {
+    vi.stubGlobal('chrome', { runtime: { sendNativeMessage: vi.fn(async () => ({
+      success: false, error: 'action không được hỗ trợ',
+    })) } })
+    await expect(nativeRequest('public_ip')).rejects.toThrow('IP Public qua curl ifconfig.me')
+  })
 })

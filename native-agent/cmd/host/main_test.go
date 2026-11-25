@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"net"
+	"reflect"
 	"runtime"
 	"testing"
 )
@@ -135,5 +136,31 @@ func TestStreamPingEmitsLinesAndFinalResult(t *testing.T) {
 	}
 	if frames.Len() == 0 {
 		t.Fatal("ping did not emit any progress before final result")
+	}
+}
+
+func TestPublicIPOutputValidation(t *testing.T) {
+	for _, value := range []string{"1.1.1.1", "2001:4860:4860::8888"} {
+		ip, err := parsePublicIPOutput([]byte(" \r\n" + value + "\r\n"))
+		if err != nil || ip != value {
+			t.Fatalf("expected valid IP %s, got %q: %v", value, ip, err)
+		}
+	}
+	for _, value := range []string{"", "not-an-ip", "<html>error</html>", "999.1.1.1"} {
+		if _, err := parsePublicIPOutput([]byte(value)); err == nil {
+			t.Fatalf("expected invalid IP: %s", value)
+		}
+	}
+}
+
+func TestPublicIPUsesFixedCurlCommand(t *testing.T) {
+	program, args := publicIPCommand(3000)
+	want := []string{
+		"--fail", "--silent", "--show-error",
+		"--max-time", "3",
+		"https://ifconfig.me/ip",
+	}
+	if program != "curl.exe" || !reflect.DeepEqual(args, want) {
+		t.Fatalf("unexpected public IP command: %s %v", program, args)
 	}
 }

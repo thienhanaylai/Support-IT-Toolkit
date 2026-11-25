@@ -3,7 +3,7 @@ import React from 'react'
 import { createRoot } from 'react-dom/client'
 import { act } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { passwordRecentKey } from '../services/passwordGenerator'
+import { passwordOptionsKey, passwordRecentKey } from '../services/passwordGenerator'
 import { PasswordGenerator } from './PasswordGenerator'
 
 afterEach(() => { vi.unstubAllGlobals(); document.body.innerHTML = '' })
@@ -12,7 +12,10 @@ it('copies generated passwords and keeps only the three most recent in session s
   document.body.innerHTML = '<div id="root"></div>'
   const set = vi.fn(async (_value: Record<string, string[]>) => {})
   const writeText = vi.fn(async (_value: string) => {})
-  vi.stubGlobal('chrome', { storage: { session: { get: vi.fn(async () => ({})), set } } })
+  vi.stubGlobal('chrome', { storage: {
+    session: { get: vi.fn(async () => ({})), set },
+    local: { get: vi.fn(async () => ({})), set: vi.fn(async () => {}) },
+  } })
   Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
   const root = createRoot(document.getElementById('root')!)
   await act(async () => root.render(<PasswordGenerator />))
@@ -44,10 +47,13 @@ it('copies generated passwords and keeps only the three most recent in session s
 
 it('restores at most three recent passwords from the current browser session', async () => {
   document.body.innerHTML = '<div id="root"></div>'
-  vi.stubGlobal('chrome', { storage: { session: {
-    get: vi.fn(async () => ({ [passwordRecentKey]: ['one', 'two', 'three', 'four'] })),
-    set: vi.fn(async () => {}),
-  } } })
+  vi.stubGlobal('chrome', { storage: {
+    session: {
+      get: vi.fn(async () => ({ [passwordRecentKey]: ['one', 'two', 'three', 'four'] })),
+      set: vi.fn(async () => {}),
+    },
+    local: { get: vi.fn(async () => ({})), set: vi.fn(async () => {}) },
+  } })
   const root = createRoot(document.getElementById('root')!)
   await act(async () => root.render(<PasswordGenerator />))
   await vi.waitFor(() => expect(document.querySelector('.password-history-toggle')).not.toBeNull())
@@ -55,5 +61,52 @@ it('restores at most three recent passwords from the current browser session', a
   await act(async () => document.querySelector<HTMLButtonElement>('.password-history-toggle')!.click())
   expect(document.querySelectorAll('.password-recent>div')).toHaveLength(3)
   expect(document.body.textContent).not.toContain('four')
+  await act(async () => root.unmount())
+})
+
+it('restores and saves the options used by quick password generation', async () => {
+  document.body.innerHTML = '<div id="root"></div>'
+  const setOptions = vi.fn(async () => {})
+  vi.stubGlobal('chrome', { storage: {
+    session: { get: vi.fn(async () => ({})), set: vi.fn(async () => {}) },
+    local: {
+      get: vi.fn(async () => ({ [passwordOptionsKey]: {
+        length: 24, numbers: true, lowercase: true, uppercase: false, special: false,
+        excludeEnabled: true, excludeChars: '0O',
+      } })),
+      set: setOptions,
+    },
+  } })
+  const root = createRoot(document.getElementById('root')!)
+  await act(async () => root.render(<PasswordGenerator />))
+  await vi.waitFor(() => expect(document.querySelector('.password-options-toggle')).not.toBeNull())
+  await act(async () => document.querySelector<HTMLButtonElement>('.password-options-toggle')!.click())
+  await vi.waitFor(() => expect(document.querySelector<HTMLInputElement>('.password-length input')?.value).toBe('24'))
+
+  const uppercase = [...document.querySelectorAll<HTMLInputElement>('.password-checks input')][2]
+  expect(uppercase.checked).toBe(false)
+  await act(async () => uppercase.click())
+  expect(setOptions).not.toHaveBeenCalled()
+  const length = document.querySelector<HTMLInputElement>('.password-length input')!
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+  await act(async () => {
+    valueSetter.call(length, '')
+    length.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  expect(length.value).toBe('')
+  await act(async () => document.querySelector<HTMLButtonElement>('.password-save-options')!.click())
+  await vi.waitFor(() => expect(document.querySelector('[role="alert"]')?.textContent).toContain('4 đến 128'))
+  expect(setOptions).not.toHaveBeenCalled()
+  await act(async () => {
+    valueSetter.call(length, '32')
+    length.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  expect(length.value).toBe('32')
+  await act(async () => document.querySelector<HTMLButtonElement>('.password-save-options')!.click())
+  await vi.waitFor(() => expect(setOptions).toHaveBeenCalledOnce())
+  expect(setOptions).toHaveBeenLastCalledWith({
+    [passwordOptionsKey]: expect.objectContaining({ length: 32, uppercase: true, excludeChars: '0O' }),
+  })
+  expect(document.querySelector('[role="status"]')).toBeNull()
   await act(async () => root.unmount())
 })

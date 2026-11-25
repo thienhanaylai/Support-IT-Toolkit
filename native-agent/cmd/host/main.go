@@ -171,6 +171,8 @@ func dispatch(req request) response {
 		result, err = tlsCheck(req, timeout)
 	case "local_interfaces":
 		result, err = localInterfaces()
+	case "public_ip":
+		result, err = publicIP(timeout)
 	default:
 		return fail(req.Action, errors.New("action không được hỗ trợ"))
 	}
@@ -472,6 +474,49 @@ func localInterfaces() (response, error) {
 		}
 	}
 	return result, nil
+}
+
+func publicIP(timeout int) (response, error) {
+	if runtime.GOOS != "windows" {
+		return nil, errors.New("IP Public chỉ hỗ trợ Windows")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout+1000)*time.Millisecond)
+	defer cancel()
+	// The executable, flags and URL are fixed. No user input is passed to curl or a shell.
+	program, args := publicIPCommand(timeout)
+	out, runErr := commandOutput(ctx, program, args, 256, nil)
+	if ctx.Err() != nil {
+		return nil, errors.New("curl ifconfig.me hết thời gian chờ")
+	}
+	if runErr != nil {
+		message := strings.TrimSpace(trimOutput(out, 200))
+		if message != "" {
+			return nil, fmt.Errorf("curl ifconfig.me thất bại: %s", message)
+		}
+		return nil, fmt.Errorf("curl ifconfig.me thất bại: %w", runErr)
+	}
+	ip, err := parsePublicIPOutput(out)
+	if err != nil {
+		return nil, err
+	}
+	return response{"ip": ip}, nil
+}
+
+func publicIPCommand(timeout int) (string, []string) {
+	seconds := (timeout + 999) / 1000
+	return "curl.exe", []string{
+		"--fail", "--silent", "--show-error",
+		"--max-time", strconv.Itoa(seconds),
+		"https://ifconfig.me/ip",
+	}
+}
+
+func parsePublicIPOutput(out []byte) (string, error) {
+	ip := strings.TrimSpace(trimOutput(out, 256))
+	if net.ParseIP(ip) == nil {
+		return "", errors.New("ifconfig.me không trả về địa chỉ IP hợp lệ")
+	}
+	return ip, nil
 }
 
 func trimOutput(data []byte, max int) string {

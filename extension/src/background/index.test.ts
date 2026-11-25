@@ -44,6 +44,17 @@ describe('context menu popup', () => {
     expect(create).toHaveBeenCalledWith({ url: 'chrome-extension://test/welcome.html' })
   })
 
+  it('removes the retired ipify host permission', async () => {
+    const remove = vi.fn(async () => true)
+    vi.stubGlobal('chrome', {
+      runtime: { onInstalled: { addListener: vi.fn() }, onMessage: { addListener: vi.fn() } },
+      permissions: { remove },
+      contextMenus: { onClicked: { addListener: vi.fn() } },
+    })
+    await import('./index')
+    await vi.waitFor(() => expect(remove).toHaveBeenCalledWith({ origins: ['https://api.ipify.org/*'] }))
+  })
+
   it('routes Portal page buttons through the service worker with the sender tab', async () => {
     const listeners: Array<(message: { type?: string }, sender: { tab?: { id?: number; url?: string } }, respond: (value: unknown) => void) => boolean | void> = []
     const config = {
@@ -61,7 +72,10 @@ describe('context menu popup', () => {
       },
       contextMenus: { create: vi.fn(), onClicked: { addListener: vi.fn() } },
       sidePanel: { setPanelBehavior: vi.fn(async () => {}) },
-      storage: { session: { get: vi.fn(async () => ({ portalVmConfig: config })), set } },
+      storage: {
+        session: { get: vi.fn(async () => ({ portalVmConfig: config })), set },
+        local: { get: vi.fn(async () => ({})) },
+      },
       scripting: { executeScript },
     })
     await import('./index')
@@ -85,5 +99,68 @@ describe('context menu popup', () => {
     )).toBe(true)
     await vi.waitFor(() => expect(pasted).toHaveBeenCalledWith({ applied: ['CPU', 'RAM', 'Internet', 'Disk'] }))
     expect(executeScript).toHaveBeenCalledWith(expect.objectContaining({ target: { tabId: 10 }, world: 'MAIN', args: [config] }))
+  })
+
+  it('generates a Portal password from saved options and keeps it in session history', async () => {
+    type Listener = (
+      message: { type?: string; options?: unknown },
+      sender: { tab?: { id?: number; url?: string } },
+      respond: (value: unknown) => void,
+    ) => boolean | void
+    const listeners: Listener[] = []
+    const set = vi.fn(async () => {})
+    const setLocal = vi.fn(async () => {})
+    vi.stubGlobal('chrome', {
+      runtime: {
+        onInstalled: { addListener: vi.fn() },
+        onMessage: { addListener: (listener: Listener) => listeners.push(listener) },
+      },
+      contextMenus: { create: vi.fn(), onClicked: { addListener: vi.fn() } },
+      storage: {
+        local: {
+          get: vi.fn(async () => ({ passwordGeneratorOptions: {
+            length: 12, numbers: true, lowercase: false, uppercase: false, special: false,
+            excludeEnabled: true, excludeChars: '012345678',
+          } })),
+          set: setLocal,
+        },
+        session: {
+          get: vi.fn(async () => ({ passwordGeneratorRecent: ['old-password'] })),
+          set,
+        },
+      },
+    })
+    await import('./index')
+    const respond = vi.fn()
+    const listener = listeners.at(-1)!
+    expect(listener(
+      { type: 'toolkit:generate-password' },
+      { tab: { id: 12, url: 'https://portal.longvan.vn/computing-manager/manager/computing/computing_create.xhtml' } },
+      respond,
+    )).toBe(true)
+    await vi.waitFor(() => expect(respond).toHaveBeenCalledWith({
+      password: '999999999999',
+      options: {
+        length: 12, numbers: true, lowercase: false, uppercase: false, special: false,
+        excludeEnabled: true, excludeChars: '012345678',
+      },
+    }))
+    expect(setLocal).toHaveBeenCalledWith({
+      passwordGeneratorOptions: {
+        length: 12, numbers: true, lowercase: false, uppercase: false, special: false,
+        excludeEnabled: true, excludeChars: '012345678',
+      },
+    })
+    expect(set).toHaveBeenCalledWith({
+      passwordGeneratorRecent: ['999999999999', 'old-password'],
+    })
+
+    const denied = vi.fn()
+    expect(listener(
+      { type: 'toolkit:generate-password' },
+      { tab: { id: 13, url: 'https://portal.longvan.vn/cloud-service-manager/manager/cloud-service-detail.xhtml' } },
+      denied,
+    )).toBe(false)
+    expect(denied).toHaveBeenCalledWith({ error: 'Chỉ có thể tạo nhanh mật khẩu tại trang Tạo computing.' })
   })
 })
