@@ -64,7 +64,7 @@ try {
   [System.IO.File]::WriteAllText($cmdPath, $cmd, (New-Object System.Text.UTF8Encoding($false)))
   Write-Host "Agent ZIP: $zipPath"
   Write-Host "Agent ZIP SHA256: $hash"
-  Write-Host "Standalone installer: $cmdPath"
+  Write-Host "Standalone installer (local only, never upload to GitHub Releases): $cmdPath"
 } finally {
   Remove-Item -LiteralPath $staging -Recurse -Force
 }

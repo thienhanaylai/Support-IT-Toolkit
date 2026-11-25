@@ -18,6 +18,13 @@ Muốn tự tạo lại EXE một file và ZIP từ mã nguồn (máy build cầ
 .\packaging\build-release.ps1 -Force
 ```
 
+### Quy tắc phát hành
+
+- **Không tải `Install.cmd` lên GitHub Releases**, kể cả khi script đóng gói Agent tạo file này trong thư mục `release/`. File chỉ dùng cục bộ hoặc nằm trong ZIP.
+- Chỉ đính kèm `ITSupportToolkit-Windows.zip`, `ITSupportToolkit-Windows.exe` và (khi cần) `ITSupportToolkit-Agent-Windows.zip`.
+- Không dựng hoặc đính kèm gói Edge Add-ons trừ khi có yêu cầu riêng.
+- Kiểm tra danh sách tài sản của release sau khi tải lên; nếu có `Install.cmd`, xóa ngay khỏi release.
+
 ## Yêu cầu khi cài từ mã nguồn
 
 - Windows 10/11, Chrome hoặc Edge; Node.js 20+, npm; Go 1.22+ nếu muốn tự build Agent.
