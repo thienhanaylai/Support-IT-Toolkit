@@ -19,7 +19,7 @@ Các công cụ native cũ—ICMP Ping, Traceroute, TCP Port, Quét Port, DNS h�
 
 - Authenticator hỗ trợ TOTP, import liên kết/ảnh/TXT, chọn vùng QR, sắp xếp, tìm kiếm, sao chép và export TXT.
 - Secret TOTP được mã hóa AES-GCM trước khi lưu trong `chrome.storage.local`. Khóa mở tự động cũng nằm trong vùng lưu trữ extension; đây không thay thế mật khẩu chính hoặc kho khóa phần cứng.
-- Password Generator dùng `crypto.getRandomValues()`, hỗ trợ các nhóm ký tự, độ dài 4–128 và danh sách loại trừ.
+- Password Generator dùng `crypto.getRandomValues()`, hỗ trợ các nhóm ký tự, độ dài 4–128, số ký tự đặc biệt (mặc định 3) và danh sách loại trừ.
 - Mật khẩu gần đây chỉ được giữ trong `chrome.storage.session`, không ghi vào lịch sử hoặc báo cáo.
 
 ### Portal Long Vân

@@ -8,6 +8,7 @@ import {
 export function PasswordGenerator({ standalone = false }: { standalone?: boolean }) {
   const [options, setOptions] = useState(defaultPasswordOptions)
   const [lengthText, setLengthText] = useState(String(defaultPasswordOptions.length))
+  const [specialCountText, setSpecialCountText] = useState(String(defaultPasswordOptions.specialCount))
   const [password, setPassword] = useState('')
   const [recent, setRecent] = useState<string[]>([])
   const [expanded, setExpanded] = useState(false)
@@ -27,6 +28,7 @@ export function PasswordGenerator({ standalone = false }: { standalone?: boolean
       const restored = normalizePasswordOptions(savedOptions[passwordOptionsKey])
       setOptions(restored)
       setLengthText(String(restored.length))
+      setSpecialCountText(String(restored.specialCount))
     }).catch(() => {})
     return () => { mounted = false }
   }, [])
@@ -37,7 +39,7 @@ export function PasswordGenerator({ standalone = false }: { standalone?: boolean
   }
 
   function currentOptions(): PasswordOptions {
-    return { ...options, length: Number(lengthText) }
+    return { ...options, length: Number(lengthText), specialCount: Number(specialCountText) }
   }
 
   async function saveOptions() {
@@ -47,6 +49,7 @@ export function PasswordGenerator({ standalone = false }: { standalone?: boolean
       await chrome.storage.local.set({ [passwordOptionsKey]: next })
       setOptions(next)
       setLengthText(String(next.length))
+      setSpecialCountText(String(next.specialCount))
       setError('')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Không thể lưu tùy chọn.')
@@ -89,6 +92,7 @@ export function PasswordGenerator({ standalone = false }: { standalone?: boolean
         <label><input type="checkbox" checked={options.special} onChange={(event) => update('special', event.target.checked)} /> Ký tự đặc biệt</label>
       </div>
       <label className="password-length">Độ dài <input type="number" inputMode="numeric" min={4} max={128} step={1} value={lengthText} onChange={(event) => { setLengthText(event.target.value); setError('') }} /></label>
+      {options.special && <label className="password-special-count">Số ký tự đặc biệt <input type="number" inputMode="numeric" min={1} max={128} step={1} value={specialCountText} onChange={(event) => { setSpecialCountText(event.target.value); setError('') }} /></label>}
       <label className="password-extra"><span><input type="checkbox" checked={options.excludeEnabled} onChange={(event) => update('excludeEnabled', event.target.checked)} /> Loại trừ ký tự</span>{options.excludeEnabled && <input aria-label="Ký tự loại trừ" value={options.excludeChars} onChange={(event) => update('excludeChars', event.target.value)} placeholder="Ví dụ: 0O1Il" />}</label>
       <div className="password-save-row"><button type="button" className="password-save-options" onClick={() => void saveOptions()}><Check size={13} /> Lưu tùy chọn</button></div>
     </div>}

@@ -31,6 +31,7 @@
 .it-toolkit-password-options label{display:flex;align-items:center;gap:3px;white-space:nowrap}
 .it-toolkit-password-options input[type="checkbox"]{margin:0}
 .it-toolkit-password-length input{box-sizing:border-box;width:68px;min-height:31px;border:1px solid #a8c8bc;border-radius:4px;padding:4px 6px}
+.it-toolkit-password-special-count[hidden]{display:none}
 .it-toolkit-password-exclude{display:flex;align-items:center;gap:8px;flex:1 1 210px;flex-wrap:wrap}
 .it-toolkit-password-exclude>input[type="text"]{box-sizing:border-box;min-width:130px;min-height:31px;flex:1 1 130px;border:1px solid #a8c8bc;border-radius:4px;padding:4px 7px}
 .it-toolkit-password-exclude>input[hidden]{display:none}

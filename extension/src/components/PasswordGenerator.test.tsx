@@ -41,6 +41,7 @@ it('copies generated passwords and keeps only the three most recent in session s
   await act(async () => copy.click())
   await vi.waitFor(() => expect(writeText).toHaveBeenCalledOnce())
   expect(writeText.mock.calls[0][0].length).toBe(16)
+  expect((writeText.mock.calls[0][0].match(/[^A-Za-z0-9]/g) ?? [])).toHaveLength(3)
   expect(copy.textContent).toContain('Đã chép')
   await act(async () => root.unmount())
 })
@@ -71,7 +72,7 @@ it('restores and saves the options used by quick password generation', async () 
     session: { get: vi.fn(async () => ({})), set: vi.fn(async () => {}) },
     local: {
       get: vi.fn(async () => ({ [passwordOptionsKey]: {
-        length: 24, numbers: true, lowercase: true, uppercase: false, special: false,
+        length: 24, specialCount: 4, numbers: true, lowercase: true, uppercase: false, special: false,
         excludeEnabled: true, excludeChars: '0O',
       } })),
       set: setOptions,
@@ -82,13 +83,22 @@ it('restores and saves the options used by quick password generation', async () 
   await vi.waitFor(() => expect(document.querySelector('.password-options-toggle')).not.toBeNull())
   await act(async () => document.querySelector<HTMLButtonElement>('.password-options-toggle')!.click())
   await vi.waitFor(() => expect(document.querySelector<HTMLInputElement>('.password-length input')?.value).toBe('24'))
+  expect(document.querySelector('.password-special-count')).toBeNull()
 
-  const uppercase = [...document.querySelectorAll<HTMLInputElement>('.password-checks input')][2]
-  expect(uppercase.checked).toBe(false)
-  await act(async () => uppercase.click())
+  const checks = [...document.querySelectorAll<HTMLInputElement>('.password-checks input')]
+  expect(checks[2].checked).toBe(false)
+  await act(async () => checks[2].click())
   expect(setOptions).not.toHaveBeenCalled()
-  const length = document.querySelector<HTMLInputElement>('.password-length input')!
+  await act(async () => checks[3].click())
+  await vi.waitFor(() => expect(document.querySelector<HTMLInputElement>('.password-special-count input')?.value).toBe('4'))
+  const specialCount = document.querySelector<HTMLInputElement>('.password-special-count input')!
   const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+  await act(async () => {
+    valueSetter.call(specialCount, '6')
+    specialCount.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  expect(specialCount.value).toBe('6')
+  const length = document.querySelector<HTMLInputElement>('.password-length input')!
   await act(async () => {
     valueSetter.call(length, '')
     length.dispatchEvent(new Event('input', { bubbles: true }))
@@ -105,7 +115,9 @@ it('restores and saves the options used by quick password generation', async () 
   await act(async () => document.querySelector<HTMLButtonElement>('.password-save-options')!.click())
   await vi.waitFor(() => expect(setOptions).toHaveBeenCalledOnce())
   expect(setOptions).toHaveBeenLastCalledWith({
-    [passwordOptionsKey]: expect.objectContaining({ length: 32, uppercase: true, excludeChars: '0O' }),
+    [passwordOptionsKey]: expect.objectContaining({
+      length: 32, specialCount: 6, uppercase: true, special: true, excludeChars: '0O',
+    }),
   })
   expect(document.querySelector('[role="status"]')).toBeNull()
   await act(async () => root.unmount())

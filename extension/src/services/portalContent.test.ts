@@ -272,7 +272,7 @@ it('shows OS or Site mismatches as an error after pasting resources', async () =
 
 it('places quick generation beside Password and updates the field with input and change events', async () => {
   let savedOptions = {
-    length: 20, numbers: true, lowercase: true, uppercase: true, special: false,
+    length: 20, specialCount: 4, numbers: true, lowercase: true, uppercase: true, special: false,
     excludeEnabled: true, excludeChars: '0O',
   }
   const sendMessage = vi.fn(async (message: { type: string; options?: typeof savedOptions }) => {
@@ -324,7 +324,13 @@ it('places quick generation beside Password and updates the field with input and
   expect(optionsPanel.parentElement).toBe(dom.window.document.body)
   expect(optionsPanel.querySelector<HTMLInputElement>('[data-option="length"]')?.value).toBe('20')
   expect(optionsPanel.querySelector<HTMLInputElement>('[data-option="special"]')?.checked).toBe(false)
+  expect(optionsPanel.querySelector<HTMLInputElement>('[data-option="specialCount"]')?.value).toBe('4')
+  expect(optionsPanel.querySelector<HTMLElement>('.it-toolkit-password-special-count')?.hidden).toBe(true)
   expect(optionsPanel.querySelector<HTMLInputElement>('[data-option="excludeChars"]')?.value).toBe('0O')
+  const special = optionsPanel.querySelector<HTMLInputElement>('[data-option="special"]')!
+  special.checked = true
+  special.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
+  await vi.waitFor(() => expect(optionsPanel.querySelector<HTMLElement>('.it-toolkit-password-special-count')?.hidden).toBe(false))
   const length = optionsPanel.querySelector<HTMLInputElement>('[data-option="length"]')!
   length.value = '24'
   length.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
@@ -336,7 +342,7 @@ it('places quick generation beside Password and updates the field with input and
   saveOptions.click()
   await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({
     type: 'toolkit:set-password-options',
-    options: expect.objectContaining({ length: 24, excludeChars: '0O' }),
+    options: expect.objectContaining({ length: 24, special: true, specialCount: 4, excludeChars: '0O' }),
   }))
   await vi.waitFor(() => expect(saveOptions.disabled).toBe(false))
   expect(optionsPanel.querySelector('.it-toolkit-password-options-notice')?.textContent).toBe('')

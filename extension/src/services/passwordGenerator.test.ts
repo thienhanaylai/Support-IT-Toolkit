@@ -4,7 +4,7 @@ import {
 } from './passwordGenerator'
 
 const defaults: PasswordOptions = {
-  length: 16, numbers: true, lowercase: true, uppercase: true, special: true,
+  length: 16, specialCount: 3, numbers: true, lowercase: true, uppercase: true, special: true,
   excludeEnabled: false, excludeChars: '',
 }
 
@@ -22,7 +22,7 @@ describe('password generator', () => {
     expect(password).toMatch(/[0-9]/)
     expect(password).toMatch(/[a-z]/)
     expect(password).toMatch(/[A-Z]/)
-    expect(password).toMatch(/[^A-Za-z0-9]/)
+    expect((password.match(/[^A-Za-z0-9]/g) ?? [])).toHaveLength(3)
     expect(random).toHaveBeenCalled()
   })
 
@@ -32,22 +32,38 @@ describe('password generator', () => {
     })
     expect(password).toHaveLength(24)
     expect(password).not.toMatch(/[0O1Il]/)
+    expect((password.match(/[^A-Za-z0-9]/g) ?? [])).toHaveLength(3)
   })
 
-  it('validates length and requires at least one character class', () => {
+  it('uses the configured number of special characters and validates it', () => {
+    const password = generatePassword({ ...defaults, length: 24, specialCount: 7 })
+    expect(password).toHaveLength(24)
+    expect((password.match(/[^A-Za-z0-9]/g) ?? [])).toHaveLength(7)
     expect(() => generatePassword({ ...defaults, length: 3 })).toThrow('4 đến 128')
+    expect(() => generatePassword({ ...defaults, specialCount: 0 })).toThrow('1 đến 128')
+    expect(() => generatePassword({ ...defaults, specialCount: 129 })).toThrow('1 đến 128')
+    expect(() => generatePassword({ ...defaults, length: 6, specialCount: 4 })).toThrow('ít nhất 7')
+    expect(() => generatePassword({
+      ...defaults, numbers: false, lowercase: false, uppercase: false, length: 6, specialCount: 3,
+    })).toThrow('Cần chọn thêm nhóm ký tự khác')
+    expect(generatePassword({ ...defaults, special: false, specialCount: 0 })).toHaveLength(16)
+  })
+
+  it('requires at least one character class', () => {
     expect(() => generatePassword({ ...defaults, numbers: false, lowercase: false, uppercase: false, special: false })).toThrow('ít nhất một')
   })
 
   it('normalizes persisted options without trusting malformed storage values', () => {
     expect(normalizePasswordOptions({
-      length: 24, numbers: false, lowercase: true, uppercase: false, special: true,
+      length: 24, specialCount: 5, numbers: false, lowercase: true, uppercase: false, special: true,
       excludeEnabled: true, excludeChars: '0O',
     })).toEqual({
-      length: 24, numbers: false, lowercase: true, uppercase: false, special: true,
+      length: 24, specialCount: 5, numbers: false, lowercase: true, uppercase: false, special: true,
       excludeEnabled: true, excludeChars: '0O',
     })
-    expect(normalizePasswordOptions({ length: 999, numbers: 'yes', excludeChars: 123 }))
+    expect(normalizePasswordOptions({ length: 999, specialCount: 0, numbers: 'yes', excludeChars: 123 }))
       .toEqual(defaultPasswordOptions)
+    expect(normalizePasswordOptions({ length: 20, specialCount: 200 }))
+      .toMatchObject({ length: 20, specialCount: 3 })
   })
 })

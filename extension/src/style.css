@@ -1155,13 +1155,15 @@ h1 span {
   margin: 0;
   accent-color: #008f6a;
 }
-.password-length {
+.password-length,
+.password-special-count {
   display: flex;
   align-items: center;
   gap: 7px;
   color: #344e55;
 }
-.password-length input {
+.password-length input,
+.password-special-count input {
   width: 60px;
   height: 29px;
   border: 1px solid #d4e3df;
@@ -2803,7 +2805,8 @@ html.auth-is-reordering * {
   .password-heading strong,
   .password-checks label,
   .password-extra span,
-  .password-length {
+  .password-length,
+  .password-special-count {
     color: #e8f1f0;
   }
   .password-recent > strong {
@@ -2824,6 +2827,7 @@ html.auth-is-reordering * {
     border-color: #477a67;
   }
   .password-length input,
+  .password-special-count input,
   .password-extra > input,
   .password-result {
     background: #111b1f;

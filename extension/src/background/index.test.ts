@@ -186,7 +186,7 @@ describe('context menu popup', () => {
       storage: {
         local: {
           get: vi.fn(async () => ({ passwordGeneratorOptions: {
-            length: 12, numbers: true, lowercase: false, uppercase: false, special: false,
+            length: 12, specialCount: 3, numbers: true, lowercase: false, uppercase: false, special: false,
             excludeEnabled: true, excludeChars: '012345678',
           } })),
           set: setLocal,
@@ -208,13 +208,13 @@ describe('context menu popup', () => {
     await vi.waitFor(() => expect(respond).toHaveBeenCalledWith({
       password: '999999999999',
       options: {
-        length: 12, numbers: true, lowercase: false, uppercase: false, special: false,
+        length: 12, specialCount: 3, numbers: true, lowercase: false, uppercase: false, special: false,
         excludeEnabled: true, excludeChars: '012345678',
       },
     }))
     expect(setLocal).toHaveBeenCalledWith({
       passwordGeneratorOptions: {
-        length: 12, numbers: true, lowercase: false, uppercase: false, special: false,
+        length: 12, specialCount: 3, numbers: true, lowercase: false, uppercase: false, special: false,
         excludeEnabled: true, excludeChars: '012345678',
       },
     })

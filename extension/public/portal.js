@@ -17,7 +17,7 @@
     otpMenuOpen: false, otpText: '', otpKind: '',
   }
   const defaultPasswordOptions = {
-    length: 16, numbers: true, lowercase: true, uppercase: true, special: true,
+    length: 16, specialCount: 3, numbers: true, lowercase: true, uppercase: true, special: true,
     excludeEnabled: false, excludeChars: '',
   }
   let renderQueued = false
@@ -402,6 +402,8 @@
     return {
       length: Number.isSafeInteger(value.length) && value.length >= 4 && value.length <= 128
         ? value.length : defaultPasswordOptions.length,
+      specialCount: Number.isSafeInteger(value.specialCount) && value.specialCount >= 1 && value.specialCount <= 128
+        ? value.specialCount : defaultPasswordOptions.specialCount,
       numbers: typeof value.numbers === 'boolean' ? value.numbers : defaultPasswordOptions.numbers,
       lowercase: typeof value.lowercase === 'boolean' ? value.lowercase : defaultPasswordOptions.lowercase,
       uppercase: typeof value.uppercase === 'boolean' ? value.uppercase : defaultPasswordOptions.uppercase,
@@ -603,6 +605,19 @@
     }))
     lengthLabel.append(lengthInput)
 
+    const specialCountLabel = element('label', 'it-toolkit-password-length it-toolkit-password-special-count')
+    specialCountLabel.append(document.createTextNode('Số ký tự đặc biệt '))
+    const specialCountInput = element('input')
+    specialCountInput.type = 'number'
+    specialCountInput.min = '1'
+    specialCountInput.max = '128'
+    specialCountInput.dataset.option = 'specialCount'
+    specialCountInput.addEventListener('change', () => updatePasswordOptionsDraft({
+      ...(state.passwordOptionsDraft || state.passwordOptions || defaultPasswordOptions),
+      specialCount: Number(specialCountInput.value),
+    }))
+    specialCountLabel.append(specialCountInput)
+
     const excludeRow = element('div', 'it-toolkit-password-exclude')
     const excludeLabel = element('label')
     const excludeEnabled = element('input')
@@ -630,7 +645,7 @@
     saveButton.type = 'button'
     saveButton.addEventListener('click', savePasswordOptions)
     footer.append(saveButton)
-    panel.append(panelHeader, checks, lengthLabel, excludeRow, footer)
+    panel.append(panelHeader, checks, lengthLabel, specialCountLabel, excludeRow, footer)
     document.body.append(panel)
     return panel
   }
@@ -709,6 +724,10 @@
       }
       const length = panel.querySelector('[data-option="length"]')
       if (length && length.value !== String(options.length)) length.value = String(options.length)
+      const specialCount = panel.querySelector('[data-option="specialCount"]')
+      if (specialCount && specialCount.value !== String(options.specialCount)) specialCount.value = String(options.specialCount)
+      const specialCountLabel = panel.querySelector('.it-toolkit-password-special-count')
+      if (specialCountLabel) specialCountLabel.hidden = !options.special
       const excludeChars = panel.querySelector('[data-option="excludeChars"]')
       if (excludeChars) {
         if (excludeChars.value !== options.excludeChars) excludeChars.value = options.excludeChars
