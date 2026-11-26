@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Clock3, Download, History, KeyRound, Search, ShieldCheck, Trash2 } from 'lucide-react'
+import { Clock3, Download, History, KeyRound, Plus, Save, Search, ShieldCheck, Tags, Trash2, UserPlus } from 'lucide-react'
 import { Header } from '../components/Header'
 import { HistoryItem } from '../components/HistoryItem'
 import { Result } from '../components/Result'
@@ -8,6 +8,10 @@ import { downloadAuthenticatorExport, loadAuthenticatorEntries } from '../servic
 import { hasPortalAccess, removePortalAccess, requestPortalAccess } from '../services/portalAccess'
 import { downloadReport } from '../services/report'
 import { defaultSettings, getHistory, getSettings, type CheckRecord, type Settings } from '../services/storage'
+import {
+  createTagElementGroup, createTagElementMember, loadTagElementGroups, parseTagElementText,
+  saveTagElementGroups, serializeTagElementGroups, tagElementsStorageKey, type TagElementGroup,
+} from '../services/tagElements'
 import { safeTimeout } from '../services/validation'
 import '../style.css'
 
@@ -26,6 +30,10 @@ function App() {
   const [authExporting, setAuthExporting] = useState(false)
   const [authExportStatus, setAuthExportStatus] = useState('')
   const [authExportError, setAuthExportError] = useState('')
+  const [tagGroups, setTagGroups] = useState<TagElementGroup[]>([])
+  const [tagImport, setTagImport] = useState('')
+  const [tagSaved, setTagSaved] = useState(false)
+  const [tagError, setTagError] = useState('')
   const filtered = history.filter((item) =>
     `${item.tool} ${item.target} ${item.source}`.toLocaleLowerCase('vi-VN')
       .includes(query.trim().toLocaleLowerCase('vi-VN')),
@@ -42,10 +50,19 @@ function App() {
     }).finally(() => { if (mounted) setHistoryLoading(false) })
     void hasPortalAccess().then((allowed) => { if (mounted) setPortalAccess(allowed) })
       .catch(() => { if (mounted) setPortalAccess(false) })
+    void loadTagElementGroups().then((groups) => {
+      if (!mounted) return
+      setTagGroups(groups)
+      setTagImport(serializeTagElementGroups(groups))
+    }).catch(() => { if (mounted) setTagError('Không thể tải danh sách Tag Element.') })
     const onChanged = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
       if (area === 'local' && changes.history && mounted) {
         setHistory((changes.history.newValue as CheckRecord[] | undefined) ?? [])
         setHistoryError('')
+      }
+      if (area === 'local' && changes[tagElementsStorageKey] && mounted) {
+        const groups = changes[tagElementsStorageKey].newValue
+        if (Array.isArray(groups)) setTagGroups(groups as TagElementGroup[])
       }
     }
     chrome.storage.onChanged.addListener(onChanged)
@@ -117,12 +134,66 @@ function App() {
     }
   }
 
+  function updateTagGroup(groupId: string, change: (group: TagElementGroup) => TagElementGroup) {
+    setTagGroups((groups) => groups.map((group) => group.id === groupId ? change(group) : group))
+    setTagSaved(false)
+    setTagError('')
+  }
+
+  function importTags() {
+    try {
+      const groups = parseTagElementText(tagImport)
+      setTagGroups(groups)
+      setTagSaved(false)
+      setTagError('')
+    } catch (cause) {
+      setTagError(cause instanceof Error ? cause.message : 'Danh sách Tag Element không hợp lệ.')
+    }
+  }
+
+  async function saveTags() {
+    const clean = tagGroups.map((group) => ({
+      ...group,
+      name: group.name.trim(),
+      members: group.members.map((member) => ({
+        ...member,
+        name: member.name.trim(),
+        elementId: member.elementId.trim(),
+      })),
+    }))
+    if (!clean.length) {
+      setTagError('Cần có ít nhất một lĩnh vực.')
+      return
+    }
+    const invalidGroup = clean.find((group) => !group.name)
+    if (invalidGroup) {
+      setTagError('Tên lĩnh vực không được để trống.')
+      return
+    }
+    const invalidMember = clean.flatMap((group) => group.members).find((member) =>
+      !member.name || !/^@[^\s:[\]]+:[^\s[\]]+$/.test(member.elementId))
+    if (invalidMember) {
+      setTagError('Tên thành viên và Element ID dạng @id:example.com là bắt buộc.')
+      return
+    }
+    try {
+      await saveTagElementGroups(clean)
+      setTagGroups(clean)
+      setTagImport(serializeTagElementGroups(clean))
+      setTagSaved(true)
+      setTagError('')
+    } catch {
+      setTagSaved(false)
+      setTagError('Không thể lưu danh sách Tag Element.')
+    }
+  }
+
   return <main className="panel options-page"><Header section="Cài đặt" /><div className="main-content">
     <div className="eyebrow">KHÔNG GIAN CỦA BẠN</div>
     <h1>Cài đặt <span>& lịch sử.</span></h1>
     <p className="intro">Tùy chỉnh cách kiểm tra và quản lý kết quả đã lưu trên thiết bị này.</p>
     <nav className="options-nav" aria-label="Mục cài đặt">
-      <a href="#preferences">Tùy chọn</a><a href="#authenticator-backup">Authenticator</a><a href="#portal-access">Quyền Portal</a><a href="#history">Lịch sử</a>
+      <a href="#preferences">Tùy chọn</a><a href="#tag-elements">Tag Element</a><a href="#authenticator-backup">Authenticator</a><a href="#portal-access">Quyền Portal</a><a href="#history">Lịch sử</a>
     </nav>
 
     <form id="preferences" className="options-section" onSubmit={(event) => void submit(event)}>
@@ -142,6 +213,70 @@ function App() {
       </div>
       <div className="options-save"><button className="primary" type="submit">Lưu cài đặt</button>{saved && <span className="success" role="status">Đã lưu cài đặt.</span>}{saveError && <span className="options-error" role="alert">{saveError}</span>}</div>
     </form>
+
+    <section id="tag-elements" className="options-section tag-elements-options" aria-labelledby="tag-elements-title">
+      <div className="options-section-heading"><span className="options-section-icon"><Tags size={19} /></span><div>
+        <h2 id="tag-elements-title">Danh sách Tag Element</h2>
+        <p>Quản lý lĩnh vực và thành viên dùng cho các nút sao chép nhanh cạnh Thông tin VM.</p>
+      </div></div>
+      <div className="tag-import">
+        <label htmlFor="tag-import-text">Import hoặc chỉnh sửa hàng loạt</label>
+        <textarea id="tag-import-text" value={tagImport} onChange={(event) => {
+          setTagImport(event.target.value); setTagSaved(false); setTagError('')
+        }} placeholder={'Vmware\n(name)[@id:example.com]'} />
+        <div><button type="button" onClick={importTags}>Nhận diện danh sách</button>
+          <small>Mỗi lĩnh vực nằm trên một dòng; các dòng tiếp theo dùng dạng <code>(Tên)[@id:example.com]</code>.</small>
+        </div>
+      </div>
+      <div className="tag-groups-editor">
+        {tagGroups.map((group, groupIndex) => <article className="tag-group-editor" key={group.id}>
+          <div className="tag-group-editor-heading">
+            <label><span>Lĩnh vực {groupIndex + 1}</span><input value={group.name}
+              aria-label={`Tên lĩnh vực ${groupIndex + 1}`}
+              onChange={(event) => updateTagGroup(group.id, (current) => ({ ...current, name: event.target.value }))} /></label>
+            <button type="button" className="tag-delete" aria-label={`Xóa lĩnh vực ${group.name}`}
+              onClick={() => {
+                setTagGroups((groups) => groups.filter((item) => item.id !== group.id))
+                setTagSaved(false)
+              }}><Trash2 size={15} /> Xóa lĩnh vực</button>
+          </div>
+          <div className="tag-members-editor">
+            {group.members.map((member, memberIndex) => <div className="tag-member-editor" key={member.id}>
+              <label><span>Tên</span><input value={member.name} aria-label={`Tên thành viên ${memberIndex + 1} của ${group.name}`}
+                onChange={(event) => updateTagGroup(group.id, (current) => ({
+                  ...current,
+                  members: current.members.map((item) => item.id === member.id ? { ...item, name: event.target.value } : item),
+                }))} /></label>
+              <label><span>Element ID</span><input value={member.elementId} placeholder="@id:example.com"
+                aria-label={`Element ID của ${member.name}`}
+                onChange={(event) => updateTagGroup(group.id, (current) => ({
+                  ...current,
+                  members: current.members.map((item) => item.id === member.id ? { ...item, elementId: event.target.value } : item),
+                }))} /></label>
+              <button type="button" className="tag-delete tag-delete-member" aria-label={`Xóa thành viên ${member.name}`}
+                onClick={() => updateTagGroup(group.id, (current) => ({
+                  ...current, members: current.members.filter((item) => item.id !== member.id),
+                }))}><Trash2 size={15} /></button>
+            </div>)}
+            {!group.members.length && <p className="tag-editor-empty">Lĩnh vực này chưa có thành viên.</p>}
+          </div>
+          <button type="button" className="tag-add-member" onClick={() =>
+            updateTagGroup(group.id, (current) => ({
+              ...current, members: [...current.members, createTagElementMember()],
+            }))}><UserPlus size={15} /> Thêm thành viên</button>
+        </article>)}
+      </div>
+      <div className="tag-editor-actions">
+        <button type="button" className="tag-add-group" onClick={() => {
+          setTagGroups((groups) => [...groups, createTagElementGroup()])
+          setTagSaved(false)
+          setTagError('')
+        }}><Plus size={15} /> Thêm lĩnh vực</button>
+        <button type="button" className="primary" onClick={() => void saveTags()}><Save size={15} /> Lưu danh sách</button>
+        {tagSaved && <span className="success" role="status">Đã lưu Tag Element.</span>}
+      </div>
+      {tagError && <p className="options-error" role="alert">{tagError}</p>}
+    </section>
 
     <section id="authenticator-backup" className="options-section" aria-labelledby="authenticator-backup-title">
       <div className="options-section-heading"><span className="options-section-icon"><KeyRound size={19} /></span><div>

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CheckRecord } from '../services/storage'
+import { tagElementsStorageKey } from '../services/tagElements'
 
 const records: CheckRecord[] = [
   { id: 'one', at: '2026-11-24T12:00:00Z', tool: 'Ping', target: 'example.com', source: 'Local Agent', status: 'ok', result: { message: 'pong' } },
@@ -100,5 +101,47 @@ describe('Settings history', () => {
     changed([records[1]])
     await vi.waitFor(() => expect(document.querySelectorAll('.options-history-list .recent')).toHaveLength(1))
     expect(document.querySelector('.options-history-list')?.textContent).toContain('test.net:443')
+  })
+
+  it('imports, adds, edits, removes, and saves Tag Element groups and members', async () => {
+    const { set } = await openSettings()
+    const section = document.querySelector('#tag-elements')!
+    expect(document.querySelector('a[href="#tag-elements"]')).not.toBeNull()
+    const textarea = section.querySelector<HTMLTextAreaElement>('#tag-import-text')!
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+      textarea,
+      'Vmware\n(Lê Ngọc Vương)[@10.19530321:team.longvan.vn]',
+    )
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    const recognize = [...section.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.includes('Nhận diện danh sách'))!
+    recognize.click()
+    await vi.waitFor(() => expect(section.querySelectorAll('.tag-group-editor')).toHaveLength(1))
+    expect(section.textContent).toContain('Lê Ngọc Vương')
+
+    section.querySelector<HTMLButtonElement>('.tag-add-member')!.click()
+    await vi.waitFor(() => expect(section.querySelectorAll('.tag-member-editor')).toHaveLength(2))
+    section.querySelectorAll<HTMLButtonElement>('.tag-delete-member')[1].click()
+    await vi.waitFor(() => expect(section.querySelectorAll('.tag-member-editor')).toHaveLength(1))
+
+    section.querySelector<HTMLButtonElement>('.tag-add-group')!.click()
+    await vi.waitFor(() => expect(section.querySelectorAll('.tag-group-editor')).toHaveLength(2))
+    section.querySelectorAll<HTMLButtonElement>('.tag-group-editor-heading .tag-delete')[1].click()
+    await vi.waitFor(() => expect(section.querySelectorAll('.tag-group-editor')).toHaveLength(1))
+
+    const groupName = section.querySelector<HTMLInputElement>('[aria-label="Tên lĩnh vực 1"]')!
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(groupName, 'VMware')
+    groupName.dispatchEvent(new Event('input', { bubbles: true }))
+    section.querySelector<HTMLButtonElement>('.tag-editor-actions .primary')!.click()
+    await vi.waitFor(() => expect(set).toHaveBeenCalledWith({
+      [tagElementsStorageKey]: [expect.objectContaining({
+        name: 'VMware',
+        members: [expect.objectContaining({
+          name: 'Lê Ngọc Vương',
+          elementId: '@10.19530321:team.longvan.vn',
+        })],
+      })],
+    }))
+    await vi.waitFor(() => expect(section.textContent).toContain('Đã lưu Tag Element'))
   })
 })

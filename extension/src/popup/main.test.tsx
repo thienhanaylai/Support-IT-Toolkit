@@ -2,6 +2,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { draftKey, jobKey } from '../services/work'
 import { portalVmConfigKey } from '../services/portalVmConfig'
+import { tagElementsStorageKey } from '../services/tagElements'
 
 afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); document.body.innerHTML = '' })
 
@@ -394,4 +395,40 @@ it('shows HTTP Ping and DoH as independent browser tools with their own options'
   expect(document.querySelector<HTMLSelectElement>('#doh-record-type')?.value).toBe('CAA')
   expect(document.querySelector<HTMLSelectElement>('#doh-resolver')?.value).toBe('quad9')
   expect(document.querySelector('.domain-tool-section')?.textContent).toContain('không đại diện DNS hệ điều hành')
+})
+
+it('shows Tag Element beside VM info and copies the complete recognized mention', async () => {
+  document.body.innerHTML = '<div id="root"></div>'
+  const writeText = vi.fn(async () => {})
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+  const groups = [{
+    id: 'vmware', name: 'Vmware', members: [{
+      id: 'vuong', name: 'Lê Ngọc Vương', elementId: '@10.19530321:team.longvan.vn',
+    }],
+  }]
+  vi.stubGlobal('chrome', {
+    runtime: { sendMessage: vi.fn(async () => ({})) },
+    tabs: { query: vi.fn(async () => []) },
+    storage: {
+      session: { get: vi.fn(async () => ({})), set: vi.fn(async () => {}), remove: vi.fn(async () => {}) },
+      local: { get: vi.fn(async (key: string) =>
+        key === 'history' ? { history: [] } :
+          key === tagElementsStorageKey ? { [tagElementsStorageKey]: groups } : {}) },
+      onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
+    },
+  })
+  await import('./main')
+  await showTools()
+  const tagPanel = await vi.waitFor(() => {
+    const panel = document.querySelector('.tag-elements-quick')
+    expect(panel).not.toBeNull()
+    return panel!
+  })
+  expect(document.querySelector('.vm-tools-layout')?.contains(tagPanel)).toBe(true)
+  expect(tagPanel.textContent).toContain('Vmware')
+  expect(tagPanel.textContent).toContain('Lê Ngọc Vương')
+  tagPanel.querySelector<HTMLButtonElement>('.tag-member-buttons button')!.click()
+  await vi.waitFor(() => expect(writeText)
+    .toHaveBeenCalledWith('(Lê Ngọc Vương)[@10.19530321:team.longvan.vn]'))
+  await vi.waitFor(() => expect(tagPanel.textContent).toContain('Đã chép'))
 })
