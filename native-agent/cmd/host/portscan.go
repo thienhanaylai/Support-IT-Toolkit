@@ -85,6 +85,15 @@ func portScanWithProgress(req request, timeout int, progress func(scanPortResult
 	slots := make(chan struct{}, maxConcurrentChecks)
 	var group sync.WaitGroup
 	var completed atomic.Int32
+	var progressLock sync.Mutex
+	emitProgress := func(item scanPortResult) {
+		if progress == nil {
+			return
+		}
+		progressLock.Lock()
+		defer progressLock.Unlock()
+		progress(item, int(completed.Add(1)), len(req.Ports))
+	}
 	for index, port := range req.Ports {
 		group.Add(1)
 		go func(index, port int) {
@@ -95,9 +104,7 @@ func portScanWithProgress(req request, timeout int, progress func(scanPortResult
 				defer func() { <-slots }()
 			case <-ctx.Done():
 				results[index] = item
-				if progress != nil {
-					progress(item, int(completed.Add(1)), len(req.Ports))
-				}
+				emitProgress(item)
 				return
 			}
 			start := time.Now()
@@ -113,9 +120,7 @@ func portScanWithProgress(req request, timeout int, progress func(scanPortResult
 				}
 			}
 			results[index] = item
-			if progress != nil {
-				progress(item, int(completed.Add(1)), len(req.Ports))
-			}
+			emitProgress(item)
 		}(index, port)
 	}
 	group.Wait()

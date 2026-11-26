@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -14,13 +13,13 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	toolkiticmp "it-support-toolkit/native-agent/internal/icmp"
 	"it-support-toolkit/native-agent/internal/security"
 )
 
@@ -191,38 +190,11 @@ func ping(req request, timeout int) (response, error) {
 	return pingWithProgress(req, timeout, nil)
 }
 
-func commandOutput(ctx context.Context, program string, args []string, maxOutput int, progress func(string)) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, program, args...)
-	if progress == nil {
-		return cmd.CombinedOutput()
-	}
-	pipe, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	cmd.Stderr = cmd.Stdout
-	if err := cmd.Start(); err != nil {
-		return nil, err
-	}
-	var output bytes.Buffer
-	scanner := bufio.NewScanner(pipe)
-	scanner.Buffer(make([]byte, 4096), 64*1024)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if output.Len() < maxOutput {
-			output.WriteString(line)
-			output.WriteByte('\n')
-		}
-		if line != "" {
-			progress(trimOutput([]byte(line), 500))
-		}
-	}
-	scanErr := scanner.Err()
-	runErr := cmd.Wait()
-	if scanErr != nil {
-		return output.Bytes(), scanErr
-	}
-	return output.Bytes(), runErr
+// commandOutput remains temporarily for the legacy public_ip action while
+// installed v0.1.9 extensions are still supported. Network probes no longer
+// use it; the compatibility action is removed in the final Zero CMD phase.
+func commandOutput(ctx context.Context, program string, args []string, _ int, _ func(string)) ([]byte, error) {
+	return exec.CommandContext(ctx, program, args...).CombinedOutput()
 }
 
 func pingWithProgress(req request, timeout int, progress func(string)) (response, error) {
@@ -234,53 +206,21 @@ func pingWithProgress(req request, timeout int, progress func(string)) (response
 	if err != nil {
 		return nil, err
 	}
-	if runtime.GOOS != "windows" {
-		return nil, errors.New("ping chỉ hỗ trợ Windows")
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(count*(timeout+1000))*time.Millisecond)
 	defer cancel()
-	// -n and -w are fixed flags; host cannot begin with '-'.
-	out, runErr := commandOutput(ctx, "ping", []string{"-n", strconv.Itoa(count), "-w", strconv.Itoa(timeout), host}, 8192, progress)
-	if ctx.Err() != nil {
-		return nil, errors.New("ping hết thời gian chờ")
-	}
-	raw := trimOutput(out, 8192)
-	times := parseTimes(raw)
-	received := len(times)
-	min, max, avg := 0, 0, 0
-	if received > 0 {
-		min, max = times[0], times[0]
-		for _, v := range times {
-			avg += v
-			if v < min {
-				min = v
-			}
-			if v > max {
-				max = v
-			}
+	result, err := toolkiticmp.Ping(ctx, host, count, timeout, progress)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, errors.New("ping hết thời gian chờ")
 		}
-		avg /= received
-	}
-	if runErr != nil && len(out) == 0 {
-		return nil, runErr
+		return nil, err
 	}
 	return response{
-		"target": host, "sent": count, "received": received,
-		"loss": 100 * (count - received) / count, "min": min, "avg": avg, "max": max,
-		"timesMs": times, "raw": raw,
+		"target": host, "sent": result.Sent, "received": result.Received,
+		"loss": result.Loss, "min": result.Min, "avg": result.Average, "max": result.Max,
+		"timesMs": result.Times, "raw": trimOutput([]byte(result.Raw), 8192),
 		"note": "Thống kê dựa trên các phản hồi có thời gian (ms); xem raw nếu Windows dùng ngôn ngữ khác.",
 	}, nil
-}
-
-var timePattern = regexp.MustCompile(`(?i)(?:time|thời gian)[=<]\s*(\d+)\s*ms`)
-
-func parseTimes(raw string) []int {
-	var times []int
-	for _, match := range timePattern.FindAllStringSubmatch(raw, 5) {
-		n, _ := strconv.Atoi(match[1])
-		times = append(times, n)
-	}
-	return times
 }
 
 func traceroute(req request, timeout int) (response, error) {
@@ -296,29 +236,17 @@ func tracerouteWithProgress(req request, timeout int, progress func(string)) (re
 	if err != nil {
 		return nil, err
 	}
-	if runtime.GOOS != "windows" {
-		return nil, errors.New("traceroute chỉ hỗ trợ Windows")
-	}
-	// Windows tracert probes 3 times per hop.
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(hops*3*(timeout+500))*time.Millisecond)
 	defer cancel()
-	out, runErr := commandOutput(ctx, "tracert", []string{"-d", "-h", strconv.Itoa(hops), "-w", strconv.Itoa(timeout), host}, 24000, progress)
-	raw := trimOutput(out, 24000)
-	if ctx.Err() != nil {
-		return response{"target": host, "raw": raw, "timedOut": true}, nil
+	result, err := toolkiticmp.Trace(ctx, host, hops, timeout, progress)
+	if err != nil {
+		return nil, err
 	}
-	if runErr != nil && len(out) == 0 {
-		return nil, runErr
+	response := response{"target": host, "hops": result.Hops, "raw": trimOutput([]byte(result.Raw), 24000)}
+	if result.TimedOut {
+		response["timedOut"] = true
 	}
-	lines := strings.Split(raw, "\n")
-	route := make([]string, 0, hops)
-	hopPattern := regexp.MustCompile(`^\s*\d{1,2}\s+`)
-	for _, line := range lines {
-		if hopPattern.MatchString(line) {
-			route = append(route, strings.TrimSpace(line))
-		}
-	}
-	return response{"target": host, "hops": route, "raw": raw}, nil
+	return response, nil
 }
 
 func tcpCheck(req request, timeout int) (response, error) {
