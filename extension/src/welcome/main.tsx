@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { hasPortalAccess, requestPortalAccess } from '../services/portalAccess'
+import { applyTheme, getSettings } from '../services/storage'
 import '../style.css'
 
 function App() {
@@ -9,6 +10,7 @@ function App() {
   const [portalError, setPortalError] = useState('')
   useEffect(() => {
     void hasPortalAccess().then(setPortalAccess).catch(() => setPortalAccess(false))
+    void getSettings().then((settings) => applyTheme(settings.theme)).catch(() => applyTheme('light'))
   }, [])
 
   async function grantPortal() {

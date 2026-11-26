@@ -7,7 +7,7 @@ import { PasswordGenerator } from '../components/PasswordGenerator'
 import { Authenticator } from '../components/Authenticator'
 import { TagElements } from '../components/TagElements'
 import { isTool, labels, type Tool } from '../services/checks'
-import { getHistory, type CheckRecord } from '../services/storage'
+import { applyTheme, getHistory, getSettings, type CheckRecord } from '../services/storage'
 import { grantHost } from '../services/hostAccess'
 import { dohQuery, dohRecordTypes, dohResolvers, type DoHRecordType, type DoHResolver } from '../services/network/dns-lookup'
 import { parseHTTPURL, type HTTPMethod } from '../services/network/http-ping'
@@ -72,6 +72,9 @@ function App() {
     }).catch(() => {})
     const changed = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
       if (!mounted) return
+      if (area === 'local' && changes.settings) {
+        void getSettings().then((value) => applyTheme(value.theme))
+      }
       if (area === 'session' && changes[jobKey]) {
         const next = changes[jobKey].newValue as CheckJob | undefined
         setJob(next ?? null)
@@ -84,12 +87,14 @@ function App() {
     }
     chrome.storage.onChanged.addListener(changed)
     void (async () => {
-      const [stored, response, history] = await Promise.all([
+      const [stored, response, history, settings] = await Promise.all([
         chrome.storage.session.get([draftKey, 'selectedTarget', 'displayedRecord']),
         chrome.runtime.sendMessage({ type: 'toolkit:get-job' }) as Promise<{ job?: CheckJob; error?: string }>,
         getHistory(),
+        getSettings(),
       ])
       if (!mounted) return
+      applyTheme(settings.theme)
       const draft = stored[draftKey] as PopupDraft | undefined
       if (draft) {
         setInput(draft.input)

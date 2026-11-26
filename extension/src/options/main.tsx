@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Clock3, Download, History, KeyRound, Plus, Save, Search, ShieldCheck, Tags, Trash2, UserPlus } from 'lucide-react'
+import { Clock3, Download, History, KeyRound, Moon, Plus, Save, Search, ShieldCheck, Sun, Tags, Trash2, UserPlus } from 'lucide-react'
 import { Header } from '../components/Header'
 import { HistoryItem } from '../components/HistoryItem'
 import { Result } from '../components/Result'
 import { downloadAuthenticatorExport, loadAuthenticatorEntries } from '../services/authenticator'
 import { hasPortalAccess, removePortalAccess, requestPortalAccess } from '../services/portalAccess'
 import { downloadReport } from '../services/report'
-import { defaultSettings, getHistory, getSettings, type CheckRecord, type Settings } from '../services/storage'
+import {
+  applyTheme, defaultSettings, getHistory, getSettings, type CheckRecord, type Settings, type Theme,
+} from '../services/storage'
 import {
   createTagElementGroup, createTagElementMember, loadTagElementGroups, parseTagElementText,
   saveTagElementGroups, serializeTagElementGroups, tagElementsStorageKey, type TagElementGroup,
@@ -15,7 +17,23 @@ import {
 import { safeTimeout } from '../services/validation'
 import '../style.css'
 
+type OptionsTab = 'preferences' | 'tag-elements' | 'authenticator-backup' | 'portal-access' | 'history'
+
+const optionsTabs: Array<{ id: OptionsTab; label: string }> = [
+  { id: 'preferences', label: 'Tùy chọn' },
+  { id: 'tag-elements', label: 'Tag Element' },
+  { id: 'authenticator-backup', label: 'Authenticator' },
+  { id: 'portal-access', label: 'Quyền Portal' },
+  { id: 'history', label: 'Lịch sử' },
+]
+
+function initialOptionsTab(): OptionsTab {
+  const value = location.hash.slice(1)
+  return optionsTabs.some((tab) => tab.id === value) ? value as OptionsTab : 'preferences'
+}
+
 function App() {
+  const [activeOptionsTab, setActiveOptionsTab] = useState<OptionsTab>(initialOptionsTab)
   const [settings, setSettings] = useState<Settings>(defaultSettings)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -42,7 +60,11 @@ function App() {
 
   useEffect(() => {
     let mounted = true
-    void getSettings().then((value) => { if (mounted) setSettings(value) }).catch(() => {
+    void getSettings().then((value) => {
+      if (!mounted) return
+      setSettings(value)
+      applyTheme(value.theme)
+    }).catch(() => {
       if (mounted) setSaveError('Không thể tải cài đặt. Hãy mở lại trang và thử lần nữa.')
     })
     void getHistory().then((items) => { if (mounted) setHistory(items) }).catch(() => {
@@ -64,6 +86,13 @@ function App() {
         const groups = changes[tagElementsStorageKey].newValue
         if (Array.isArray(groups)) setTagGroups(groups as TagElementGroup[])
       }
+      if (area === 'local' && changes.settings && mounted) {
+        void getSettings().then((value) => {
+          if (!mounted) return
+          setSettings(value)
+          applyTheme(value.theme)
+        })
+      }
     }
     chrome.storage.onChanged.addListener(onChanged)
     return () => { mounted = false; chrome.storage.onChanged.removeListener(onChanged) }
@@ -75,6 +104,7 @@ function App() {
     try {
       await chrome.storage.local.set({ settings: next })
       setSettings(next)
+      applyTheme(next.theme)
       setSaved(true)
       setSaveError('')
     } catch {
@@ -132,6 +162,17 @@ function App() {
     } finally {
       setAuthExporting(false)
     }
+  }
+
+  function selectOptionsTab(tab: OptionsTab) {
+    setActiveOptionsTab(tab)
+    window.history.replaceState(null, '', `#${tab}`)
+  }
+
+  function selectTheme(theme: Theme) {
+    setSaved(false)
+    setSettings((current) => ({ ...current, theme }))
+    applyTheme(theme)
   }
 
   function updateTagGroup(groupId: string, change: (group: TagElementGroup) => TagElementGroup) {
@@ -192,11 +233,14 @@ function App() {
     <div className="eyebrow">KHÔNG GIAN CỦA BẠN</div>
     <h1>Cài đặt <span>& lịch sử.</span></h1>
     <p className="intro">Tùy chỉnh cách kiểm tra và quản lý kết quả đã lưu trên thiết bị này.</p>
-    <nav className="options-nav" aria-label="Mục cài đặt">
-      <a href="#preferences">Tùy chọn</a><a href="#tag-elements">Tag Element</a><a href="#authenticator-backup">Authenticator</a><a href="#portal-access">Quyền Portal</a><a href="#history">Lịch sử</a>
+    <nav className="options-nav" role="tablist" aria-label="Mục cài đặt">
+      {optionsTabs.map((tab) => <button type="button" role="tab" key={tab.id}
+        aria-selected={activeOptionsTab === tab.id} aria-controls={tab.id}
+        className={activeOptionsTab === tab.id ? 'active' : ''}
+        onClick={() => selectOptionsTab(tab.id)}>{tab.label}</button>)}
     </nav>
 
-    <form id="preferences" className="options-section" onSubmit={(event) => void submit(event)}>
+    <form id="preferences" className="options-section" hidden={activeOptionsTab !== 'preferences'} onSubmit={(event) => void submit(event)}>
       <div className="options-section-heading"><span className="options-section-icon"><Clock3 size={19} /></span><div>
         <h2>Tùy chọn kiểm tra</h2><p>Điều chỉnh thời gian chờ và cách lưu kết quả.</p>
       </div></div>
@@ -210,11 +254,24 @@ function App() {
           <span><strong>Lưu lịch sử kiểm tra</strong><small>Tắt để ngừng lưu kết quả mới. Kết quả cũ vẫn ở bên dưới cho tới khi bạn xóa.</small></span>
           <input id="save-history" type="checkbox" checked={settings.saveHistory} onChange={(event) => { setSaved(false); setSettings({ ...settings, saveHistory: event.target.checked }) }} />
         </label>
+        <div className="options-theme">
+          <span><strong>Giao diện</strong><small>Áp dụng cho popup, Cài đặt và Lịch sử của extension.</small></span>
+          <div role="radiogroup" aria-label="Chọn giao diện">
+            <button type="button" role="radio" aria-checked={settings.theme === 'light'}
+              className={settings.theme === 'light' ? 'active' : ''} onClick={() => selectTheme('light')}>
+              <Sun size={15} /> Sáng
+            </button>
+            <button type="button" role="radio" aria-checked={settings.theme === 'dark'}
+              className={settings.theme === 'dark' ? 'active' : ''} onClick={() => selectTheme('dark')}>
+              <Moon size={15} /> Tối
+            </button>
+          </div>
+        </div>
       </div>
       <div className="options-save"><button className="primary" type="submit">Lưu cài đặt</button>{saved && <span className="success" role="status">Đã lưu cài đặt.</span>}{saveError && <span className="options-error" role="alert">{saveError}</span>}</div>
     </form>
 
-    <section id="tag-elements" className="options-section tag-elements-options" aria-labelledby="tag-elements-title">
+    <section id="tag-elements" hidden={activeOptionsTab !== 'tag-elements'} className="options-section tag-elements-options" aria-labelledby="tag-elements-title">
       <div className="options-section-heading"><span className="options-section-icon"><Tags size={19} /></span><div>
         <h2 id="tag-elements-title">Danh sách Tag Element</h2>
         <p>Quản lý lĩnh vực và thành viên dùng cho các nút sao chép nhanh cạnh Thông tin VM.</p>
@@ -278,7 +335,7 @@ function App() {
       {tagError && <p className="options-error" role="alert">{tagError}</p>}
     </section>
 
-    <section id="authenticator-backup" className="options-section" aria-labelledby="authenticator-backup-title">
+    <section id="authenticator-backup" hidden={activeOptionsTab !== 'authenticator-backup'} className="options-section" aria-labelledby="authenticator-backup-title">
       <div className="options-section-heading"><span className="options-section-icon"><KeyRound size={19} /></span><div>
         <h2 id="authenticator-backup-title">Sao lưu Authenticator</h2><p>Xuất các tài khoản TOTP để sao lưu hoặc import lại vào IT Support Toolkit.</p>
       </div></div>
@@ -291,7 +348,7 @@ function App() {
       {authExportError && <p className="options-error" role="alert">{authExportError}</p>}
     </section>
 
-    <section id="portal-access" className="options-section" aria-labelledby="portal-access-options-title">
+    <section id="portal-access" hidden={activeOptionsTab !== 'portal-access'} className="options-section" aria-labelledby="portal-access-options-title">
       <div className="options-section-heading"><span className="options-section-icon"><ShieldCheck size={19} /></span><div>
         <h2 id="portal-access-options-title">Quyền truy cập Portal Long Vân</h2><p>Quản lý quyền sao chép và dán cấu hình VM trên Portal.</p>
       </div></div>
@@ -304,7 +361,7 @@ function App() {
       {portalError && <p className="options-error" role="alert">{portalError}</p>}
     </section>
 
-    <section id="history" className="options-section" aria-labelledby="options-history-title">
+    <section id="history" hidden={activeOptionsTab !== 'history'} className="options-section" aria-labelledby="options-history-title">
       <div className="options-section-heading options-history-heading"><span className="options-section-icon"><History size={19} /></span><div>
         <h2 id="options-history-title">Lịch sử kiểm tra <span className="options-badge">{historyLoading ? '…' : history.length}/50</span></h2>
         <p>Xem lại kết quả trên thiết bị này, không đồng bộ sang trình duyệt khác.</p>

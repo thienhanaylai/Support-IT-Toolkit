@@ -35,11 +35,28 @@ async function openSettings(initialHistory = records) {
     changed: (history: CheckRecord[]) => onChanged?.({ history: { newValue: history } as chrome.storage.StorageChange }, 'local') }
 }
 
-afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); document.body.innerHTML = '' })
+async function selectTab(label: string) {
+  const button = [...document.querySelectorAll<HTMLButtonElement>('.options-nav button')]
+    .find((item) => item.textContent === label)!
+  button.click()
+  await vi.waitFor(() => expect(button.getAttribute('aria-selected')).toBe('true'))
+  return button
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.resetModules()
+  document.body.innerHTML = ''
+  document.documentElement.removeAttribute('data-theme')
+  window.history.replaceState(null, '', location.pathname)
+})
 
 describe('Settings history', () => {
   it('can grant and revoke Portal access from Settings', async () => {
     const { permissionRequest, permissionRemove } = await openSettings()
+    await selectTab('Quyền Portal')
+    expect(document.querySelector('#preferences')?.hasAttribute('hidden')).toBe(true)
+    expect(document.querySelector('#portal-access')?.hasAttribute('hidden')).toBe(false)
     const toggle = document.querySelector<HTMLInputElement>('#portal-access-toggle')!
     await vi.waitFor(() => expect(toggle.disabled).toBe(false))
     toggle.click()
@@ -60,14 +77,17 @@ describe('Settings history', () => {
 
   it('offers Authenticator export from Settings with a secret warning', async () => {
     await openSettings()
+    const tab = await selectTab('Authenticator')
     const section = document.querySelector('#authenticator-backup')
     expect(section?.textContent).toContain('Export Auth')
     expect(section?.textContent).toContain('secret TOTP dạng đọc được')
-    expect(document.querySelector('a[href="#authenticator-backup"]')).not.toBeNull()
+    expect(tab.getAttribute('aria-selected')).toBe('true')
+    expect(section?.hasAttribute('hidden')).toBe(false)
   })
 
   it('shows saved records, filters them, and opens the selected result', async () => {
     await openSettings()
+    await selectTab('Lịch sử')
     expect(document.querySelectorAll('.options-history-list .recent')).toHaveLength(2)
     const search = document.querySelector<HTMLInputElement>('.options-search input')!
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(search, 'example.com')
@@ -89,6 +109,7 @@ describe('Settings history', () => {
     clear.click()
     await vi.waitFor(() => expect(remove).toHaveBeenCalledWith('history'))
     await vi.waitFor(() => expect(document.querySelector('.options-history-list')).toBeNull())
+    await selectTab('Tùy chọn')
     const toggle = document.querySelector<HTMLInputElement>('#save-history')!
     toggle.click()
     document.querySelector<HTMLButtonElement>('.options-save button')!.click()
@@ -98,6 +119,7 @@ describe('Settings history', () => {
 
   it('updates the Settings history when another extension page changes storage', async () => {
     const { changed } = await openSettings()
+    await selectTab('Lịch sử')
     changed([records[1]])
     await vi.waitFor(() => expect(document.querySelectorAll('.options-history-list .recent')).toHaveLength(1))
     expect(document.querySelector('.options-history-list')?.textContent).toContain('test.net:443')
@@ -105,8 +127,10 @@ describe('Settings history', () => {
 
   it('imports, adds, edits, removes, and saves Tag Element groups and members', async () => {
     const { set } = await openSettings()
+    const tab = await selectTab('Tag Element')
     const section = document.querySelector('#tag-elements')!
-    expect(document.querySelector('a[href="#tag-elements"]')).not.toBeNull()
+    expect(tab.getAttribute('aria-selected')).toBe('true')
+    expect(section.hasAttribute('hidden')).toBe(false)
     const textarea = section.querySelector<HTMLTextAreaElement>('#tag-import-text')!
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
       textarea,
@@ -143,5 +167,21 @@ describe('Settings history', () => {
       })],
     }))
     await vi.waitFor(() => expect(section.textContent).toContain('Đã lưu Tag Element'))
+  })
+
+  it('switches between real setting tabs and saves the selected light or dark theme', async () => {
+    const { set } = await openSettings()
+    expect(document.querySelector('#preferences')?.hasAttribute('hidden')).toBe(false)
+    expect(document.querySelector('#history')?.hasAttribute('hidden')).toBe(true)
+    const dark = document.querySelector<HTMLButtonElement>('.options-theme button[aria-checked="false"]')!
+    dark.click()
+    await vi.waitFor(() => expect(document.documentElement.dataset.theme).toBe('dark'))
+    document.querySelector<HTMLButtonElement>('.options-save .primary')!.click()
+    await vi.waitFor(() => expect(set).toHaveBeenCalledWith({
+      settings: expect.objectContaining({ theme: 'dark' }),
+    }))
+    await selectTab('Lịch sử')
+    expect(document.querySelector('#preferences')?.hasAttribute('hidden')).toBe(true)
+    expect(document.querySelector('#history')?.hasAttribute('hidden')).toBe(false)
   })
 })

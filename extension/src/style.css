@@ -1498,25 +1498,44 @@ h1 span {
 }
 .options-nav {
   display: flex;
-  gap: 7px;
-  flex-wrap: wrap;
+  gap: 0;
   margin: 0 0 24px;
+  border-bottom: 1px solid #d8e2e8;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
-.options-nav a {
+.options-nav button {
+  position: relative;
   display: inline-flex;
-  padding: 9px 14px;
-  border: 1px solid #dbe9e5;
-  border-radius: 99px;
-  color: #26705e;
-  background: #f4faf7;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-height: 43px;
+  padding: 0 17px;
+  border: 0;
+  background: transparent;
+  color: #617583;
   font-size: 11px;
   font-weight: 750;
 }
-.options-nav a:hover {
-  border-color: #7bc9a5;
-  background: #e8f7ef;
+.options-nav button:hover {
+  background: #eef6fd;
+  color: #1565c0;
 }
-.options-nav a:focus-visible,
+.options-nav button.active {
+  color: #1565c0;
+}
+.options-nav button.active::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  bottom: -1px;
+  left: 10px;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: #2196f3;
+}
+.options-nav button:focus-visible,
 .options-page button:focus-visible,
 .options-page input:focus-visible,
 .options-page a:focus-visible {
@@ -1565,6 +1584,58 @@ h1 span {
   grid-template-columns: minmax(180px, 0.9fr) minmax(220px, 1.1fr);
   gap: 18px;
   align-items: start;
+}
+.options-theme {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  grid-column: 1 / -1;
+  gap: 16px;
+  padding: 15px;
+  border: 1px solid #dce7ed;
+  border-radius: 9px;
+  background: #f5f9fd;
+}
+.options-theme > span strong {
+  display: block;
+  color: #26404e;
+  font-size: 12px;
+}
+.options-theme > span small {
+  display: block;
+  margin-top: 5px;
+  color: #71858d;
+  font-size: 11px;
+}
+.options-theme > div {
+  display: flex;
+  gap: 5px;
+  flex: none;
+  padding: 4px;
+  border: 1px solid #cbdce8;
+  border-radius: 8px;
+  background: #fff;
+}
+.options-theme button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #647985;
+  font-size: 10px;
+  font-weight: 750;
+}
+.options-theme button:hover {
+  background: #eef6fd;
+  color: #1565c0;
+}
+.options-theme button.active {
+  background: #1976d2;
+  color: #fff;
 }
 .options-field label,
 .options-agent > label {
@@ -2097,6 +2168,17 @@ h1 span {
   .options-auth-export {
     align-items: stretch;
     flex-direction: column;
+  }
+  .options-theme {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .options-theme > div {
+    width: 100%;
+  }
+  .options-theme button {
+    flex: 1;
+    justify-content: center;
   }
   .options-auth-export > button {
     width: 100%;
@@ -2988,8 +3070,8 @@ html.auth-is-reordering * {
   user-select: none !important;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+:root[data-theme="dark"] {
+  & {
     color-scheme: dark;
     background: #11191c;
     color: #e8f1f0;
@@ -3290,14 +3372,44 @@ html.auth-is-reordering * {
     border-color: #3b5257;
     color: #e8f1f0;
   }
-  .options-nav a {
-    background: #1d3832;
-    border-color: #38594d;
-    color: #9ee7c1;
+  .options-nav {
+    border-color: #344b50;
   }
-  .options-nav a:hover {
-    background: #285344;
-    border-color: #66b894;
+  .options-nav button {
+    color: #adc3c4;
+  }
+  .options-nav button:hover,
+  .options-nav button.active {
+    background: #182c3b;
+    color: #90caf9;
+  }
+  .options-nav button.active::after {
+    background: #42a5f5;
+  }
+  .options-theme {
+    border-color: #385063;
+    background: #172733;
+  }
+  .options-theme > span strong {
+    color: #e8f1f0;
+  }
+  .options-theme > span small {
+    color: #adc3c4;
+  }
+  .options-theme > div {
+    border-color: #3b525f;
+    background: #101b22;
+  }
+  .options-theme button {
+    color: #adc3c4;
+  }
+  .options-theme button:hover {
+    background: #1b3448;
+    color: #90caf9;
+  }
+  .options-theme button.active {
+    background: #1976d2;
+    color: #fff;
   }
   .options-section {
     background: #192428;
@@ -3689,4 +3801,226 @@ html.auth-is-reordering * {
     background: #050709;
     color: #fff;
   }
+}
+
+/* Long Vân Portal palette */
+:root[data-theme="light"] {
+  color-scheme: light;
+  background: #f4f6f8;
+  color: #263238;
+}
+:root[data-theme="light"] body,
+:root[data-theme="light"] .popup,
+:root[data-theme="light"] .panel,
+:root[data-theme="light"] .header,
+:root[data-theme="light"] .popup-header {
+  background: #fff;
+  color: #263238;
+}
+.header,
+.popup-header {
+  border-top: 3px solid #ffb300;
+  border-bottom-color: #1565c0;
+  background: #1976d2 !important;
+  color: #fff !important;
+}
+.header .version {
+  border-color: #ffffff4d;
+  background: #ffffff24;
+  color: #fff;
+}
+.popup-header .popup-settings {
+  color: #fff;
+}
+.popup-header .popup-settings:hover {
+  background: #ffffff24;
+}
+.eyebrow,
+h1 span,
+.popup-settings,
+.history-link,
+.settings-link,
+.success,
+.tag-tab-heading h1 svg,
+.tag-tab-group-copy > span:last-child,
+.tag-tab-members svg {
+  color: #1565c0;
+}
+.primary,
+.inline-check,
+.portal-access-button,
+.vm-transfer button,
+.password-result .password-copy-main,
+.auth-actions button:first-child,
+.auth-add-form button[type="submit"],
+.tag-editor-actions .primary,
+.auth-copy.is-copied {
+  border-color: #1976d2;
+  background: #1976d2;
+  color: #fff;
+}
+.primary:hover:not(:disabled),
+.inline-check:hover:not(:disabled),
+.portal-access-button:hover:not(:disabled),
+.vm-transfer button:hover:not(:disabled),
+.password-result .password-copy-main:hover:not(:disabled),
+.auth-actions button:first-child:hover:not(:disabled),
+.auth-add-form button[type="submit"]:hover:not(:disabled) {
+  background: #1565c0;
+}
+.popup-tabs button:hover,
+.popup-tabs button.active {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+.popup-tabs button.active::after {
+  background: #ffb300;
+}
+.options-section-icon,
+.brand-icon,
+.tool.selected .tool-icon {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+.options-toggle,
+.options-auth-export,
+.tag-import,
+.tag-tab-group-copy {
+  border-color: #d5e5f1;
+  background: #f5f9fd;
+}
+.tool:hover,
+.tool.selected,
+.auth-card:hover,
+.tag-tab-members button:hover {
+  border-color: #64b5f6;
+}
+.tool.selected,
+.auth-card.is-copied,
+.tag-tab-members button.is-copied {
+  background: #eef7fe;
+  box-shadow: 0 0 0 1px #2196f326;
+}
+.auth-actions button,
+.auth-add-form button,
+.tag-tab-heading > a,
+.tag-import button,
+.tag-add-member,
+.tag-add-group,
+.auth-copy {
+  border-color: #90caf9;
+  background: #eaf4fd;
+  color: #1565c0;
+}
+.auth-actions button:hover,
+.auth-add-form button:hover,
+.tag-tab-heading > a:hover,
+.tag-import button:hover,
+.tag-add-member:hover,
+.tag-add-group:hover,
+.auth-copy:hover {
+  background: #d8ecfc;
+}
+.auth-timer > span {
+  background: #2196f3;
+}
+.tag-tab-card.is-copied,
+.auth-card.is-copied {
+  border-color: #2196f3;
+}
+
+:root[data-theme="dark"] .header,
+:root[data-theme="dark"] .popup-header {
+  border-top-color: #ffb300;
+  background: #1565c0 !important;
+}
+:root[data-theme="dark"] .eyebrow,
+:root[data-theme="dark"] h1 span,
+:root[data-theme="dark"] .popup-settings,
+:root[data-theme="dark"] .history-link,
+:root[data-theme="dark"] .settings-link,
+:root[data-theme="dark"] .success,
+:root[data-theme="dark"] .tag-tab-heading h1 svg,
+:root[data-theme="dark"] .tag-tab-group-copy > span:last-child,
+:root[data-theme="dark"] .tag-tab-members svg {
+  color: #90caf9;
+}
+:root[data-theme="dark"] .primary,
+:root[data-theme="dark"] .inline-check,
+:root[data-theme="dark"] .portal-access-button,
+:root[data-theme="dark"] .vm-transfer button,
+:root[data-theme="dark"] .password-result .password-copy-main,
+:root[data-theme="dark"] .auth-actions button:first-child,
+:root[data-theme="dark"] .auth-add-form button[type="submit"],
+:root[data-theme="dark"] .tag-editor-actions .primary,
+:root[data-theme="dark"] .copy-current-vm {
+  border-color: #1976d2;
+  background: #1976d2;
+  color: #fff;
+}
+:root[data-theme="dark"] .popup-tabs button:hover,
+:root[data-theme="dark"] .popup-tabs button.active {
+  background: #172d3d;
+  color: #90caf9;
+}
+:root[data-theme="dark"] .popup-tabs button.active::after {
+  background: #ffb300;
+}
+:root[data-theme="dark"] .options-section-icon,
+:root[data-theme="dark"] .tool.selected .tool-icon {
+  background: #173a55;
+  color: #90caf9;
+}
+:root[data-theme="dark"] .options-toggle,
+:root[data-theme="dark"] .options-auth-export,
+:root[data-theme="dark"] .tag-import,
+:root[data-theme="dark"] .tag-tab-group-copy {
+  border-color: #38556b;
+  background: #14232d;
+}
+:root[data-theme="dark"] .tool:hover,
+:root[data-theme="dark"] .tool.selected,
+:root[data-theme="dark"] .auth-card:hover,
+:root[data-theme="dark"] .tag-tab-members button:hover {
+  border-color: #42a5f5;
+}
+:root[data-theme="dark"] .tool.selected,
+:root[data-theme="dark"] .auth-card.is-copied,
+:root[data-theme="dark"] .tag-tab-members button.is-copied {
+  background: #162f42;
+  box-shadow: 0 0 0 1px #42a5f533;
+}
+:root[data-theme="dark"] .auth-actions button,
+:root[data-theme="dark"] .auth-add-form button,
+:root[data-theme="dark"] .tag-tab-heading > a,
+:root[data-theme="dark"] .tag-import button,
+:root[data-theme="dark"] .tag-add-member,
+:root[data-theme="dark"] .tag-add-group,
+:root[data-theme="dark"] .auth-copy {
+  border-color: #426a86;
+  background: #172a37;
+  color: #90caf9;
+}
+:root[data-theme="dark"] .auth-timer > span {
+  background: #42a5f5;
+}
+:root[data-theme="dark"],
+:root[data-theme="dark"] body,
+:root[data-theme="dark"] .popup,
+:root[data-theme="dark"] .panel {
+  background: #0d161c;
+}
+:root[data-theme="dark"] .options-section,
+:root[data-theme="dark"] .popup-tool-group,
+:root[data-theme="dark"] .auth-card,
+:root[data-theme="dark"] .tag-tab-card {
+  border-color: #304957;
+  background: #121f28;
+}
+:root[data-theme="dark"] .input-panel,
+:root[data-theme="dark"] .settings-form,
+:root[data-theme="dark"] .tag-group-editor,
+:root[data-theme="dark"] .auth-add-form {
+  border-color: #304957;
+  background: #14232d;
 }

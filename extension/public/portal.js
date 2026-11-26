@@ -14,7 +14,7 @@
     vmInfoBusy: false, vmInfoCopied: false, vmInfoText: '', vmInfoKind: '',
     vmComposerOpen: false, vmComposerLoading: false, vmComposerCopying: false,
     vmComposerVmText: '', vmComposerExtraText: '', vmComposerTagGroups: [],
-    vmComposerAddedGroups: [], vmComposerText: '', vmComposerKind: '',
+    vmComposerAddedGroups: [], vmComposerText: '', vmComposerKind: '', vmComposerTheme: 'light',
     otpBusy: false, otpLoaded: false, otpCodes: [], otpSelectedId: '',
     otpMenuOpen: false, otpText: '', otpKind: '',
   }
@@ -149,6 +149,7 @@
       if (!vmResponse?.text) throw new Error('Không có thông tin VM để soạn nội dung.')
       state.vmComposerVmText = vmResponse.text
       state.vmComposerTagGroups = Array.isArray(tagResponse?.groups) ? tagResponse.groups : []
+      state.vmComposerTheme = tagResponse?.theme === 'dark' ? 'dark' : 'light'
       state.vmComposerText = ''
       state.vmComposerKind = ''
     } catch (error) {
@@ -270,6 +271,7 @@
       })
       document.body.append(overlay)
     }
+    overlay.classList.toggle('is-dark', state.vmComposerTheme === 'dark')
     const vmText = overlay.querySelector('.it-toolkit-vm-composer-vm')
     const extraText = overlay.querySelector('.it-toolkit-vm-composer-extra')
     if (vmText && vmText.value !== state.vmComposerVmText) vmText.value = state.vmComposerVmText

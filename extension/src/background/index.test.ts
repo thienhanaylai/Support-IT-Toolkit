@@ -107,7 +107,7 @@ describe('context menu popup', () => {
       { tab: { id: 8, url: 'https://portal.longvan.vn/computing-manager/manager/computing/computing_detail.xhtml?id=1' } },
       tags,
     )).toBe(true)
-    await vi.waitFor(() => expect(tags).toHaveBeenCalledWith({ groups }))
+    await vi.waitFor(() => expect(tags).toHaveBeenCalledWith({ groups, theme: 'light' }))
 
     const denied = vi.fn()
     expect(listener(

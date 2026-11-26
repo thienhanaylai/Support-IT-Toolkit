@@ -95,7 +95,7 @@ it('composes editable VM info, extra text, and a configured Element group before
   }]
   const sendMessage = vi.fn(async (message: { type: string }) =>
     message.type === 'toolkit:get-tag-elements'
-      ? { groups }
+      ? { groups, theme: 'dark' }
       : { info: { computingName: 'COMPUTING-A' }, text })
   const writeText = vi.fn(async () => {})
   const dom = await execute(
@@ -115,6 +115,7 @@ it('composes editable VM info, extra text, and a configured Element group before
   })
   const vmText = dialog.querySelector<HTMLTextAreaElement>('.it-toolkit-vm-composer-vm')!
   await vi.waitFor(() => expect(vmText.value).toBe(text))
+  expect(dialog.parentElement?.classList.contains('is-dark')).toBe(true)
   expect(sendMessage).toHaveBeenCalledWith({ type: 'toolkit:get-current-vm-info' })
   expect(sendMessage).toHaveBeenCalledWith({ type: 'toolkit:get-tag-elements' })
 

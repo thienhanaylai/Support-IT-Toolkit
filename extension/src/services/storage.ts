@@ -7,8 +7,14 @@ export type CheckRecord = {
   status: 'ok' | 'warn' | 'error'
   result: Record<string, unknown>
 }
-export type Settings = { timeoutMs: number; saveHistory: boolean }
-export const defaultSettings: Settings = { timeoutMs: 3000, saveHistory: true }
+export type Theme = 'light' | 'dark'
+export type Settings = { timeoutMs: number; saveHistory: boolean; theme: Theme }
+export const defaultSettings: Settings = { timeoutMs: 3000, saveHistory: true, theme: 'light' }
+
+export function applyTheme(theme: Theme): void {
+  document.documentElement.dataset.theme = theme
+  document.documentElement.style.colorScheme = theme
+}
 
 const sensitiveField = /(?:api[-_]?key|authorization|password|passwd|secret|access[-_]?token|refresh[-_]?token|session[-_]?token)/i
 
@@ -30,6 +36,7 @@ export async function getSettings(): Promise<Settings> {
   return {
     timeoutMs: saved?.timeoutMs ?? defaultSettings.timeoutMs,
     saveHistory: saved?.saveHistory ?? defaultSettings.saveHistory,
+    theme: saved?.theme === 'dark' ? 'dark' : 'light',
   }
 }
 

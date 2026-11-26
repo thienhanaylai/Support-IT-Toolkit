@@ -4,14 +4,19 @@ import { Download, Trash2 } from 'lucide-react'
 import { HistoryItem } from '../components/HistoryItem'
 import { Result } from '../components/Result'
 import { downloadReport } from '../services/report'
-import { getHistory, type CheckRecord } from '../services/storage'
+import { applyTheme, getHistory, getSettings, type CheckRecord } from '../services/storage'
 import '../style.css'
 
 function App() {
   const [history, setHistory] = useState<CheckRecord[]>([])
   const [selected, setSelected] = useState<CheckRecord | null>(null)
   const detailsRef = useRef<HTMLDivElement>(null)
-  useEffect(() => { void getHistory().then(setHistory) }, [])
+  useEffect(() => {
+    void Promise.all([getHistory(), getSettings()]).then(([items, settings]) => {
+      applyTheme(settings.theme)
+      setHistory(items)
+    }).catch(() => applyTheme('light'))
+  }, [])
   function showRecord(item: CheckRecord) {
     setSelected(item)
     requestAnimationFrame(() => detailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))

@@ -16,6 +16,7 @@ import {
   showAuthenticatorQRRegionPicker, type AuthenticatorQRRegion,
 } from '../services/authenticatorQR'
 import { loadTagElementGroups } from '../services/tagElements'
+import { getSettings } from '../services/storage'
 
 registerJobs()
 
@@ -226,8 +227,8 @@ chrome.runtime.onMessage.addListener((message: {
       respond({ error: 'Chỉ có thể dùng Tag Element trên trang Portal Long Vân.' })
       return false
     }
-    void loadTagElementGroups().then(
-      (groups) => respond({ groups }),
+    void Promise.all([loadTagElementGroups(), getSettings()]).then(
+      ([groups, settings]) => respond({ groups, theme: settings.theme }),
       (error) => respond({ error: error instanceof Error ? error.message : String(error) }),
     )
     return true
