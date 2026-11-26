@@ -1,4 +1,6 @@
-import { nativeRequest, type NativeProgress } from './nativeHost'
+import { runBrowserTool } from '../engines/browser-engine'
+import { runNativeTool } from '../engines/native-engine'
+import type { NativeProgress } from './nativeHost'
 import { domainOnly, mxToolboxLookup, registrationDomain, type MXCommand } from './domainLookup'
 import { publicIP } from './formatRecord'
 import { commonPorts } from './scanPorts'
@@ -16,7 +18,7 @@ export const labels: Record<Tool, string> = {
   mxtoolbox: 'MXToolbox', whois: 'WHOIS',
 }
 const external = new Set<Tool>(['mxtoolbox', 'whois'])
-const browser = new Set<Tool>(['vm_info', ...external])
+const browser = new Set<Tool>(['public_ip', 'vm_info', ...external])
 
 export async function runCheck(tool: Tool, input: string, portInput: number, scanPorts: number[] = commonPorts, mxCommand: MXCommand = 'dns', pingCount = 4, maxHops = 20, onProgress?: (event: NativeProgress) => void, tabId?: number, dnsRecordType: DNSRecordType = 'AUTO', dnsServer = ''): Promise<CheckRecord> {
   onProgress?.({ text: 'Đang đọc cài đặt...' })
@@ -40,6 +42,10 @@ export async function runCheck(tool: Tool, input: string, portInput: number, sca
     target = registrationDomain(host)
     result = await longVanWhoisLookup(target, timeoutMs, (text) => onProgress?.({ text }))
     source = 'Trang WHOIS Long Vân'
+  } else if (tool === 'public_ip') {
+    result = await runBrowserTool('public_ip', { timeoutMs }, onProgress)
+    if (!publicIP(result)) throw new Error('ifconfig.me không trả về địa chỉ IP hợp lệ')
+    source = 'Trình duyệt · Fetch ifconfig.me'
   } else {
     const params: Record<string, unknown> = { timeoutMs }
     if (tool === 'ping') Object.assign(params, { target: host, count: safePingCount(pingCount) })
@@ -48,20 +54,15 @@ export async function runCheck(tool: Tool, input: string, portInput: number, sca
     if (tool === 'port_scan') Object.assign(params, { target: host, ports: scanPorts, timeoutMs: Math.min(timeoutMs, 2000) })
     if (tool === 'dns_lookup') Object.assign(params, { name: host, recordType: dnsRecordType, resolver: dnsServer.trim() })
     if (tool === 'tls_check') Object.assign(params, { host, port: safePort(portInput) })
-    onProgress?.({ text: tool === 'public_ip' ? 'Đang chạy curl ifconfig.me...' :
-      tool === 'local_interfaces' ? 'Đang đọc cấu hình mạng...' :
+    onProgress?.({ text: tool === 'local_interfaces' ? 'Đang đọc cấu hình mạng...' :
       tool === 'dns_lookup' ? `Đang truy vấn DNS${dnsServer.trim() ? ` qua ${dnsServer.trim()}` : ' của hệ điều hành'}...` :
       tool === 'tls_check' ? 'Đang kết nối TLS và kiểm tra chứng chỉ...' :
       tool === 'tcp_check' ? 'Đang thử kết nối TCP...' :
       tool === 'port_scan' ? 'Đang quét các cổng TCP...' :
       tool === 'ping' ? 'Đang gửi gói Ping...' : 'Đang theo dõi các hop...' })
-    result = await nativeRequest(tool, params, onProgress)
+    result = await runNativeTool(tool, params, onProgress)
     if (tool === 'dns_lookup' && dnsServer.trim() && result.resolver === 'DNS của hệ điều hành') {
       throw new Error('Local Agent đã cũ, chưa hỗ trợ DNS server tùy chọn. Hãy chạy lại bộ cài Agent với Extension ID hiện tại.')
-    }
-    if (tool === 'public_ip') {
-      if (!publicIP(result)) throw new Error('ifconfig.me không trả về địa chỉ IP hợp lệ')
-      source = 'Máy người dùng · curl ifconfig.me'
     }
   }
   onProgress?.({ text: 'Đang hoàn tất kết quả...' })

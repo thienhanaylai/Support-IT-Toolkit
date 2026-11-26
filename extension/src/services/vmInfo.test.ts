@@ -8,7 +8,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { createElement } from 'react'
 import { Result } from '../components/Result'
 import { renderReportHTML } from './report'
-import { runCheck } from './checks'
+import { runCheck, toolRequiresAgent } from './checks'
 
 const sample = `
 <form id="frmMain"><div class="card">
@@ -162,16 +162,30 @@ describe('external domain lookups', () => {
     expect(html).toContain('&lt;script&gt;private&lt;/script&gt;')
   })
   it('does not report success when the public-IP service returns an invalid address', async () => {
-    const messages: Record<string, unknown>[] = []
     vi.stubGlobal('chrome', {
       storage: { local: { get: async () => ({ settings: { saveHistory: false } }) } },
-      runtime: { sendNativeMessage: async (_host: string, message: Record<string, unknown>) => {
-        messages.push(message)
-        return { success: true, ip: 'not-an-ip' }
-      } },
+      runtime: {},
     })
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, text: async () => 'not-an-ip' }))
+    vi.stubGlobal('fetch', fetchMock)
     await expect(runCheck('public_ip', '', 443)).rejects.toThrow('địa chỉ IP hợp lệ')
-    expect(messages).toMatchObject([{ action: 'public_ip' }])
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it('runs Public IP in the Browser Engine when the Native Host is unavailable', async () => {
+    const sendNativeMessage = vi.fn(async () => { throw new Error('Specified native messaging host not found.') })
+    vi.stubGlobal('chrome', {
+      storage: { local: { get: async () => ({ settings: { saveHistory: false } }) } },
+      runtime: { sendNativeMessage },
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, text: async () => '203.0.113.9' })))
+    vi.stubGlobal('crypto', { randomUUID: () => 'browser-ip' })
+    const record = await runCheck('public_ip', '', 443)
+    expect(record.result).toMatchObject({ success: true, action: 'public_ip', ip: '203.0.113.9' })
+    expect(record.source).toBe('Trình duyệt · Fetch ifconfig.me')
+    expect(sendNativeMessage).not.toHaveBeenCalled()
+    expect(toolRequiresAgent('public_ip')).toBe(false)
+    expect(toolRequiresAgent('ping')).toBe(true)
   })
   it('sends the chosen Ping count and Traceroute hop limit to the Local Agent', async () => {
     const messages: Record<string, unknown>[] = []
