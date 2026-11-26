@@ -129,42 +129,39 @@ it('fills the Portal OTP field from the matching Long Van Authenticator', async 
   dom.window.close()
 })
 
-it('keeps quick Auth paste off non-computing pages and removes it after Portal navigation', async () => {
-  const otpDialog = `<div class="ui-dialog" role="dialog">
+it('shows quick Auth paste on other Portal 2FA dialogs and hides it when the dialog closes', async () => {
+  const hostingUrl = 'https://portal.longvan.vn/cloud-service-manager/manager/web-hosting-service-detail.xhtml?id=1'
+  const otpDialog = (visible: boolean) => `<div id="j_idt2054:j_idt2059:dlgEnabled2FA" class="ui-dialog" role="dialog"
+    aria-hidden="${visible ? 'false' : 'true'}" style="display:${visible ? 'block' : 'none'}">
     <strong>Nhập mã xác thực để xem mật khẩu</strong>
-    <label for="portal-otp">Nhập mã OTP</label>
-    <input id="portal-otp" type="text" value="">
+    <label for="hosting-otp">Nhập mã OTP</label>
+    <input id="hosting-otp" type="text" value="">
   </div>`
-  const unrelatedMessage = vi.fn(async () => ({ codes: [
+  const hiddenMessage = vi.fn(async () => ({ codes: [
     { id: 'longvan', issuer: 'LONGVAN-PT', label: '0917580860', code: '654321' },
   ] }))
-  const unrelated = await execute(
-    'https://portal.longvan.vn/cloud-service-manager/manager/cloud-service-detail.xhtml?id=1',
-    otpDialog,
-    unrelatedMessage,
-    undefined,
-    false,
-  )
-  expect(unrelated.window.document.querySelector('.it-toolkit-otp-button')).toBeNull()
-  expect(unrelatedMessage).not.toHaveBeenCalledWith({ type: 'toolkit:get-authenticator-codes' })
-  unrelated.window.dispatchEvent(new unrelated.window.Event('pagehide'))
-  unrelated.window.close()
+  const hidden = await execute(hostingUrl, otpDialog(false), hiddenMessage, undefined, false)
+  await vi.waitFor(() => expect(hidden.window.document.querySelector('.it-toolkit-otp-button')).toBeNull())
+  expect(hiddenMessage).not.toHaveBeenCalledWith({ type: 'toolkit:get-authenticator-codes' })
+  hidden.window.dispatchEvent(new hidden.window.Event('pagehide'))
+  hidden.window.close()
 
   const sendMessage = vi.fn(async () => ({ codes: [
     { id: 'longvan', issuer: 'LONGVAN-PT', label: '0917580860', code: '654321' },
   ] }))
-  const computing = await execute(
-    'https://portal.longvan.vn/computing-manager/manager/computing/computing_detail.xhtml?id=1',
-    otpDialog,
-    sendMessage,
-  )
-  await vi.waitFor(() => expect(computing.window.document.querySelector('.it-toolkit-otp-button')).not.toBeNull())
-  computing.window.history.pushState({}, '', '/cloud-service-manager/manager/web-hosting-service-detail.xhtml?id=1')
-  computing.window.document.body.append(computing.window.document.createElement('span'))
-  await vi.waitFor(() => expect(computing.window.document.querySelector('.it-toolkit-otp-button')).toBeNull())
-  expect(computing.window.document.querySelector('.it-toolkit-otp-menu')).toBeNull()
-  computing.window.dispatchEvent(new computing.window.Event('pagehide'))
-  computing.window.close()
+  const dom = await execute(hostingUrl, otpDialog(true), sendMessage)
+  const input = dom.window.document.querySelector<HTMLInputElement>('#hosting-otp')!
+  const button = dom.window.document.querySelector<HTMLButtonElement>('.it-toolkit-otp-button')!
+  await vi.waitFor(() => expect(button.textContent).toBe('LONGVAN-PT: 654321'))
+  button.click()
+  await vi.waitFor(() => expect(input.value).toBe('654321'))
+
+  dom.window.document.querySelector('.ui-dialog')!.remove()
+  dom.window.document.body.append(dom.window.document.createElement('span'))
+  await vi.waitFor(() => expect(dom.window.document.querySelector('.it-toolkit-otp-button')).toBeNull())
+  await vi.waitFor(() => expect(dom.window.document.querySelector('.it-toolkit-otp-menu')).toBeNull())
+  dom.window.dispatchEvent(new dom.window.Event('pagehide'))
+  dom.window.close()
 })
 
 it('places Paste configuration inside Resources and reports the required order', async () => {

@@ -28,7 +28,7 @@ function App() {
     <p className="intro">Bản Browser-only không cần Local Agent. IP Public, HTTP Ping và DNS over HTTPS chạy trực tiếp trong trình duyệt.</p>
     <section className="agent-card portal-access-card" aria-labelledby="portal-access-title">
       <h2 id="portal-access-title">Quyền truy cập Portal Long Vân</h2>
-      <p>Cấp một lần để hiện nút sao chép thông số tại trang Dịch vụ và dán cấu hình tại trang Tạo computing. Quyền chỉ áp dụng cho <strong>portal.longvan.vn</strong>.</p>
+      <p>Cấp một lần để hiện nút sao chép thông số tại trang Dịch vụ, dán cấu hình tại trang Tạo computing và điền OTP trong hộp xác thực 2 lớp. Quyền chỉ áp dụng cho <strong>portal.longvan.vn</strong>.</p>
       {portalAccess ? <p className="success" role="status">Đã cấp quyền Portal. Hãy refresh các tab Portal đang mở.</p>
         : <button type="button" className="portal-access-button" disabled={portalBusy || portalAccess === null} onClick={() => void grantPortal()}>{portalBusy ? 'Đang yêu cầu...' : 'Cấp quyền Portal'}</button>}
       {portalError && <p className="options-error" role="alert">{portalError}</p>}

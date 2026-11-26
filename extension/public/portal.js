@@ -2,8 +2,7 @@
   const servicePath = '/cloud-service-manager/manager/cloud-service-detail.xhtml'
   const createPath = '/computing-manager/manager/computing/computing_create.xhtml'
   const detailPath = '/computing-manager/manager/computing/computing_detail.xhtml'
-  if (location.origin !== 'https://portal.longvan.vn' ||
-      (location.pathname !== servicePath && location.pathname !== createPath && location.pathname !== detailPath)) return
+  if (location.origin !== 'https://portal.longvan.vn') return
 
   const state = {
     busy: false, text: '', kind: '', config: null,
@@ -116,30 +115,71 @@
     }
   }
 
-  function otpControl() {
-    if (location.pathname !== detailPath) return null
-    const labels = [...document.querySelectorAll('label, strong, span, div')]
-    const label = labels.find((node) =>
-      (node.textContent ?? '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN') === 'nhập mã otp')
-    if (!label) return null
-    const dialog = label.closest('[role="dialog"], .ui-dialog, .modal, .p-dialog') ||
-      label.parentElement?.parentElement
+  function normalizedText(node) {
+    return (node?.textContent ?? '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN')
+  }
+
+  function isVisible(node) {
+    return !node.hidden && node.getAttribute('aria-hidden') !== 'true' &&
+      node.style.display !== 'none' && node.style.visibility !== 'hidden'
+  }
+
+  function otpLabelIn(dialog) {
+    return [...dialog.querySelectorAll('label, strong, span, div, p')].find((node) => {
+      const text = normalizedText(node)
+      return text.length <= 80 && /^(?:nhập\s+)?mã\s+otp(?:\s|$|[^a-z0-9])/.test(text)
+    }) ?? null
+  }
+
+  function otpDialog() {
+    const dialogs = [...document.querySelectorAll('[role="dialog"], .ui-dialog, .modal, .p-dialog')]
+    return dialogs.find((dialog) => {
+      if (!isVisible(dialog)) return false
+      return /(?:enable2fa|dlg.*2fa|2fa)/i.test(dialog.id || '') || Boolean(otpLabelIn(dialog))
+    }) ?? null
+  }
+
+  function otpInputIn(dialog, label) {
     const linked = label instanceof HTMLLabelElement && label.htmlFor
       ? document.getElementById(label.htmlFor) : null
-    let input = linked instanceof HTMLInputElement ? linked : null
-    if (!input) {
+    if (linked instanceof HTMLInputElement) return linked
+    if (label) {
       let sibling = label.nextElementSibling
-      while (sibling && !input) {
-        if (sibling instanceof HTMLInputElement) input = sibling
-        else input = sibling.querySelector('input')
+      while (sibling) {
+        const candidate = sibling instanceof HTMLInputElement ? sibling : sibling.querySelector('input')
+        if (candidate instanceof HTMLInputElement) return candidate
         sibling = sibling.nextElementSibling
       }
     }
-    if (!input && dialog) {
-      const candidates = [...dialog.querySelectorAll('input:not([type="hidden"]):not([disabled])')]
-      input = candidates.find((candidate) =>
-        Boolean(label.compareDocumentPosition(candidate) & Node.DOCUMENT_POSITION_FOLLOWING)) ?? null
+    const candidates = [...dialog.querySelectorAll('input:not([type="hidden"]):not([disabled])')]
+    const marked = candidates.find((input) =>
+      /otp|one.?time|2fa|token|auth/i.test(`${input.id} ${input.name} ${input.autocomplete}`))
+    if (marked) return marked
+    const numeric = candidates.find((input) =>
+      input.autocomplete === 'one-time-code' || input.inputMode === 'numeric' ||
+      (input.maxLength >= 6 && input.maxLength <= 8))
+    if (numeric) return numeric
+    return label
+      ? candidates.find((input) =>
+        Boolean(label.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING)) ?? null
+      : candidates[0] ?? null
+  }
+
+  function otpControl() {
+    const detected = otpDialog()
+    if (detected) {
+      const label = otpLabelIn(detected)
+      const input = otpInputIn(detected, label)
+      if (input) return { label, input, dialog: detected }
     }
+    // Older computing detail pages may render the dialog without an id/label match.
+    if (location.pathname !== detailPath) return null
+    const label = [...document.querySelectorAll('label, strong, span, div')]
+      .find((node) => normalizedText(node) === 'nhập mã otp')
+    if (!label) return null
+    const dialog = label.closest('[role="dialog"], .ui-dialog, .modal, .p-dialog') ||
+      label.parentElement?.parentElement
+    const input = dialog ? otpInputIn(dialog, label) : null
     return input ? { label, input, dialog } : null
   }
 
@@ -204,7 +244,7 @@
   }
 
   async function loadAuthenticatorCodes(openMenu = false) {
-    if (location.pathname !== detailPath) return null
+    if (!otpControl()) return null
     if (state.otpBusy) return selectedOtpCode()
     state.otpBusy = true
     state.otpText = ''
@@ -827,21 +867,22 @@
   }
 
   function renderOtpTool() {
-    if (location.pathname !== detailPath) {
-      removeOtpTool()
-      return
-    }
     const control = otpControl()
     if (!control) {
-      document.getElementById(otpMenuId)?.remove()
+      if (document.querySelector('.it-toolkit-otp-tools, .it-toolkit-otp-anchor') ||
+          document.getElementById(otpMenuId) || state.otpCodes.length || state.otpLoaded) {
+        removeOtpTool()
+      }
       return
     }
     let anchor = control.dialog?.querySelector('.it-toolkit-otp-anchor')
     if (!anchor) {
       const candidates = [...(control.dialog?.querySelectorAll('label, strong, span, div, p') ?? [])]
-      anchor = candidates.find((node) =>
-        (node.textContent ?? '').replace(/\s+/g, ' ').trim() === 'Nhập mã xác thực để truy cập console') ||
-        control.label
+      anchor = candidates.find((node) => {
+        const text = normalizedText(node)
+        return text.length <= 100 && /nhập mã xác thực/.test(text)
+      }) || control.label || control.dialog?.querySelector('.ui-dialog-content') || control.dialog
+      if (!anchor) return
       anchor.classList.add('it-toolkit-otp-anchor')
     }
     let root = anchor.querySelector(':scope > .it-toolkit-otp-tools')

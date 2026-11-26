@@ -161,7 +161,7 @@ function App() {
         <h2 id="portal-access-options-title">Quyền truy cập Portal Long Vân</h2><p>Quản lý quyền sao chép và dán cấu hình VM trên Portal.</p>
       </div></div>
       <label className="options-toggle" htmlFor="portal-access-toggle">
-        <span><strong>Cho phép truy cập portal.longvan.vn</strong><small>Chỉ dùng trên trang Dịch vụ và Tạo computing. Sau khi thay đổi, hãy refresh các tab Portal đang mở.</small></span>
+        <span><strong>Cho phép truy cập portal.longvan.vn</strong><small>Dùng cho tiện ích Dịch vụ, Tạo computing và điền OTP trong hộp xác thực 2 lớp trên Portal. Sau khi thay đổi, hãy refresh các tab Portal đang mở.</small></span>
         <input id="portal-access-toggle" type="checkbox" disabled={portalBusy || portalAccess === null} checked={portalAccess === true} onChange={(event) => void changePortalAccess(event.target.checked)} />
       </label>
       {portalAccess === true && <p className="success" role="status">Đã cấp quyền Portal.</p>}

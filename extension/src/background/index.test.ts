@@ -73,6 +73,41 @@ describe('context menu popup', () => {
     }))
   })
 
+  it('allows OTP lookup on any Portal page and rejects other origins', async () => {
+    type Listener = (
+      message: { type?: string },
+      sender: { tab?: { id?: number; url?: string } },
+      respond: (value: unknown) => void,
+    ) => boolean | void
+    const listeners: Listener[] = []
+    vi.stubGlobal('chrome', {
+      runtime: {
+        onInstalled: { addListener: vi.fn() },
+        onMessage: { addListener: (listener: Listener) => listeners.push(listener) },
+      },
+      contextMenus: { create: vi.fn(), onClicked: { addListener: vi.fn() } },
+      sidePanel: { setPanelBehavior: vi.fn(async () => {}) },
+      storage: { local: { get: vi.fn(async () => ({})) } },
+    })
+    await import('./index')
+    const listener = listeners.at(-1)!
+    const allowed = vi.fn()
+    expect(listener(
+      { type: 'toolkit:get-authenticator-codes' },
+      { tab: { id: 8, url: 'https://portal.longvan.vn/cloud-service-manager/manager/web-hosting-service-detail.xhtml?id=1' } },
+      allowed,
+    )).toBe(true)
+    await vi.waitFor(() => expect(allowed).toHaveBeenCalledWith({ codes: [] }))
+
+    const denied = vi.fn()
+    expect(listener(
+      { type: 'toolkit:get-authenticator-codes' },
+      { tab: { id: 9, url: 'https://portal.longvan.vn.evil.test/cloud-service-manager/manager/web-hosting-service-detail.xhtml' } },
+      denied,
+    )).toBe(false)
+    expect(denied).toHaveBeenCalledWith({ error: 'Chỉ có thể điền OTP trên trang Portal Long Vân.' })
+  })
+
   it('opens the QR region picker on the active tab', async () => {
     type Listener = (
       message: { type?: string },

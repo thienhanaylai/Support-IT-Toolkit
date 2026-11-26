@@ -1,5 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { hasPortalAccess, portalOriginPattern, removePortalAccess, requestPortalAccess } from './portalAccess'
+import {
+  hasPortalAccess, isPortalPageUrl, portalOriginPattern, removePortalAccess, requestPortalAccess,
+} from './portalAccess'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -15,4 +17,12 @@ it('uses only the Long Vân Portal origin for optional access', async () => {
   expect(contains).toHaveBeenCalledWith(expected)
   expect(request).toHaveBeenCalledWith(expected)
   expect(remove).toHaveBeenCalledWith(expected)
+})
+
+it('allows OTP lookup on any Portal page but not lookalike origins', () => {
+  expect(isPortalPageUrl('https://portal.longvan.vn/cloud-service-manager/manager/web-hosting-service-detail.xhtml?id=1')).toBe(true)
+  expect(isPortalPageUrl('https://portal.longvan.vn/computing-manager/manager/computing/computing_detail.xhtml?id=1')).toBe(true)
+  expect(isPortalPageUrl('https://portal.longvan.vn.evil.test/cloud-service-manager/manager/web-hosting-service-detail.xhtml')).toBe(false)
+  expect(isPortalPageUrl('http://portal.longvan.vn/cloud-service-manager/manager/web-hosting-service-detail.xhtml')).toBe(false)
+  expect(isPortalPageUrl('not a url')).toBe(false)
 })

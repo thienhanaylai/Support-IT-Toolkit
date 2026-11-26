@@ -3,7 +3,7 @@ import {
   buildVmName, copyServiceConfig, isPortalCreateUrl, isPortalVmConfig,
   pasteServiceConfig, portalVmConfigKey,
 } from '../services/portalVmConfig'
-import { portalOriginPattern } from '../services/portalAccess'
+import { isPortalPageUrl, portalOriginPattern } from '../services/portalAccess'
 import {
   generatePassword, normalizePasswordOptions, passwordOptionsKey, passwordRecentKey,
 } from '../services/passwordGenerator'
@@ -19,11 +19,7 @@ import {
 registerJobs()
 
 const portalScriptId = 'longvan-portal-tools'
-const portalMatches = [
-  'https://portal.longvan.vn/cloud-service-manager/manager/cloud-service-detail.xhtml*',
-  'https://portal.longvan.vn/computing-manager/manager/computing/computing_create.xhtml*',
-  'https://portal.longvan.vn/computing-manager/manager/computing/computing_detail.xhtml*',
-]
+const portalMatches = [portalOriginPattern]
 
 async function syncPortalContentScript(): Promise<void> {
   if (!chrome.permissions?.contains || !chrome.scripting?.getRegisteredContentScripts) return
@@ -209,8 +205,8 @@ chrome.runtime.onMessage.addListener((message: {
     return true
   }
   if (message?.type === 'toolkit:get-authenticator-codes') {
-    if (!url || !isPortalVMUrl(url)) {
-      respond({ error: 'Chỉ có thể điền OTP tại trang chi tiết computing của Portal.' })
+    if (!url || !isPortalPageUrl(url)) {
+      respond({ error: 'Chỉ có thể điền OTP trên trang Portal Long Vân.' })
       return false
     }
     void loadAuthenticatorEntries().then((entries) => respond({

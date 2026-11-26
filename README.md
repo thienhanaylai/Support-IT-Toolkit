@@ -29,7 +29,7 @@ Quyền `https://portal.longvan.vn/*` là quyền tùy chọn và chỉ được
 - Trang Dịch vụ: sao chép CORE, RAM, Internet, Storage, OS, Site Provider, chủ sở hữu và mã dịch vụ.
 - Trang Tạo computing: dán tài nguyên, gợi ý tên VM, tạo mật khẩu và điền cấu hình theo thứ tự an toàn.
 - Trang chi tiết computing: sao chép Link VM, Tên computing, Nhóm ảo hóa, Nhóm, Tên VM, VMID, VMP, Host và ResourcePool.
-- Hộp xác thực hai lớp: điền mã TOTP hiện tại; content script không nhận secret.
+- Hộp xác thực hai lớp: nhận diện dialog `dlgEnabled2FA` trên các trang Portal và điền mã TOTP hiện tại; content script không nhận secret.
 - Extension không tự bấm Lưu/Tạo VM.
 
 ## Cài đặt
