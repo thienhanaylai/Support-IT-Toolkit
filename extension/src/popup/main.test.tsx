@@ -117,6 +117,40 @@ it('scrolls to the result when the user starts a check, not when the popup reope
   await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1))
 })
 
+it('shows DNS Check with record type and a custom DNS server', async () => {
+  document.body.innerHTML = '<div id="root"></div>'
+  Element.prototype.scrollIntoView = vi.fn()
+  const draft = {
+    input: 'example.com', port: 443, pingCount: 4, maxHops: 20,
+    scanMode: 'common', customPorts: '22,80,443', mxCommand: 'dns',
+    dnsRecordType: 'AAAA', dnsServer: '1.1.1.1', tool: 'dns_lookup',
+  }
+  const sendMessage = vi.fn(async (message: { type: string }) =>
+    message.type === 'toolkit:get-job' ? {} :
+      { job: { id: 'dns-job', tool: 'dns_lookup', status: 'running', progress: [] } })
+  vi.stubGlobal('chrome', {
+    runtime: { sendMessage },
+    tabs: { query: vi.fn(async () => []) },
+    storage: {
+      session: { get: vi.fn(async () => ({ [draftKey]: draft })), set: vi.fn(async () => {}), remove: vi.fn(async () => {}) },
+      local: { get: vi.fn(async () => ({ history: [] })) },
+      onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
+    },
+  })
+  await import('./main')
+  await showTools()
+  expect(document.querySelector('.domain-tool-section')?.textContent).toContain('DNS Check')
+  expect((document.querySelector('#dns-record-type') as HTMLSelectElement).value).toBe('AAAA')
+  expect((document.querySelector('#dns-server') as HTMLInputElement).value).toBe('1.1.1.1')
+  document.querySelector<HTMLButtonElement>('.inline-check')!.click()
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+    type: 'toolkit:start-job',
+    request: expect.objectContaining({
+      tool: 'dns_lookup', input: 'example.com', dnsRecordType: 'AAAA', dnsServer: '1.1.1.1',
+    }),
+  })))
+})
+
 it('offers copy only on the Service tab and includes OS and Site Provider for review', async () => {
   document.body.innerHTML = '<div id="root"></div>'
   const config = {

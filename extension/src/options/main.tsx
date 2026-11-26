@@ -205,7 +205,7 @@ function App() {
       <div className="options-section-heading"><span className="options-section-icon"><HardDrive size={19} /></span><div>
         <h2 id="agent-options-title">Local Agent cho Windows</h2><p>Cài hoặc cập nhật Agent khi cần dùng các công cụ mạng tại máy.</p>
       </div></div>
-      <p>Ping, Traceroute, TCP Port, Quét Port, SSL/TLS và Mạng LAN cần Agent cài riêng. <a href={agentZipURL} target="_blank" rel="noopener noreferrer">Tải ZIP Agent từ GitHub Release ↗</a>, giải nén toàn bộ rồi chạy <strong>Install.cmd</strong> bên trong và nhập Extension ID của bản này khi được hỏi.</p>
+      <p>Ping, Traceroute, TCP Port, Quét Port, DNS Check, SSL/TLS và Mạng LAN cần Agent cài riêng. <a href={agentZipURL} target="_blank" rel="noopener noreferrer">Tải ZIP Agent từ GitHub Release ↗</a>, giải nén toàn bộ rồi chạy <strong>Install.cmd</strong> bên trong và nhập Extension ID của bản này khi được hỏi.</p>
       <label htmlFor="current-extension-id">Extension ID của bạn</label>
       <input id="current-extension-id" readOnly value={chrome.runtime.id} onFocus={(event) => event.currentTarget.select()} />
       <p className="agent-note">Không di chuyển hoặc chạy riêng Install.cmd vì bộ cài cần các file đi kèm trong ZIP. Agent không được đóng gói vào extension trên Edge Add-ons.</p>

@@ -28,7 +28,7 @@ function App() {
   return <main className="panel"><div className="main-content onboarding">
     <div className="eyebrow">BẮT ĐẦU SỬ DỤNG</div>
     <h1>Đã cài <span>IT Support Toolkit.</span></h1>
-    <p className="intro">WHOIS và MXToolbox có thể dùng ngay. Các công cụ Ping, Traceroute, TCP Port, Quét Port, SSL/TLS, Mạng LAN và IP Public cần Local Agent trên Windows.</p>
+    <p className="intro">WHOIS và MXToolbox có thể dùng ngay. Các công cụ Ping, Traceroute, TCP Port, Quét Port, DNS Check, SSL/TLS, Mạng LAN và IP Public cần Local Agent trên Windows.</p>
     <section className="agent-card portal-access-card" aria-labelledby="portal-access-title">
       <h2 id="portal-access-title">Quyền truy cập Portal Long Vân</h2>
       <p>Cấp một lần để hiện nút sao chép thông số tại trang Dịch vụ và dán cấu hình tại trang Tạo computing. Quyền chỉ áp dụng cho <strong>portal.longvan.vn</strong>.</p>

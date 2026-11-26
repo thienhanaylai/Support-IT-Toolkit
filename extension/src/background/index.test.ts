@@ -55,6 +55,46 @@ describe('context menu popup', () => {
     await vi.waitFor(() => expect(remove).toHaveBeenCalledWith({ origins: ['https://api.ipify.org/*'] }))
   })
 
+  it('opens the QR region picker on the active tab', async () => {
+    type Listener = (
+      message: { type?: string },
+      sender: { tab?: { id?: number; url?: string } },
+      respond: (value: unknown) => void,
+    ) => boolean | void
+    const listeners: Listener[] = []
+    const set = vi.fn(async () => {})
+    const executeScript = vi.fn(async () => [{ result: undefined }])
+    vi.stubGlobal('crypto', { randomUUID: () => 'qr-token' })
+    vi.stubGlobal('chrome', {
+      runtime: {
+        onInstalled: { addListener: vi.fn() },
+        onMessage: { addListener: (listener: Listener) => listeners.push(listener) },
+      },
+      contextMenus: { create: vi.fn(), onClicked: { addListener: vi.fn() } },
+      sidePanel: { setPanelBehavior: vi.fn(async () => {}) },
+      storage: {
+        session: { set, remove: vi.fn(async () => {}) },
+        local: { get: vi.fn(async () => ({})) },
+      },
+      tabs: { query: vi.fn(async () => [{ id: 21, windowId: 7, url: 'https://example.com/qr' }]) },
+      scripting: { executeScript },
+    })
+    await import('./index')
+    const respond = vi.fn()
+    expect(listeners.at(-1)!({ type: 'toolkit:start-auth-qr-region' }, {}, respond)).toBe(true)
+    await vi.waitFor(() => expect(respond).toHaveBeenCalledWith({ started: true }))
+    expect(set).toHaveBeenCalledWith({
+      authenticatorQRPicker: expect.objectContaining({
+        token: 'qr-token', tabId: 21, windowId: 7,
+      }),
+    })
+    expect(executeScript).toHaveBeenCalledWith({
+      target: { tabId: 21 },
+      func: expect.any(Function),
+      args: ['qr-token'],
+    })
+  })
+
   it('routes Portal page buttons through the service worker with the sender tab', async () => {
     const listeners: Array<(message: { type?: string }, sender: { tab?: { id?: number; url?: string } }, respond: (value: unknown) => void) => boolean | void> = []
     const config = {

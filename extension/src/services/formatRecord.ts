@@ -48,9 +48,24 @@ export function publicIP(result: Record<string, unknown>): string | null {
   } catch { return null }
 }
 
+export function formatDNSCheck(result: Record<string, unknown>): string {
+  const records = Array.isArray(result.records)
+    ? result.records.filter((item): item is string => typeof item === 'string') : []
+  return [
+    `Tên/IP: ${String(result.name ?? '—')}`,
+    `Loại bản ghi: ${String(result.recordType ?? '—')}`,
+    `DNS server: ${String(result.resolver ?? '—')}`,
+    `Thời gian: ${String(result.durationMs ?? '—')} ms`,
+    '',
+    records.length ? 'Kết quả:' : 'Không tìm thấy bản ghi.',
+    ...records.map((item) => `• ${item}`),
+  ].join('\n').trim()
+}
+
 export function getCopyText(record: CheckRecord): string {
   if (record.tool === 'IP Public') return publicIP(record.result) ?? ''
   if (record.tool === 'Thông tin VM') return formatVMInfo(record.result)
+  if (record.tool === 'DNS Check') return formatDNSCheck(record.result)
   if (record.tool === 'MXToolbox') return formatMXToolbox(record.result)
   if (record.tool === 'WHOIS' || record.tool === 'WHOIS / RDAP') return formatWHOIS(record.result)
   const raw = getRawOutput(record.result)

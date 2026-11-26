@@ -38,6 +38,7 @@ type request struct {
 	Ports      []int  `json:"ports"`
 	TimeoutMs  int    `json:"timeoutMs"`
 	RecordType string `json:"recordType"`
+	Resolver   string `json:"resolver"`
 	Stream     bool   `json:"stream"`
 }
 
@@ -350,14 +351,30 @@ func dnsLookup(req request, timeout int) (response, error) {
 	}
 	kind := strings.ToUpper(req.RecordType)
 	if kind == "" {
-		kind = "A"
+		kind = "AUTO"
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Millisecond)
 	defer cancel()
 	start := time.Now()
 	var values []string
-	r := net.DefaultResolver
+	r, resolverName, err := resolverForRequest(req.Resolver, timeout)
+	if err != nil {
+		return nil, err
+	}
+	if kind == "AUTO" {
+		if net.ParseIP(host) != nil {
+			kind = "PTR"
+		} else {
+			kind = "A/AAAA"
+		}
+	}
 	switch kind {
+	case "A/AAAA":
+		var records []net.IPAddr
+		records, err = r.LookupIPAddr(ctx, host)
+		for _, item := range records {
+			values = append(values, item.IP.String())
+		}
 	case "A", "AAAA":
 		ips, e := r.LookupIP(ctx, "ip4", host)
 		if kind == "AAAA" {
@@ -387,6 +404,11 @@ func dnsLookup(req request, timeout int) (response, error) {
 		if err == nil {
 			values = []string{name}
 		}
+	case "PTR":
+		if net.ParseIP(host) == nil {
+			return nil, errors.New("PTR yêu cầu địa chỉ IPv4 hoặc IPv6")
+		}
+		values, err = r.LookupAddr(ctx, host)
 	default:
 		return nil, errors.New("recordType không được hỗ trợ")
 	}
@@ -396,7 +418,42 @@ func dnsLookup(req request, timeout int) (response, error) {
 	if len(values) > 50 {
 		values = values[:50]
 	}
-	return response{"name": host, "recordType": kind, "records": values, "durationMs": time.Since(start).Milliseconds(), "resolver": "DNS của hệ điều hành"}, nil
+	return response{"name": host, "recordType": kind, "records": values, "durationMs": time.Since(start).Milliseconds(), "resolver": resolverName}, nil
+}
+
+func resolverForRequest(value string, timeout int) (*net.Resolver, string, error) {
+	server := strings.TrimSpace(value)
+	if server == "" {
+		return net.DefaultResolver, "DNS của hệ điều hành", nil
+	}
+	address, err := dnsServerAddress(server)
+	if err != nil {
+		return nil, "", err
+	}
+	dialer := &net.Dialer{Timeout: time.Duration(timeout) * time.Millisecond}
+	resolver := &net.Resolver{
+		PreferGo:     true,
+		StrictErrors: true,
+		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			return dialer.DialContext(ctx, network, address)
+		},
+	}
+	return resolver, address, nil
+}
+
+func dnsServerAddress(value string) (string, error) {
+	if ip := net.ParseIP(value); ip != nil {
+		return net.JoinHostPort(ip.String(), "53"), nil
+	}
+	host, portText, err := net.SplitHostPort(value)
+	if err != nil || net.ParseIP(strings.Trim(host, "[]")) == nil {
+		return "", errors.New("DNS server phải là địa chỉ IP, có thể kèm port")
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil || port < 1 || port > 65535 {
+		return "", errors.New("port DNS phải từ 1 đến 65535")
+	}
+	return net.JoinHostPort(strings.Trim(host, "[]"), strconv.Itoa(port)), nil
 }
 
 func tlsCheck(req request, timeout int) (response, error) {

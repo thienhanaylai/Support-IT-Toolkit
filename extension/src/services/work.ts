@@ -1,6 +1,6 @@
 import type { MXCommand } from './domainLookup'
 import type { NativeProgress } from './nativeHost'
-import type { Tool } from './checks'
+import type { DNSRecordType, Tool } from './checks'
 import type { CheckRecord } from './storage'
 
 export const jobKey = 'currentCheck'
@@ -14,6 +14,8 @@ export type CheckRequest = {
   mxCommand: MXCommand
   pingCount: number
   maxHops: number
+  dnsRecordType?: DNSRecordType
+  dnsServer?: string
   tabId?: number
 }
 
@@ -34,5 +36,7 @@ export type PopupDraft = {
   scanMode: 'common' | 'custom'
   customPorts: string
   mxCommand: MXCommand
+  dnsRecordType?: DNSRecordType
+  dnsServer?: string
   tool: Tool | null
 }

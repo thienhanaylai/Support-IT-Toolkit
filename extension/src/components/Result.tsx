@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Check, Copy, RefreshCw } from 'lucide-react'
-import { formatLAN, getCopyText, getRawOutput, publicIP } from '../services/formatRecord'
+import { formatDNSCheck, formatLAN, getCopyText, getRawOutput, publicIP } from '../services/formatRecord'
 import { formatMXToolbox, formatWHOIS } from '../services/domainLookup'
 import { formatVMInfo } from '../services/vmInfo'
 import type { CheckRecord } from '../services/storage'
@@ -19,6 +19,7 @@ export function Result({ record, onCopyCurrentVM, copyingCurrentVM = false, copi
   const isPingWithOutput = record.tool === 'Ping' && Boolean(rawOutput)
   const isLAN = record.tool === 'Mạng LAN'
   const isVMInfo = record.tool === 'Thông tin VM'
+  const isDNSCheck = record.tool === 'DNS Check'
   const isDomainLookup = record.tool === 'MXToolbox' || record.tool === 'WHOIS' || record.tool === 'WHOIS / RDAP'
   const scanRows = Array.isArray(record.result.ports) ? record.result.ports.filter(
     (item): item is { port: number; state: string; service?: string; durationMs?: number } =>
@@ -54,7 +55,7 @@ export function Result({ record, onCopyCurrentVM, copyingCurrentVM = false, copi
     <div className="result-target">{record.target}</div>
     {!isPingWithOutput && <div className="source">{record.source}</div>}
     {!rawOutput && vmCopyButtons}
-    {isPingWithOutput || (isLAN && rawOutput) ? null : record.tool === 'WHOIS' ? <WhoisResult result={record.result} /> : record.tool === 'SSL / TLS' ? <TlsResult result={record.result} /> : isLAN ? <pre>{formatLAN(record.result)}</pre> : isVMInfo || isDomainLookup ? <pre>{isVMInfo ? formatVMInfo(record.result) : record.tool === 'MXToolbox' ? formatMXToolbox(record.result) : formatWHOIS(record.result)}</pre> : scanRows ? <>
+    {isPingWithOutput || (isLAN && rawOutput) ? null : record.tool === 'WHOIS' ? <WhoisResult result={record.result} /> : record.tool === 'SSL / TLS' ? <TlsResult result={record.result} /> : isLAN ? <pre>{formatLAN(record.result)}</pre> : isDNSCheck ? <pre>{formatDNSCheck(record.result)}</pre> : isVMInfo || isDomainLookup ? <pre>{isVMInfo ? formatVMInfo(record.result) : record.tool === 'MXToolbox' ? formatMXToolbox(record.result) : formatWHOIS(record.result)}</pre> : scanRows ? <>
       <div className="scan-summary"><strong>{String(record.result.openCount ?? 0)} mở</strong><span>{String(record.result.closedCount ?? 0)} đóng</span><span>{String(record.result.timeoutCount ?? 0)} timeout</span></div>
       <div className="scan-address">IP kiểm tra: {String(record.result.resolvedIp ?? record.target)}</div>
       <div className="scan-table-wrap"><table className="scan-table"><thead><tr><th>PORT</th><th>GỢI Ý</th><th>TRẠNG THÁI</th><th>ĐỘ TRỄ</th></tr></thead><tbody>

@@ -5,7 +5,7 @@ import { HistoryItem } from '../components/HistoryItem'
 import { Result } from '../components/Result'
 import { PasswordGenerator } from '../components/PasswordGenerator'
 import { Authenticator } from '../components/Authenticator'
-import { labels, toolRequiresAgent, type Tool } from '../services/checks'
+import { labels, toolRequiresAgent, type DNSRecordType, type Tool } from '../services/checks'
 import { getHistory, getSettings, type CheckRecord } from '../services/storage'
 import { commonPorts, parseScanPorts } from '../services/scanPorts'
 import { domainOnly, isMXToolboxApiKey, registrationDomain, type MXCommand } from '../services/domainLookup'
@@ -26,6 +26,7 @@ const tools: { id: Tool; icon: React.ReactNode; detail: string }[] = [
   { id: 'tls_check', icon: <ShieldCheck size={19} />, detail: 'Chứng chỉ & TLS' },
   { id: 'mxtoolbox', icon: <MailSearch size={19} />, detail: 'DNS & email từ MXToolbox' },
   { id: 'whois', icon: <UserRoundSearch size={19} />, detail: 'Thông tin đăng ký tên miền' },
+  { id: 'dns_lookup', icon: <Globe2 size={19} />, detail: 'Truy vấn qua DNS tùy chọn' },
   { id: 'local_interfaces', icon: <Monitor size={19} />, detail: 'IP LAN & adapter' },
   { id: 'public_ip', icon: <Zap size={19} />, detail: 'IP Internet nhìn thấy' },
 ]
@@ -43,6 +44,8 @@ function App() {
   const [scanMode, setScanMode] = useState<'common' | 'custom'>('common')
   const [customPorts, setCustomPorts] = useState('22,80,443,8080')
   const [mxCommand, setMxCommand] = useState<MXCommand>('dns')
+  const [dnsRecordType, setDnsRecordType] = useState<DNSRecordType>('AUTO')
+  const [dnsServer, setDnsServer] = useState('')
   const [tool, setTool] = useState<Tool | null>(null)
   const [ready, setReady] = useState(false)
   const [starting, setStarting] = useState(false)
@@ -112,6 +115,8 @@ function App() {
         setScanMode(draft.scanMode)
         setCustomPorts(draft.customPorts)
         setMxCommand(draft.mxCommand)
+        setDnsRecordType(draft.dnsRecordType ?? 'AUTO')
+        setDnsServer(draft.dnsServer ?? '')
         setTool(draft.tool)
       }
       if (typeof stored.selectedTarget === 'string' && stored.selectedTarget) {
@@ -138,9 +143,9 @@ function App() {
 
   useLayoutEffect(() => {
     if (!ready) return
-    const draft: PopupDraft = { input, port, pingCount, maxHops, scanMode, customPorts, mxCommand, tool }
+    const draft: PopupDraft = { input, port, pingCount, maxHops, scanMode, customPorts, mxCommand, dnsRecordType, dnsServer, tool }
     void chrome.storage.session.set({ [draftKey]: draft })
-  }, [ready, input, port, pingCount, maxHops, scanMode, customPorts, mxCommand, tool])
+  }, [ready, input, port, pingCount, maxHops, scanMode, customPorts, mxCommand, dnsRecordType, dnsServer, tool])
 
   useEffect(() => {
     progressRef.current?.scrollTo({ top: progressRef.current.scrollHeight })
@@ -200,7 +205,7 @@ function App() {
         await chrome.tabs.query({ active: true, currentWindow: true }) : [undefined]
       const response = await chrome.runtime.sendMessage({
         type: 'toolkit:start-job',
-        request: { tool: selectedTool, input, port, scanPorts, mxCommand, pingCount, maxHops, tabId: tab?.id },
+        request: { tool: selectedTool, input, port, scanPorts, mxCommand, pingCount, maxHops, dnsRecordType, dnsServer, tabId: tab?.id },
       }) as { job?: CheckJob; error?: string }
       if (response.error) throw new Error(response.error)
       if (response.job) setJob((current) =>
@@ -380,6 +385,24 @@ function App() {
             </div>}
             {hasMXKey && <small>API key đã lưu. Có thể thay đổi trong Cài đặt.</small>}
             {mxKeySaved && <small className="mx-key-saved" role="status">Đã lưu API key. Bây giờ bạn có thể bấm Kiểm tra.</small>}
+          </div>}
+          {tool === 'dns_lookup' && <div className="dns-options">
+            <div><label htmlFor="dns-record-type">LOẠI BẢN GHI</label>
+              <select id="dns-record-type" value={dnsRecordType} onChange={(event) => setDnsRecordType(event.target.value as DNSRecordType)}>
+                <option value="AUTO">Tự động (domain → IP, IP → PTR)</option>
+                <option value="A">A (IPv4)</option><option value="AAAA">AAAA (IPv6)</option>
+                <option value="MX">MX</option><option value="TXT">TXT</option>
+                <option value="NS">NS</option><option value="CNAME">CNAME</option><option value="PTR">PTR</option>
+              </select>
+            </div>
+            <div><label htmlFor="dns-server">DNS SERVER TÙY CHỌN</label>
+              <input id="dns-server" type="text" list="dns-server-presets" spellCheck={false}
+                placeholder="Trống = DNS hệ điều hành" value={dnsServer}
+                onChange={(event) => setDnsServer(event.target.value)}
+                onKeyDown={(event) => { if (event.key === 'Enter') void run() }} />
+              <datalist id="dns-server-presets"><option value="1.1.1.1" /><option value="8.8.8.8" /><option value="9.9.9.9" /></datalist>
+            </div>
+            <small>Nhập IPv4/IPv6, có thể kèm port; ví dụ 1.1.1.1, 8.8.8.8:53 hoặc [2001:4860:4860::8888]:53.</small>
           </div>}
         </div>}
         <div className="tool-grid">{inputTools.map((item) => <button type="button" key={item.id} title={`${labels[item.id]} — ${item.detail}`} aria-label={`${labels[item.id]}: ${item.detail}`} disabled={busy} className={`tool ${tool === item.id ? 'selected' : ''}`} onClick={() => { setTool(item.id); setError('') }}>

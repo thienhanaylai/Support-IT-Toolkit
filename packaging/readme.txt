@@ -12,11 +12,11 @@ Cấu trúc gói:
 
 Sau khi Microsoft duyệt và cấp Extension ID, người dùng cần cài Windows
 Local Agent riêng nếu muốn dùng Ping, Traceroute, TCP Port, Quét Port,
-SSL/TLS và Mạng LAN. Khi cài Agent, phải đăng ký đúng Extension ID
+DNS Check, SSL/TLS và Mạng LAN. Khi cài Agent, phải đăng ký đúng Extension ID
 của phiên bản trên Edge Add-ons.
 
 Khi cài mới, extension mở trang hướng dẫn kèm ID và link tải
-ITSupportToolkit-Agent-Windows.zip tại GitHub Release v0.1.8.
+ITSupportToolkit-Agent-Windows.zip tại GitHub Release v0.1.9.
 Link luôn có lại trong Cài đặt. Giải nén toàn bộ ZIP rồi chạy
 Install.cmd bên trong; bộ cài yêu cầu người dùng nhập Extension ID.
 Trình duyệt không thể tự chạy CMD. Gói Agent không tải lên Edge Add-ons.

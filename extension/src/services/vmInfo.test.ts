@@ -193,4 +193,42 @@ describe('external domain lookups', () => {
     await expect(runCheck('traceroute', 'example.com', 443, undefined, 'dns', 4, 31)).rejects.toThrow('1 đến 30')
     expect(messages).toHaveLength(2)
   })
+  it('runs DNS Check through the selected resolver and formats the records', async () => {
+    const messages: Record<string, unknown>[] = []
+    vi.stubGlobal('chrome', {
+      storage: { local: { get: async () => ({ settings: { saveHistory: false } }) } },
+      runtime: { sendNativeMessage: async (_host: string, message: Record<string, unknown>) => {
+        messages.push(message)
+        return {
+          success: true, name: 'example.com', recordType: 'A',
+          resolver: '1.1.1.1:53', durationMs: 12, records: ['93.184.216.34'],
+        }
+      } },
+    })
+    vi.stubGlobal('crypto', { randomUUID: () => 'dns-id' })
+    const record = await runCheck(
+      'dns_lookup', 'example.com', 443, undefined, 'dns', 4, 20,
+      undefined, undefined, 'A', '1.1.1.1',
+    )
+    expect(messages).toMatchObject([{
+      action: 'dns_lookup', name: 'example.com', recordType: 'A', resolver: '1.1.1.1',
+    }])
+    expect(record.tool).toBe('DNS Check')
+    expect(getCopyText(record)).toContain('DNS server: 1.1.1.1:53')
+    expect(getCopyText(record)).toContain('93.184.216.34')
+    expect(renderToStaticMarkup(createElement(Result, { record }))).toContain('93.184.216.34')
+  })
+  it('detects an older Agent that silently ignores the custom DNS server', async () => {
+    vi.stubGlobal('chrome', {
+      storage: { local: { get: async () => ({ settings: { saveHistory: false } }) } },
+      runtime: { sendNativeMessage: async () => ({
+        success: true, name: 'example.com', recordType: 'A',
+        resolver: 'DNS của hệ điều hành', records: ['93.184.216.34'],
+      }) },
+    })
+    await expect(runCheck(
+      'dns_lookup', 'example.com', 443, undefined, 'dns', 4, 20,
+      undefined, undefined, 'A', '1.1.1.1',
+    )).rejects.toThrow('Local Agent đã cũ, chưa hỗ trợ DNS server tùy chọn')
+  })
 })

@@ -61,4 +61,12 @@ describe('Native Messaging streaming', () => {
     })) } })
     await expect(nativeRequest('public_ip')).rejects.toThrow('IP Public qua curl ifconfig.me')
   })
+
+  it('explains that DNS AUTO requires the updated Local Agent', async () => {
+    vi.stubGlobal('chrome', { runtime: { sendNativeMessage: vi.fn(async () => ({
+      success: false, error: 'recordType không được hỗ trợ',
+    })) } })
+    await expect(nativeRequest('dns_lookup', { name: 'example.com', recordType: 'AUTO' }))
+      .rejects.toThrow('Local Agent đã cũ, chưa hỗ trợ DNS Check')
+  })
 })

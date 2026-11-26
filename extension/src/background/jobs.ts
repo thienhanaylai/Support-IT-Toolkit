@@ -45,7 +45,7 @@ async function execute(job: CheckJob, request: CheckRequest): Promise<void> {
       request.pingCount, request.maxHops, (event) => {
         job.progress = [...job.progress, { ...event, text: event.text.slice(0, 2000) }].slice(-100)
         write()
-      }, request.tabId,
+      }, request.tabId, request.dnsRecordType, request.dnsServer,
     )
     job.status = 'done'
     job.record = record

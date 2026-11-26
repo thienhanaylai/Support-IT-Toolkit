@@ -7,17 +7,18 @@ import { longVanWhoisLookup } from './longVanWhois'
 import { getSettings, saveRecord, type CheckRecord } from './storage'
 import { parseInput, safeMaxHops, safePingCount, safePort, safeTimeout } from './validation'
 
-export type Tool = 'ping' | 'traceroute' | 'tcp_check' | 'port_scan' | 'tls_check' | 'local_interfaces' | 'public_ip' | 'vm_info' | 'mxtoolbox' | 'whois'
+export type Tool = 'ping' | 'traceroute' | 'tcp_check' | 'port_scan' | 'dns_lookup' | 'tls_check' | 'local_interfaces' | 'public_ip' | 'vm_info' | 'mxtoolbox' | 'whois'
+export type DNSRecordType = 'AUTO' | 'A' | 'AAAA' | 'MX' | 'TXT' | 'NS' | 'CNAME' | 'PTR'
 export const labels: Record<Tool, string> = {
   ping: 'Ping', traceroute: 'Traceroute', tcp_check: 'TCP Port', port_scan: 'Quét Port',
-  tls_check: 'SSL / TLS',
+  dns_lookup: 'DNS Check', tls_check: 'SSL / TLS',
   local_interfaces: 'Mạng LAN', public_ip: 'IP Public', vm_info: 'Thông tin VM',
   mxtoolbox: 'MXToolbox', whois: 'WHOIS',
 }
 const external = new Set<Tool>(['mxtoolbox', 'whois'])
 const browser = new Set<Tool>(['vm_info', ...external])
 
-export async function runCheck(tool: Tool, input: string, portInput: number, scanPorts: number[] = commonPorts, mxCommand: MXCommand = 'dns', pingCount = 4, maxHops = 20, onProgress?: (event: NativeProgress) => void, tabId?: number): Promise<CheckRecord> {
+export async function runCheck(tool: Tool, input: string, portInput: number, scanPorts: number[] = commonPorts, mxCommand: MXCommand = 'dns', pingCount = 4, maxHops = 20, onProgress?: (event: NativeProgress) => void, tabId?: number, dnsRecordType: DNSRecordType = 'AUTO', dnsServer = ''): Promise<CheckRecord> {
   onProgress?.({ text: 'Đang đọc cài đặt...' })
   const settings = await getSettings()
   const timeoutMs = safeTimeout(settings.timeoutMs)
@@ -45,14 +46,19 @@ export async function runCheck(tool: Tool, input: string, portInput: number, sca
     if (tool === 'traceroute') Object.assign(params, { target: host, maxHops: safeMaxHops(maxHops) })
     if (tool === 'tcp_check') Object.assign(params, { target: host, port: safePort(portInput) })
     if (tool === 'port_scan') Object.assign(params, { target: host, ports: scanPorts, timeoutMs: Math.min(timeoutMs, 2000) })
+    if (tool === 'dns_lookup') Object.assign(params, { name: host, recordType: dnsRecordType, resolver: dnsServer.trim() })
     if (tool === 'tls_check') Object.assign(params, { host, port: safePort(portInput) })
     onProgress?.({ text: tool === 'public_ip' ? 'Đang chạy curl ifconfig.me...' :
       tool === 'local_interfaces' ? 'Đang đọc cấu hình mạng...' :
+      tool === 'dns_lookup' ? `Đang truy vấn DNS${dnsServer.trim() ? ` qua ${dnsServer.trim()}` : ' của hệ điều hành'}...` :
       tool === 'tls_check' ? 'Đang kết nối TLS và kiểm tra chứng chỉ...' :
       tool === 'tcp_check' ? 'Đang thử kết nối TCP...' :
       tool === 'port_scan' ? 'Đang quét các cổng TCP...' :
       tool === 'ping' ? 'Đang gửi gói Ping...' : 'Đang theo dõi các hop...' })
     result = await nativeRequest(tool, params, onProgress)
+    if (tool === 'dns_lookup' && dnsServer.trim() && result.resolver === 'DNS của hệ điều hành') {
+      throw new Error('Local Agent đã cũ, chưa hỗ trợ DNS server tùy chọn. Hãy chạy lại bộ cài Agent với Extension ID hiện tại.')
+    }
     if (tool === 'public_ip') {
       if (!publicIP(result)) throw new Error('ifconfig.me không trả về địa chỉ IP hợp lệ')
       source = 'Máy người dùng · curl ifconfig.me'
@@ -63,6 +69,7 @@ export async function runCheck(tool: Tool, input: string, portInput: number, sca
     (typeof result.loss === 'number' && result.loss > 0) || result.verified === false ||
     (typeof result.Status === 'number' && result.Status !== 0) || result.timedOut === true ||
     (typeof result.timeoutCount === 'number' && result.timeoutCount > 0) ||
+    (tool === 'dns_lookup' && Array.isArray(result.records) && result.records.length === 0) ||
     (tool === 'mxtoolbox' && Array.isArray(result.records) && result.records.length === 0) ||
     (tool === 'vm_info' && (!result.vmName || !result.vmp || !result.host || !result.resourcePool || !result.group)) ? 'warn' : 'ok'
   const record: CheckRecord = { id: crypto.randomUUID(), at: new Date().toISOString(), tool: labels[tool], target, source, status, result }

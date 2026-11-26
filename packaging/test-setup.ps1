@@ -106,7 +106,7 @@ try {
   $updateInstalled = Join-Path $env:LOCALAPPDATA 'ITSupportToolkit\extension'
   New-Item -Path (Join-Path $updateSource 'assets'), (Join-Path $updateBundle 'agent'), (Join-Path $updateInstalled 'assets') -ItemType Directory -Force | Out-Null
   Copy-Item -LiteralPath (Join-Path $source 'setup.ps1') -Destination $updateBundle
-  Set-Content -LiteralPath (Join-Path $updateSource 'manifest.json') -Value '{"version":"0.1.8"}'
+  Set-Content -LiteralPath (Join-Path $updateSource 'manifest.json') -Value '{"version":"0.1.9"}'
   Set-Content -LiteralPath (Join-Path $updateSource 'assets\current.js') -Value 'current bundle'
   Set-Content -LiteralPath (Join-Path $updateBundle 'agent\it-support-host.exe') -Value 'new agent'
   Set-Content -LiteralPath (Join-Path $updateInstalled 'manifest.json') -Value '{"version":"0.1.6"}'
@@ -129,7 +129,7 @@ try {
       !(Test-Path -LiteralPath (Join-Path $updateInstalled '.it-support-toolkit-installed'))) {
     throw 'Dev update did not install the current bundle or preserve its installer marker.'
   }
-  if (!$updateOutput.Contains('0.1.6 -> 0.1.8') -or !$updateOutput.Contains('Không gỡ hoặc Load unpacked lại') -or
+  if (!$updateOutput.Contains('0.1.6 -> 0.1.9') -or !$updateOutput.Contains('Không gỡ hoặc Load unpacked lại') -or
       !$updateOutput.Contains('chrome://extensions/') -or !$updateOutput.Contains('edge://extensions/')) {
     throw 'Dev update instructions are incomplete.'
   }

@@ -164,3 +164,26 @@ func TestPublicIPUsesFixedCurlCommand(t *testing.T) {
 		t.Fatalf("unexpected public IP command: %s %v", program, args)
 	}
 }
+
+func TestDNSServerAddress(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"1.1.1.1", "1.1.1.1:53"},
+		{"8.8.8.8:5353", "8.8.8.8:5353"},
+		{"2606:4700:4700::1111", "[2606:4700:4700::1111]:53"},
+		{"[2001:4860:4860::8888]:53", "[2001:4860:4860::8888]:53"},
+	}
+	for _, test := range tests {
+		got, err := dnsServerAddress(test.input)
+		if err != nil || got != test.want {
+			t.Fatalf("dnsServerAddress(%q) = %q, %v; want %q", test.input, got, err, test.want)
+		}
+	}
+	for _, invalid := range []string{"dns.google", "1.1.1.1:0", "1.1.1.1:70000"} {
+		if _, err := dnsServerAddress(invalid); err == nil {
+			t.Fatalf("expected invalid DNS server %q to fail", invalid)
+		}
+	}
+}
