@@ -1,14 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { extractVMInfoFromDOM, formatVMInfo, getVMInfoFromTab, isPortalVMUrl } from './vmInfo'
-import { domainOnly, formatMXToolbox, mxToolboxLookup, registrationDomain } from './domainLookup'
+import { formatMXToolbox } from './domainLookup'
 import { getCopyText } from './formatRecord'
-import { nativeRequest } from './nativeHost'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createElement } from 'react'
 import { Result } from '../components/Result'
 import { renderReportHTML } from './report'
-import { runCheck, toolRequiresAgent } from './checks'
+import { runCheck } from './checks'
 
 const sample = `
 <form id="frmMain"><div class="card">
@@ -76,40 +75,16 @@ describe('Portal computing page', () => {
 })
 
 describe('external domain lookups', () => {
-  it('requires a domain and a key for MXToolbox except its public demo', async () => {
-    expect(domainOnly('https://example.com/path')).toBe('example.com')
-    expect(() => domainOnly('192.0.2.1')).toThrow()
-    await expect(mxToolboxLookup('example.org', 'mx', '', 3000)).rejects.toThrow('API key')
-  })
-  it('queries the registered domain, not a .com/.net host', () => {
-    expect(registrationDomain('https://www.example.com/path')).toBe('example.com')
-    expect(registrationDomain('portal.longvan.net')).toBe('longvan.net')
-    expect(registrationDomain('portal.longvan.vn')).toBe('longvan.vn')
-    expect(registrationDomain('portal.example.com.vn')).toBe('example.com.vn')
-    expect(registrationDomain('www.example.co.uk')).toBe('example.co.uk')
-    expect(registrationDomain('longvan.vn')).toBe('longvan.vn')
-  })
-  it('uses the official MXToolbox demo endpoint for DNS example.com', async () => {
-    vi.stubGlobal('chrome', { permissions: { contains: async () => true } })
-    const fetchMock = vi.fn(async (_url: string) => new Response(JSON.stringify({
-      ReportingNameServer: 'ns.example.com', TimeToComplete: 746,
-      Information: [{ Type: 'NS', 'Domain Name': 'ns.example.com', 'IP Address': '192.0.2.1', TTL: '24 hrs', Status: '[GREEN]', Asn: 'PRIVATE' }],
-      Passed: [{ Name: 'DNS Record Published', Info: 'Found' }], Failed: [],
-    }), { status: 200 }))
-    vi.stubGlobal('fetch', fetchMock)
-    const result = await mxToolboxLookup('example.com', 'dns', '', 3000)
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('https://mxtoolbox.com/api/v1/lookup/dns/example.com')
-    expect(result.records).toEqual(['Type: NS · Domain Name: ns.example.com · IP Address: 192.0.2.1 · TTL: 24 hrs'])
-    expect(result).toMatchObject({ domain: 'example.com', command: 'dns', reportingNameServer: 'ns.example.com', timeToCompleteMs: '746' })
-    expect(result).not.toHaveProperty('passed')
+  it('still formats saved MXToolbox results without retaining the lookup runtime', () => {
+    const result = {
+      domain: 'example.com', command: 'dns', reportingNameServer: 'ns.example.com',
+      timeToCompleteMs: '746',
+      records: [{ Type: 'NS', 'Domain Name': 'ns.example.com', 'IP Address': '192.0.2.1', TTL: '24 hrs', Status: '[GREEN]' }],
+    }
     const copy = getCopyText({ id: 'mx', at: '', tool: 'MXToolbox', target: 'example.com', source: 'MXToolbox', status: 'ok', result })
     expect(copy).toContain('DNS server: ns.example.com\nThời gian: 746 ms')
     expect(copy).not.toMatch(/GREEN|PRIVATE|CẢNH BÁO|DNS Record Published/)
     expect(formatMXToolbox({ ...result, records: [{ Type: 'NS', 'Domain Name': 'ns.example.com', Status: '[GREEN]' }], warnings: ['noisy'] })).not.toContain('GREEN')
-  })
-  it('explains that an installed older Agent does not support port scans', async () => {
-    vi.stubGlobal('chrome', { runtime: { sendNativeMessage: async () => ({ success: false, error: 'action không được hỗ trợ' }) } })
-    await expect(nativeRequest('port_scan', { target: '127.0.0.1', ports: [443] })).rejects.toThrow('Local Agent đã cũ')
   })
   it('shows only command output for Ping, not its JSON metadata', () => {
     const html = renderToStaticMarkup(createElement(Result, { record: {
@@ -172,81 +147,18 @@ describe('external domain lookups', () => {
     })
     const fetchMock = vi.fn(async () => ({ ok: true, status: 200, text: async () => 'not-an-ip' }))
     vi.stubGlobal('fetch', fetchMock)
-    await expect(runCheck('public_ip', '', 443)).rejects.toThrow('địa chỉ IP hợp lệ')
+    await expect(runCheck('public_ip', '', 4)).rejects.toThrow('địa chỉ IP hợp lệ')
     expect(fetchMock).toHaveBeenCalledOnce()
   })
 
-  it('runs Public IP in the Browser Engine when the Native Host is unavailable', async () => {
-    const sendNativeMessage = vi.fn(async () => { throw new Error('Specified native messaging host not found.') })
+  it('runs Public IP entirely in the Browser Engine', async () => {
     vi.stubGlobal('chrome', {
       storage: { local: { get: async () => ({ settings: { saveHistory: false } }) } },
-      runtime: { sendNativeMessage },
     })
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, text: async () => '203.0.113.9' })))
     vi.stubGlobal('crypto', { randomUUID: () => 'browser-ip' })
-    const record = await runCheck('public_ip', '', 443)
+    const record = await runCheck('public_ip', '', 4)
     expect(record.result).toMatchObject({ success: true, action: 'public_ip', ip: '203.0.113.9' })
     expect(record.source).toBe('Trình duyệt · Fetch ifconfig.me')
-    expect(sendNativeMessage).not.toHaveBeenCalled()
-    expect(toolRequiresAgent('public_ip')).toBe(false)
-    expect(toolRequiresAgent('ping')).toBe(true)
-  })
-  it('sends the chosen Ping count and Traceroute hop limit to the Local Agent', async () => {
-    const messages: Record<string, unknown>[] = []
-    vi.stubGlobal('chrome', {
-      storage: { local: { get: async () => ({ settings: { saveHistory: false } }) } },
-      runtime: { sendNativeMessage: async (_host: string, message: Record<string, unknown>) => {
-        messages.push(message)
-        return { success: true, raw: 'Command output' }
-      } },
-    })
-    vi.stubGlobal('crypto', { randomUUID: () => 'test-id' })
-    await runCheck('ping', 'example.com', 443, undefined, 'dns', 2, 20)
-    await runCheck('traceroute', 'example.com', 443, undefined, 'dns', 4, 8)
-    expect(messages).toMatchObject([
-      { action: 'ping', target: 'example.com', count: 2 },
-      { action: 'traceroute', target: 'example.com', maxHops: 8 },
-    ])
-    await expect(runCheck('ping', 'example.com', 443, undefined, 'dns', 6)).rejects.toThrow('1 đến 5')
-    await expect(runCheck('traceroute', 'example.com', 443, undefined, 'dns', 4, 31)).rejects.toThrow('1 đến 30')
-    expect(messages).toHaveLength(2)
-  })
-  it('runs DNS Check through the selected resolver and formats the records', async () => {
-    const messages: Record<string, unknown>[] = []
-    vi.stubGlobal('chrome', {
-      storage: { local: { get: async () => ({ settings: { saveHistory: false } }) } },
-      runtime: { sendNativeMessage: async (_host: string, message: Record<string, unknown>) => {
-        messages.push(message)
-        return {
-          success: true, name: 'example.com', recordType: 'A',
-          resolver: '1.1.1.1:53', durationMs: 12, records: ['93.184.216.34'],
-        }
-      } },
-    })
-    vi.stubGlobal('crypto', { randomUUID: () => 'dns-id' })
-    const record = await runCheck(
-      'dns_lookup', 'example.com', 443, undefined, 'dns', 4, 20,
-      undefined, undefined, 'A', '1.1.1.1',
-    )
-    expect(messages).toMatchObject([{
-      action: 'dns_lookup', name: 'example.com', recordType: 'A', resolver: '1.1.1.1',
-    }])
-    expect(record.tool).toBe('DNS Check')
-    expect(getCopyText(record)).toContain('DNS server: 1.1.1.1:53')
-    expect(getCopyText(record)).toContain('93.184.216.34')
-    expect(renderToStaticMarkup(createElement(Result, { record }))).toContain('93.184.216.34')
-  })
-  it('detects an older Agent that silently ignores the custom DNS server', async () => {
-    vi.stubGlobal('chrome', {
-      storage: { local: { get: async () => ({ settings: { saveHistory: false } }) } },
-      runtime: { sendNativeMessage: async () => ({
-        success: true, name: 'example.com', recordType: 'A',
-        resolver: 'DNS của hệ điều hành', records: ['93.184.216.34'],
-      }) },
-    })
-    await expect(runCheck(
-      'dns_lookup', 'example.com', 443, undefined, 'dns', 4, 20,
-      undefined, undefined, 'A', '1.1.1.1',
-    )).rejects.toThrow('Local Agent đã cũ, chưa hỗ trợ DNS server tùy chọn')
   })
 })

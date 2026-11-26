@@ -32,6 +32,7 @@ if (!(Test-Path -LiteralPath $readme -PathType Leaf)) { throw 'Missing Edge pack
 if (Test-Path -LiteralPath (Join-Path $dist 'readme.txt')) { throw 'Build output already contains readme.txt.' }
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 if ($manifest.manifest_version -ne 3) { throw 'Expected a Manifest V3 extension.' }
+if (@($manifest.permissions) -contains 'nativeMessaging') { throw 'Browser-only package must not request nativeMessaging.' }
 $required = @(@(
   'welcome.html',
   $manifest.action.default_popup,

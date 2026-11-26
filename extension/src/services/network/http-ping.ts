@@ -1,4 +1,4 @@
-import type { NativeProgress } from '../nativeHost'
+import type { CheckProgress } from '../progress'
 import { abortError, clampTimeout, withTimeout } from './timeout'
 
 export type HTTPMethod = 'HEAD' | 'GET'
@@ -38,7 +38,7 @@ export async function httpPing(
   method: HTTPMethod,
   count: number,
   timeoutMs: number,
-  onProgress?: (event: NativeProgress) => void,
+  onProgress?: (event: CheckProgress) => void,
   signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   const url = parseHTTPURL(input)

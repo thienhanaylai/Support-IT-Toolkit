@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Clock3, Download, HardDrive, History, KeyRound, Search, ShieldCheck, Trash2 } from 'lucide-react'
+import { Clock3, Download, History, KeyRound, Search, ShieldCheck, Trash2 } from 'lucide-react'
 import { Header } from '../components/Header'
 import { HistoryItem } from '../components/HistoryItem'
 import { Result } from '../components/Result'
-import { agentZipURL } from '../services/agentDownload'
 import { downloadAuthenticatorExport, loadAuthenticatorEntries } from '../services/authenticator'
 import { hasPortalAccess, removePortalAccess, requestPortalAccess } from '../services/portalAccess'
 import { downloadReport } from '../services/report'
@@ -123,7 +122,7 @@ function App() {
     <h1>Cài đặt <span>& lịch sử.</span></h1>
     <p className="intro">Tùy chỉnh cách kiểm tra và quản lý kết quả đã lưu trên thiết bị này.</p>
     <nav className="options-nav" aria-label="Mục cài đặt">
-      <a href="#preferences">Tùy chọn</a><a href="#authenticator-backup">Authenticator</a><a href="#portal-access">Quyền Portal</a><a href="#history">Lịch sử</a><a href="#agent">Local Agent</a>
+      <a href="#preferences">Tùy chọn</a><a href="#authenticator-backup">Authenticator</a><a href="#portal-access">Quyền Portal</a><a href="#history">Lịch sử</a>
     </nav>
 
     <form id="preferences" className="options-section" onSubmit={(event) => void submit(event)}>
@@ -141,16 +140,6 @@ function App() {
           <input id="save-history" type="checkbox" checked={settings.saveHistory} onChange={(event) => { setSaved(false); setSettings({ ...settings, saveHistory: event.target.checked }) }} />
         </label>
       </div>
-      <div className="options-divider" />
-      <div className="options-section-heading"><span className="options-section-icon"><KeyRound size={19} /></span><div>
-        <h2>MXToolbox API key</h2><p>Không bắt buộc. Chỉ cần cho các truy vấn MXToolbox sử dụng API.</p>
-      </div></div>
-      <div className="options-field">
-        <label htmlFor="mx-key">API key</label>
-        <input id="mx-key" type="password" autoComplete="off" placeholder="UUID từ tài khoản MXToolbox" value={settings.mxtoolboxApiKey} onChange={(event) => { setSaved(false); setSettings({ ...settings, mxtoolboxApiKey: event.target.value }) }} />
-        <small>Key lưu trong chrome.storage.local (không mã hóa), chỉ gửi tới API chính thức khi bạn kiểm tra; không đưa vào lịch sử hoặc báo cáo. <a className="settings-link" href="https://mxtoolbox.com/api/api-reference" target="_blank" rel="noreferrer">Thông tin API ↗</a></small>
-      </div>
-      {settings.bknsApiKey && <div className="options-legacy"><strong>Key BKNS cũ (không còn sử dụng)</strong><p>WHOIS hiện dùng trang Long Vân. Bạn có thể xóa key này rồi lưu cài đặt.</p><button type="button" onClick={() => { setSaved(false); setSettings({ ...settings, bknsApiKey: '' }) }}>Xóa key BKNS cũ</button></div>}
       <div className="options-save"><button className="primary" type="submit">Lưu cài đặt</button>{saved && <span className="success" role="status">Đã lưu cài đặt.</span>}{saveError && <span className="options-error" role="alert">{saveError}</span>}</div>
     </form>
 
@@ -199,16 +188,6 @@ function App() {
               : <p className="options-empty">Không tìm thấy kết quả phù hợp.</p>}
             {selected && <div className="options-history-detail" aria-label="Chi tiết lịch sử"><Result record={selected} /></div>}
           </>}
-    </section>
-
-    <section id="agent" className="options-section options-agent" aria-labelledby="agent-options-title">
-      <div className="options-section-heading"><span className="options-section-icon"><HardDrive size={19} /></span><div>
-        <h2 id="agent-options-title">Local Agent cho Windows</h2><p>Cài hoặc cập nhật Agent khi cần dùng các công cụ mạng tại máy.</p>
-      </div></div>
-      <p>Ping, Traceroute, TCP Port, Quét Port, DNS Check, SSL/TLS và Mạng LAN cần Agent cài riêng. <a href={agentZipURL} target="_blank" rel="noopener noreferrer">Tải ZIP Agent từ GitHub Release ↗</a>, giải nén toàn bộ rồi chạy <strong>Install.cmd</strong> bên trong và nhập Extension ID của bản này khi được hỏi.</p>
-      <label htmlFor="current-extension-id">Extension ID của bạn</label>
-      <input id="current-extension-id" readOnly value={chrome.runtime.id} onFocus={(event) => event.currentTarget.select()} />
-      <p className="agent-note">Không di chuyển hoặc chạy riêng Install.cmd vì bộ cài cần các file đi kèm trong ZIP. Agent không được đóng gói vào extension trên Edge Add-ons.</p>
     </section>
   </div></main>
 }

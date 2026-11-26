@@ -67,7 +67,7 @@ func extract(root string) error {
 			return sourceErr
 		}
 	}
-	for _, required := range []string{"setup.ps1", "install-agent.ps1", "readme.txt", "extension/manifest.json", "agent/it-support-host.exe"} {
+	for _, required := range []string{"setup.ps1", "readme.txt", "extension/manifest.json"} {
 		if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(required))); err != nil || !info.Mode().IsRegular() {
 			return fmt.Errorf("missing package file: %s", required)
 		}
@@ -85,7 +85,7 @@ func run() error {
 		return err
 	}
 	if len(os.Args) > 1 && os.Args[1] == "--verify" {
-		fmt.Println("Package verified: extension, agent and installer are present.")
+		fmt.Println("Package verified: Browser-only extension and installer are present.")
 		return nil
 	}
 	cmd := exec.Command("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",

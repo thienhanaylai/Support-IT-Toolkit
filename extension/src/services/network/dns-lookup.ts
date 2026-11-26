@@ -1,4 +1,4 @@
-import type { NativeProgress } from '../nativeHost'
+import type { CheckProgress } from '../progress'
 import { abortError, clampTimeout, withTimeout } from './timeout'
 
 export type DoHRecordType = 'AUTO' | 'A' | 'AAAA' | 'MX' | 'TXT' | 'NS' | 'CNAME' | 'PTR' | 'SOA' | 'CAA' | 'SRV'
@@ -262,7 +262,7 @@ export async function resolveDoH(
   recordType: DoHRecordType,
   resolver: DoHResolver,
   timeoutMs: number,
-  onProgress?: (event: NativeProgress) => void,
+  onProgress?: (event: CheckProgress) => void,
   signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   const query = dohQuery(input, recordType)

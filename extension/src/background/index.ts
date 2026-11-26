@@ -47,18 +47,30 @@ async function syncPortalContentScript(): Promise<void> {
 void syncPortalContentScript().catch(() => {})
 chrome.permissions?.onAdded?.addListener(() => { void syncPortalContentScript().catch(() => {}) })
 chrome.permissions?.onRemoved?.addListener(() => { void syncPortalContentScript().catch(() => {}) })
-// Public IP now runs through the Local Agent. Remove the narrow host grant left
-// by older versions so Edge no longer retains unnecessary access to ipify.
+// Public IP uses ifconfig.me in the Browser Engine. Remove the old ipify grant.
 if (chrome.permissions?.remove) {
   void chrome.permissions.remove({ origins: ['https://api.ipify.org/*'] }).catch(() => {})
 }
 
-// Settings contain the MXToolbox key. Portal content scripts do not need direct
-// storage access; they communicate through the validated service-worker handlers.
+// Portal content scripts do not need direct storage access; they communicate
+// through the validated service-worker handlers.
 if (chrome.storage?.local?.setAccessLevel) {
   chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' }, () => {
     void chrome.runtime.lastError // Ignore unsupported access levels on older Chromium.
   })
+}
+
+// MXToolbox and WHOIS were retired with their API-key settings. Remove any
+// credentials left behind by older versions so they are not kept indefinitely.
+if (chrome.storage?.local?.get && chrome.storage.local.set) {
+  void chrome.storage.local.get('settings').then((data) => {
+    const settings = data.settings as Record<string, unknown> | undefined
+    if (!settings || (!('mxtoolboxApiKey' in settings) && !('bknsApiKey' in settings))) return
+    const clean = { ...settings }
+    delete clean.mxtoolboxApiKey
+    delete clean.bknsApiKey
+    return chrome.storage.local.set({ settings: clean })
+  }).catch(() => {})
 }
 
 chrome.runtime.onInstalled.addListener((details) => {

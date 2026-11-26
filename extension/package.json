@@ -15,7 +15,6 @@
     "otpauth": "^9.6.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "tldts": "^7.5.5",
     "vite": "^6.4.0"
   },
   "devDependencies": {

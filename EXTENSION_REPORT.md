@@ -1,5 +1,9 @@
 # Báo cáo IT Support Toolkit Extension
 
+> **Tài liệu lịch sử:** báo cáo này mô tả bản có Windows Local Agent trước khi
+> chuyển sang Browser-only. Trạng thái hiện tại xem `README.md` và
+> `docs/browser-only-migration.md`.
+
 **Ngày rà soát:** 25/11/2026
 **Phiên bản manifest:** 0.1.9 (Chrome/Edge Manifest V3)
 **Phạm vi:** extension trong `extension/`, Windows Local Agent trong `native-agent/`.

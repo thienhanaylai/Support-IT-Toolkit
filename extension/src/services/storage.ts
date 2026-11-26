@@ -7,8 +7,8 @@ export type CheckRecord = {
   status: 'ok' | 'warn' | 'error'
   result: Record<string, unknown>
 }
-export type Settings = { timeoutMs: number; saveHistory: boolean; mxtoolboxApiKey: string; bknsApiKey: string }
-export const defaultSettings: Settings = { timeoutMs: 3000, saveHistory: true, mxtoolboxApiKey: '', bknsApiKey: '' }
+export type Settings = { timeoutMs: number; saveHistory: boolean }
+export const defaultSettings: Settings = { timeoutMs: 3000, saveHistory: true }
 
 const sensitiveField = /(?:api[-_]?key|authorization|password|passwd|secret|access[-_]?token|refresh[-_]?token|session[-_]?token)/i
 
@@ -30,8 +30,6 @@ export async function getSettings(): Promise<Settings> {
   return {
     timeoutMs: saved?.timeoutMs ?? defaultSettings.timeoutMs,
     saveHistory: saved?.saveHistory ?? defaultSettings.saveHistory,
-    mxtoolboxApiKey: saved?.mxtoolboxApiKey ?? defaultSettings.mxtoolboxApiKey,
-    bknsApiKey: saved?.bknsApiKey ?? defaultSettings.bknsApiKey,
   }
 }
 

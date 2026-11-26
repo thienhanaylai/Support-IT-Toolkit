@@ -1,4 +1,4 @@
-import { runCheck } from '../services/checks'
+import { isTool, runCheck } from '../services/checks'
 import { jobKey, type CheckJob, type CheckRequest } from '../services/work'
 
 let activeJob: string | null = null
@@ -17,6 +17,7 @@ async function currentJob(): Promise<CheckJob | null> {
 }
 
 async function startJob(request: CheckRequest): Promise<CheckJob> {
+  if (!isTool(request?.tool)) throw new Error('Công cụ không được hỗ trợ trong chế độ Browser-only.')
   if (activeJob) throw new Error('Đang có kiểm tra khác chạy. Hãy đợi kết quả.')
   await currentJob()
   if (activeJob) throw new Error('Đang có kiểm tra khác chạy. Hãy đợi kết quả.')
@@ -41,12 +42,11 @@ async function execute(job: CheckJob, request: CheckRequest): Promise<void> {
   }
   try {
     const record = await runCheck(
-      request.tool, request.input, request.port, request.scanPorts, request.mxCommand,
-      request.pingCount, request.maxHops, (event) => {
+      request.tool, request.input, request.httpCount, (event) => {
         job.progress = [...job.progress, { ...event, text: event.text.slice(0, 2000) }].slice(-100)
         write()
-      }, request.tabId, request.dnsRecordType, request.dnsServer,
-      request.httpMethod ?? 'HEAD', request.dohRecordType ?? 'AUTO', request.dohResolver ?? 'cloudflare',
+      }, request.tabId, request.httpMethod ?? 'HEAD',
+      request.dohRecordType ?? 'AUTO', request.dohResolver ?? 'cloudflare',
     )
     job.status = 'done'
     job.record = record

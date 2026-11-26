@@ -18,24 +18,21 @@ Cách cài từ ZIP:
    Bộ cài tự sao chép đường dẫn này vào clipboard và mở sẵn thư mục.
    Trong cửa sổ Load unpacked, có thể nhấn Ctrl+L, Ctrl+V, Enter rồi
    nhấn Chọn thư mục (Select Folder).
-5. Sao chép Extension ID trên trang quản lý, dán vào cửa sổ cài
-   rồi nhấn Enter. Nếu cần đăng ký cả hai trình duyệt, nhập
-   cả hai ID cách nhau bằng dấu phẩy.
-6. Tải lại extension, sau đó thử Ping.
+5. Tải lại extension, sau đó thử IP Public, HTTP Ping hoặc DNS over HTTPS.
 
 ITSupportToolkit-Windows.exe là lựa chọn một file, không cần giải nén;
-lần cài mới vẫn cần chọn trình duyệt, Load unpacked và nhập ID.
-Khi cập nhật trên cùng máy, EXE hoặc Install.cmd từ ZIP mới dùng lại ID
-đã đăng ký và cập nhật cả extension + Agent. Không gỡ hoặc Load unpacked
+lần cài mới vẫn cần chọn trình duyệt và Load unpacked.
+Khi cập nhật trên cùng máy, EXE hoặc Install.cmd từ ZIP mới cập nhật extension.
+Không gỡ hoặc Load unpacked
 lại. Mở chrome://extensions/ hoặc edge://extensions/, bấm Reload/Tải lại
 trên thẻ IT Support Toolkit, rồi refresh các tab Portal đang mở.
 
-Giữ nguyên thư mục và Extension ID sẽ giữ Authenticator, lịch sử, API key
+Giữ nguyên thư mục và Extension ID sẽ giữ Authenticator, lịch sử
 và tùy chọn. Dữ liệu tạm trong phiên có thể mất khi tải lại trình duyệt.
 
-Gói gồm extension, Windows Local Agent và bộ cài Native Messaging.
+Gói chỉ gồm extension Browser-only và trình cài extension; không có Agent,
+Native Messaging, service hoặc chương trình kiểm tra mạng native.
 Không cần Node.js/Go hoặc quyền Administrator để cài. Không chạy bộ cài
 từ nguồn không tin cậy; EXE chưa được ký số nên Windows có thể cảnh báo.
 
 Lưu ý: trình duyệt không cho tự bật extension unpacked chỉ bằng một click.
-Nếu đã cài bản trên Edge Add-ons, cần đăng ký đúng ID của bản trên chợ.

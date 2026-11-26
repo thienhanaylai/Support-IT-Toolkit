@@ -19,10 +19,9 @@ it('restores the form and live progress after the popup is reopened, then shows 
   const scrollIntoView = vi.fn()
   Element.prototype.scrollIntoView = scrollIntoView
   Element.prototype.scrollTo = vi.fn()
-  const running = { id: 'job-1', tool: 'ping', status: 'running', progress: [{ text: 'Reply 1/4' }] }
+  const running = { id: 'job-1', tool: 'http_ping', status: 'running', progress: [{ text: '[1] HTTP 200 · 20 ms' }] }
   const draft = {
-    input: 'example.com', port: 443, pingCount: 4, maxHops: 20,
-    scanMode: 'common', customPorts: '22,80,443', mxCommand: 'dns', tool: 'ping',
+    input: 'https://example.com/', httpCount: 2, httpMethod: 'HEAD', tool: 'http_ping',
   }
   let onChanged: ((changes: Record<string, unknown>, area: string) => void) | undefined
   vi.stubGlobal('chrome', {
@@ -43,37 +42,36 @@ it('restores the form and live progress after the popup is reopened, then shows 
   })
   await import('./main')
   await showTools()
-  await vi.waitFor(() => expect((document.querySelector('#target') as HTMLInputElement)?.value).toBe('example.com'))
+  await vi.waitFor(() => expect((document.querySelector('#target') as HTMLInputElement)?.value).toBe('https://example.com/'))
   const domainTools = document.querySelector('.domain-tool-section')!
   const vmTools = document.querySelector('.vm-tool-section')!
   const networkTools = document.querySelector('.network-info-section')!
   expect(domainTools.contains(document.querySelector('#target'))).toBe(true)
   expect(domainTools.textContent).not.toContain('DOMAIN HOẶC ĐỊA CHỈ IP')
-  expect(document.querySelector('#target')?.getAttribute('aria-label')).toBe('Domain hoặc địa chỉ IP')
+  expect(document.querySelector('#target')?.getAttribute('aria-label')).toBe('URL HTTP hoặc HTTPS')
   expect(vmTools.textContent).toContain('THÔNG TIN VM')
   expect(vmTools.textContent).toContain('Thông tin VM')
   expect(vmTools.textContent).not.toContain('Mạng LAN')
   expect(vmTools.textContent).not.toContain('IP Public')
   expect(networkTools.textContent).toContain('THÔNG TIN MẠNG')
-  expect(networkTools.textContent).toContain('Mạng LAN')
+  expect(networkTools.textContent).not.toContain('Mạng LAN')
   expect(networkTools.textContent).toContain('IP Public')
   expect(networkTools.textContent).not.toContain('Thông tin VM')
   expect(domainTools.compareDocumentPosition(vmTools) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(vmTools.compareDocumentPosition(networkTools) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  expect(document.body.textContent).toContain('Reply 1/4')
-  expect(document.body.textContent).toContain('Đang kiểm tra Ping')
-  expect(domainTools.querySelector('.checking')?.textContent).toContain('Đang kiểm tra Ping')
+  expect(document.body.textContent).toContain('[1] HTTP 200')
+  expect(document.body.textContent).toContain('Đang kiểm tra HTTP Ping')
+  expect(domainTools.querySelector('.checking')?.textContent).toContain('Đang kiểm tra HTTP Ping')
   expect(vmTools.querySelector('.checking')).toBeNull()
   expect(networkTools.querySelector('.checking')).toBeNull()
   expect(scrollIntoView).not.toHaveBeenCalled()
 
   const record = {
-    id: 'record-1', at: new Date().toISOString(), tool: 'Ping', target: 'example.com',
-    source: 'Local Agent', status: 'ok', result: { raw: 'Reply from example.com' },
+    id: 'record-1', at: new Date().toISOString(), tool: 'HTTP Ping', target: 'https://example.com/',
+    source: 'Trình duyệt · Fetch HTTP', status: 'ok', result: { raw: '[1] HTTP 200 · 20 ms' },
   }
   onChanged?.({ [jobKey]: { newValue: { ...running, status: 'done', record } } }, 'session')
-  await vi.waitFor(() => expect(document.body.textContent).toContain('Reply from example.com'))
-  expect(domainTools.querySelector('.result')?.textContent).toContain('Reply from example.com')
+  await vi.waitFor(() => expect(document.querySelector('.domain-tool-section .result')?.textContent).toContain('[1] HTTP 200 · 20 ms'))
   expect(scrollIntoView).not.toHaveBeenCalled()
 })
 
@@ -82,16 +80,16 @@ it('scrolls to the result when the user starts a check, not when the popup reope
   const scrollIntoView = vi.fn()
   Element.prototype.scrollIntoView = scrollIntoView
   const draft = {
-    input: 'example.com', port: 443, pingCount: 4, maxHops: 20,
-    scanMode: 'common', customPorts: '22,80,443', mxCommand: 'dns', tool: 'ping',
+    input: 'https://example.com/', httpCount: 2, httpMethod: 'HEAD', tool: 'http_ping',
   }
   const sendMessage = vi.fn(async (message: { type: string }) =>
     message.type === 'toolkit:get-job'
       ? {}
-      : { job: { id: 'new', tool: 'ping', status: 'running', progress: [] } })
+      : { job: { id: 'new', tool: 'http_ping', status: 'running', progress: [] } })
   vi.stubGlobal('chrome', {
     runtime: { sendMessage },
     tabs: { query: vi.fn(async () => []) },
+    permissions: { contains: vi.fn(async () => true), request: vi.fn(async () => true) },
     storage: {
       session: {
         get: vi.fn(async () => ({ [draftKey]: draft })),
@@ -117,17 +115,16 @@ it('scrolls to the result when the user starts a check, not when the popup reope
   await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(1))
 })
 
-it('shows DNS Check with record type and a custom DNS server', async () => {
+it('shows only browser tools and sends the selected DoH options', async () => {
   document.body.innerHTML = '<div id="root"></div>'
   Element.prototype.scrollIntoView = vi.fn()
   const draft = {
-    input: 'example.com', port: 443, pingCount: 4, maxHops: 20,
-    scanMode: 'common', customPorts: '22,80,443', mxCommand: 'dns',
-    dnsRecordType: 'AAAA', dnsServer: '1.1.1.1', tool: 'dns_lookup',
+    input: 'example.com', httpCount: 4,
+    dohRecordType: 'AAAA', dohResolver: 'google', tool: 'doh_lookup',
   }
   const sendMessage = vi.fn(async (message: { type: string }) =>
     message.type === 'toolkit:get-job' ? {} :
-      { job: { id: 'dns-job', tool: 'dns_lookup', status: 'running', progress: [] } })
+      { job: { id: 'dns-job', tool: 'doh_lookup', status: 'running', progress: [] } })
   vi.stubGlobal('chrome', {
     runtime: { sendMessage },
     tabs: { query: vi.fn(async () => []) },
@@ -139,14 +136,19 @@ it('shows DNS Check with record type and a custom DNS server', async () => {
   })
   await import('./main')
   await showTools()
-  expect(document.querySelector('.domain-tool-section')?.textContent).toContain('DNS Check')
-  expect((document.querySelector('#dns-record-type') as HTMLSelectElement).value).toBe('AAAA')
-  expect((document.querySelector('#dns-server') as HTMLInputElement).value).toBe('1.1.1.1')
+  const section = document.querySelector('.domain-tool-section')!
+  expect(section.textContent).toContain('DNS over HTTPS')
+  expect(section.textContent).toContain('HTTP Ping')
+  for (const removed of ['Ping', 'Traceroute', 'TCP Port', 'Quét Port', 'DNS Check', 'SSL / TLS']) {
+    expect([...section.querySelectorAll('.tool strong')].map((item) => item.textContent)).not.toContain(removed)
+  }
+  expect((document.querySelector('#doh-record-type') as HTMLSelectElement).value).toBe('AAAA')
+  expect((document.querySelector('#doh-resolver') as HTMLSelectElement).value).toBe('google')
   document.querySelector<HTMLButtonElement>('.inline-check')!.click()
   await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
     type: 'toolkit:start-job',
     request: expect.objectContaining({
-      tool: 'dns_lookup', input: 'example.com', dnsRecordType: 'AAAA', dnsServer: '1.1.1.1',
+      tool: 'doh_lookup', input: 'example.com', dohRecordType: 'AAAA', dohResolver: 'google',
     }),
   })))
 })
@@ -213,8 +215,7 @@ it('retries a failed VM lookup using the currently active Portal tab', async () 
   document.body.innerHTML = '<div id="root"></div>'
   Element.prototype.scrollIntoView = vi.fn()
   const draft = {
-    input: '', port: 443, pingCount: 4, maxHops: 20,
-    scanMode: 'common', customPorts: '22,80,443', mxCommand: 'dns', tool: 'vm_info',
+    input: '', httpCount: 4, tool: 'vm_info',
   }
   const failed = { id: 'old', tool: 'vm_info', status: 'error', progress: [{ text: 'Đang đọc thông tin từ tab Portal...' }], error: 'Hãy mở tab chi tiết computing trên portal.longvan.vn' }
   const sendMessage = vi.fn(async (message: { type: string }) =>
@@ -258,7 +259,7 @@ it('does not show VM retry for an unrelated failed check', async () => {
   Element.prototype.scrollIntoView = vi.fn()
   vi.stubGlobal('chrome', {
     runtime: { sendMessage: vi.fn(async () => ({
-      job: { id: 'failed-ping', tool: 'ping', status: 'error', progress: [], error: 'Ping thất bại' },
+      job: { id: 'failed-http', tool: 'http_ping', status: 'error', progress: [], error: 'HTTP Ping thất bại' },
     })) },
     tabs: { query: vi.fn(async () => []) },
     storage: {
@@ -269,7 +270,7 @@ it('does not show VM retry for an unrelated failed check', async () => {
   })
   await import('./main')
   await showTools()
-  await vi.waitFor(() => expect(document.querySelector('.error')?.textContent).toContain('Ping thất bại'))
+  await vi.waitFor(() => expect(document.querySelector('.error')?.textContent).toContain('HTTP Ping thất bại'))
   expect(document.querySelector('.retry-vm')).toBeNull()
 })
 
@@ -277,8 +278,8 @@ it('opens a recent result inside the matching tool group', async () => {
   document.body.innerHTML = '<div id="root"></div>'
   Element.prototype.scrollIntoView = vi.fn()
   const record = {
-    id: 'network-record', at: new Date().toISOString(), tool: 'Mạng LAN', target: 'Máy này',
-    source: 'Local Agent', status: 'ok' as const, result: { raw: 'Ethernet 192.168.1.2' },
+    id: 'network-record', at: new Date().toISOString(), tool: 'IP Public', target: 'Đường truyền hiện tại',
+    source: 'Trình duyệt · Fetch ifconfig.me', status: 'ok' as const, result: { ip: '203.0.113.10' },
   }
   vi.stubGlobal('chrome', {
     runtime: { sendMessage: vi.fn(async () => ({})) },
@@ -297,7 +298,7 @@ it('opens a recent result inside the matching tool group', async () => {
     return button!
   })
   recent.click()
-  await vi.waitFor(() => expect(document.querySelector('.network-info-section .result')?.textContent).toContain('Ethernet 192.168.1.2'))
+  await vi.waitFor(() => expect(document.querySelector('.network-info-section .result')?.textContent).toContain('203.0.113.10'))
   expect(document.querySelector('.domain-tool-section .result')).toBeNull()
   expect(document.querySelector('.vm-tool-section .result')).toBeNull()
 })
@@ -338,87 +339,11 @@ it('switches between the Tools and Authenticator feature tabs', async () => {
   expect(document.querySelectorAll('.popup-tabs button')[1]?.textContent).toContain('Mật khẩu')
 })
 
-async function openMXPopup(domain: string, failed = false) {
-  document.body.innerHTML = '<div id="root"></div>'
-  Element.prototype.scrollIntoView = vi.fn()
-  const draft = {
-    input: domain, port: 443, pingCount: 4, maxHops: 20,
-    scanMode: 'common', customPorts: '22,80,443', mxCommand: 'dns', tool: 'mxtoolbox',
-  }
-  const settings = { timeoutMs: 4200, saveHistory: false, mxtoolboxApiKey: '', bknsApiKey: '' }
-  const get = vi.fn(async (key: string | string[]) =>
-    key === 'settings' ? { settings } : key === 'history' ? { history: [] } :
-      Array.isArray(key) ? { [draftKey]: draft } : {})
-  const set = vi.fn(async ({ settings: next }: { settings: typeof settings }) => { Object.assign(settings, next) })
-  const sendMessage = vi.fn(async (message: { type: string }) =>
-    message.type === 'toolkit:get-job'
-      ? failed ? { job: { id: 'old', tool: 'mxtoolbox', status: 'error', progress: [{ text: 'Đang đọc cài đặt...' }], error: 'MXToolbox yêu cầu API key' } } : {}
-      : { job: { id: 'new', tool: 'mxtoolbox', status: 'running', progress: [] } })
-  vi.stubGlobal('chrome', {
-    runtime: { sendMessage },
-    tabs: { query: vi.fn(async () => []) },
-    permissions: { contains: vi.fn(async () => true) },
-    storage: {
-      session: { get, set: vi.fn(async () => {}), remove: vi.fn(async () => {}) },
-      local: { get, set },
-      onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
-    },
-  })
-  await import('./main')
-  await showTools()
-  await vi.waitFor(() => expect(document.querySelector('.mx-key-prompt')).not.toBeNull())
-  return { set, sendMessage, settings }
-}
-
-it('offers an inline MXToolbox key form before checking an arbitrary domain', async () => {
-  const { set, sendMessage } = await openMXPopup('chatgpt.com', true)
-  const check = document.querySelector<HTMLButtonElement>('.inline-check')!
-  expect(check.textContent).toContain('Nhập API key')
-  check.click()
-  await vi.waitFor(() => expect(document.querySelector('#mx-key-popup')).not.toBeNull())
-  expect(sendMessage.mock.calls.map(([message]) => message.type)).toEqual(['toolkit:get-job'])
-  const input = document.querySelector<HTMLInputElement>('#mx-key-popup')!
-  const save = document.querySelector<HTMLButtonElement>('.mx-key-actions button[type="submit"]')!
-  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'invalid-key')
-  input.dispatchEvent(new Event('input', { bubbles: true }))
-  save.click()
-  await vi.waitFor(() => expect(document.querySelector('.mx-key-error')?.textContent).toContain('UUID'))
-  expect(set).not.toHaveBeenCalled()
-
-  const key = '12345678-1234-1234-1234-123456789abc'
-  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, key)
-  input.dispatchEvent(new Event('input', { bubbles: true }))
-  save.click()
-  await vi.waitFor(() => expect(set).toHaveBeenCalledWith({ settings: {
-    timeoutMs: 4200, saveHistory: false, mxtoolboxApiKey: key, bknsApiKey: '',
-  } }))
-  expect(document.querySelector('#mx-key-popup')).toBeNull()
-  expect(document.querySelector('.inline-check')?.textContent).toContain('Kiểm tra')
-  check.click()
-  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
-    type: 'toolkit:start-job',
-    request: expect.objectContaining({ tool: 'mxtoolbox', input: 'chatgpt.com' }),
-  })))
-  expect(JSON.stringify(sendMessage.mock.calls)).not.toContain(key)
-})
-
-it('keeps the DNS example.com demo available without an MXToolbox API key', async () => {
-  const { sendMessage } = await openMXPopup('example.com')
-  const check = document.querySelector<HTMLButtonElement>('.inline-check')!
-  expect(check.textContent).toContain('Kiểm tra')
-  check.click()
-  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
-    type: 'toolkit:start-job', request: expect.objectContaining({ tool: 'mxtoolbox', input: 'example.com' }),
-  })))
-})
-
 it('shows HTTP Ping and DoH as independent browser tools with their own options', async () => {
   document.body.innerHTML = '<div id="root"></div>'
   Element.prototype.scrollIntoView = vi.fn()
   const draft = {
-    input: 'https://example.com/path', port: 443, pingCount: 3, maxHops: 20,
-    scanMode: 'common', customPorts: '22,80,443', mxCommand: 'dns',
-    dnsRecordType: 'AUTO', dnsServer: '', httpMethod: 'GET',
+    input: 'https://example.com/path', httpCount: 3, httpMethod: 'GET',
     dohRecordType: 'CAA', dohResolver: 'quad9', tool: 'http_ping',
   }
   const sendMessage = vi.fn(async (message: { type: string }) =>
@@ -451,7 +376,7 @@ it('shows HTTP Ping and DoH as independent browser tools with their own options'
   await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
     type: 'toolkit:start-job',
     request: expect.objectContaining({
-      tool: 'http_ping', input: 'https://example.com/path', pingCount: 3, httpMethod: 'GET',
+      tool: 'http_ping', input: 'https://example.com/path', httpCount: 3, httpMethod: 'GET',
     }),
   })))
 

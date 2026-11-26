@@ -1,4 +1,4 @@
-import type { NativeProgress } from '../services/nativeHost'
+import type { CheckProgress } from '../services/progress'
 import {
   resolveDoH, safeDoHRecordType, isDoHResolver,
 } from '../services/network/dns-lookup'
@@ -10,7 +10,7 @@ export type BrowserAction = 'public_ip' | 'http_ping' | 'doh_lookup'
 export async function runBrowserTool(
   action: BrowserAction,
   params: Record<string, unknown> = {},
-  onProgress?: (event: NativeProgress) => void,
+  onProgress?: (event: CheckProgress) => void,
   signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   switch (action) {

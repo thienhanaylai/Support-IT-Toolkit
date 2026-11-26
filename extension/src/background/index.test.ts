@@ -23,7 +23,7 @@ describe('context menu popup', () => {
     })
   })
 
-  it('opens Agent instructions only on first install, not on extension updates', async () => {
+  it('opens Browser-only onboarding only on first install, not on extension updates', async () => {
     let onInstalled: ((details: { reason: string }) => void) | undefined
     const create = vi.fn(async () => ({}))
     vi.stubGlobal('chrome', {
@@ -53,6 +53,24 @@ describe('context menu popup', () => {
     })
     await import('./index')
     await vi.waitFor(() => expect(remove).toHaveBeenCalledWith({ origins: ['https://api.ipify.org/*'] }))
+  })
+
+  it('removes API keys left by retired MXToolbox and WHOIS tools', async () => {
+    const set = vi.fn(async () => {})
+    vi.stubGlobal('chrome', {
+      runtime: { onInstalled: { addListener: vi.fn() }, onMessage: { addListener: vi.fn() } },
+      contextMenus: { onClicked: { addListener: vi.fn() } },
+      storage: { local: {
+        get: vi.fn(async () => ({
+          settings: { timeoutMs: 2500, saveHistory: true, mxtoolboxApiKey: 'retired', bknsApiKey: 'retired' },
+        })),
+        set,
+      } },
+    })
+    await import('./index')
+    await vi.waitFor(() => expect(set).toHaveBeenCalledWith({
+      settings: { timeoutMs: 2500, saveHistory: true },
+    }))
   })
 
   it('opens the QR region picker on the active tab', async () => {

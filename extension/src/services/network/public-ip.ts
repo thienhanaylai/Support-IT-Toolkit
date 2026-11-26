@@ -1,12 +1,12 @@
 import { publicIP } from '../formatRecord'
-import type { NativeProgress } from '../nativeHost'
+import type { CheckProgress } from '../progress'
 import { abortError, withTimeout } from './timeout'
 
 export const publicIPEndpoint = 'https://ifconfig.me/ip'
 
 export async function fetchPublicIP(
   timeoutMs: number,
-  onProgress?: (event: NativeProgress) => void,
+  onProgress?: (event: CheckProgress) => void,
   signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
   const scope = withTimeout(timeoutMs, signal)

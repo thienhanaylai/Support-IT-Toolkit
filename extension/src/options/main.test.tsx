@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CheckRecord } from '../services/storage'
-import { agentZipURL } from '../services/agentDownload'
 
 const records: CheckRecord[] = [
   { id: 'one', at: '2026-11-24T12:00:00Z', tool: 'Ping', target: 'example.com', source: 'Local Agent', status: 'ok', result: { message: 'pong' } },
@@ -11,7 +10,7 @@ const records: CheckRecord[] = [
 async function openSettings(initialHistory = records) {
   document.body.innerHTML = '<div id="root"></div>'
   let onChanged: ((changes: Record<string, chrome.storage.StorageChange>, area: string) => void) | undefined
-  const get = vi.fn(async (key: string) => key === 'history' ? { history: initialHistory } : { settings: { timeoutMs: 3200, saveHistory: true, mxtoolboxApiKey: '', bknsApiKey: '' } })
+  const get = vi.fn(async (key: string) => key === 'history' ? { history: initialHistory } : { settings: { timeoutMs: 3200, saveHistory: true } })
   const set = vi.fn(async () => {})
   const remove = vi.fn(async () => {})
   let portalAllowed = false
@@ -50,12 +49,12 @@ describe('Settings history', () => {
     await vi.waitFor(() => expect(toggle.checked).toBe(false))
   })
 
-  it('shows only the complete Agent ZIP download link', async () => {
+  it('does not expose retired Agent installation controls', async () => {
     await openSettings()
-    expect((document.querySelector('#current-extension-id') as HTMLInputElement).value).toBe(chrome.runtime.id)
-    expect(document.querySelector(`a[href="${agentZipURL}"]`)).not.toBeNull()
-    expect(document.querySelectorAll('a[href*="github.com/thienhanaylai/Support-IT-Toolkit/releases/download"]')).toHaveLength(1)
-    expect(document.body.textContent).toContain('Không di chuyển hoặc chạy riêng Install.cmd')
+    expect(document.querySelector('#current-extension-id')).toBeNull()
+    expect(document.querySelector('a[href="#agent"]')).toBeNull()
+    expect(document.body.textContent).not.toContain('Local Agent cho Windows')
+    expect(document.body.textContent).not.toContain('MXToolbox API key')
   })
 
   it('offers Authenticator export from Settings with a secret warning', async () => {

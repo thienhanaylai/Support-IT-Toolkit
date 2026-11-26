@@ -4,7 +4,6 @@ $root = Join-Path $env:LOCALAPPDATA ('Temp\opencode\it-support-setup-test-' + [g
 $savedLocal = $env:LOCALAPPDATA
 $savedProgramFiles = $env:ProgramFiles
 $savedProgramFilesX86 = ${env:ProgramFiles(x86)}
-$id = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 
 try {
   New-Item -Path $root -ItemType Directory -Force | Out-Null
@@ -41,17 +40,12 @@ try {
   )) {
     $env:LOCALAPPDATA = Join-Path $root $test.choice
     $bundle = Join-Path $env:LOCALAPPDATA 'bundle'
-    New-Item -Path (Join-Path $bundle 'extension'), (Join-Path $bundle 'agent') -ItemType Directory -Force | Out-Null
+    New-Item -Path (Join-Path $bundle 'extension') -ItemType Directory -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $source 'setup.ps1') -Destination $bundle
     Set-Content -LiteralPath (Join-Path $bundle 'extension\manifest.json') -Value '{}'
-    Set-Content -LiteralPath (Join-Path $bundle 'agent\it-support-host.exe') -Value 'test agent'
-    Set-Content -LiteralPath (Join-Path $bundle 'install-agent.ps1') -Value 'param([string[]]$ExtensionIds,[string]$AgentBinary) [IO.File]::WriteAllText((Join-Path $env:LOCALAPPDATA "ids.txt"),($ExtensionIds -join ","))'
-    $global:answers = @($test.choice, $id)
+    $global:answers = @($test.choice)
     $openedBefore = $global:openedPaths.Count
     $output = & (Join-Path $bundle 'setup.ps1') 6>&1 | Out-String
-    if ((Get-Content -LiteralPath (Join-Path $env:LOCALAPPDATA 'ids.txt') -Raw) -ne $id) {
-      throw "Wrong Extension ID for $($test.browser)"
-    }
     if ($global:answers.Count -ne 0) { throw "Unused prompt answers for $($test.browser)" }
     $expectedPath = Join-Path $env:LOCALAPPDATA 'ITSupportToolkit\extension'
     $opened = @($global:openedPaths | Select-Object -Skip $openedBefore)
@@ -104,24 +98,15 @@ try {
   $updateBundle = Join-Path $env:LOCALAPPDATA 'bundle'
   $updateSource = Join-Path $updateBundle 'extension'
   $updateInstalled = Join-Path $env:LOCALAPPDATA 'ITSupportToolkit\extension'
-  New-Item -Path (Join-Path $updateSource 'assets'), (Join-Path $updateBundle 'agent'), (Join-Path $updateInstalled 'assets') -ItemType Directory -Force | Out-Null
+  New-Item -Path (Join-Path $updateSource 'assets'), (Join-Path $updateInstalled 'assets') -ItemType Directory -Force | Out-Null
   Copy-Item -LiteralPath (Join-Path $source 'setup.ps1') -Destination $updateBundle
   Set-Content -LiteralPath (Join-Path $updateSource 'manifest.json') -Value '{"version":"0.1.9"}'
   Set-Content -LiteralPath (Join-Path $updateSource 'assets\current.js') -Value 'current bundle'
-  Set-Content -LiteralPath (Join-Path $updateBundle 'agent\it-support-host.exe') -Value 'new agent'
   Set-Content -LiteralPath (Join-Path $updateInstalled 'manifest.json') -Value '{"version":"0.1.6"}'
   Set-Content -LiteralPath (Join-Path $updateInstalled 'assets\stale.js') -Value 'stale bundle'
   Set-Content -LiteralPath (Join-Path $updateInstalled '.it-support-toolkit-installed') -Value 'IT Support Toolkit installer'
-  New-Item -Path (Join-Path $env:LOCALAPPDATA 'ITSupportToolkit') -ItemType Directory -Force | Out-Null
-  Set-Content -LiteralPath (Join-Path $env:LOCALAPPDATA 'ITSupportToolkit\com.itsupport.toolkit.json') `
-    -Value "{`"allowed_origins`": [`"chrome-extension://$id/`"]}"
-  Set-Content -LiteralPath (Join-Path $updateBundle 'install-agent.ps1') `
-    -Value 'param([string[]]$ExtensionIds,[string]$AgentBinary) [IO.File]::WriteAllText((Join-Path $env:LOCALAPPDATA "update-ids.txt"),($ExtensionIds -join ","))'
   $global:answers = @()
   $updateOutput = & (Join-Path $updateBundle 'setup.ps1') -ReuseExistingIds -SkipOpenExtensionFolder 6>&1 | Out-String
-  if ((Get-Content -LiteralPath (Join-Path $env:LOCALAPPDATA 'update-ids.txt') -Raw) -ne $id) {
-    throw 'Dev update did not reuse the existing Extension ID.'
-  }
   if (Test-Path -LiteralPath (Join-Path $updateInstalled 'assets\stale.js')) {
     throw 'Dev update did not remove a stale extension bundle.'
   }

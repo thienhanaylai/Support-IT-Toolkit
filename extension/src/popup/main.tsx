@@ -1,17 +1,13 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Activity, ArrowRight, ClipboardCopy, Clock3, Cloud, Globe2, HardDrive, KeyRound, LockKeyhole, MailSearch, Monitor, Network, Radio, RotateCw, ScanSearch, Search, Server, Settings2, ShieldCheck, UserRoundSearch, Wrench, Zap } from 'lucide-react'
+import { Activity, ArrowRight, ClipboardCopy, Clock3, Cloud, Globe2, HardDrive, KeyRound, LockKeyhole, RotateCw, Search, Settings2, Wrench, Zap } from 'lucide-react'
 import { HistoryItem } from '../components/HistoryItem'
 import { Result } from '../components/Result'
 import { PasswordGenerator } from '../components/PasswordGenerator'
 import { Authenticator } from '../components/Authenticator'
-import { labels, toolRequiresAgent, type DNSRecordType, type Tool } from '../services/checks'
-import { getHistory, getSettings, type CheckRecord } from '../services/storage'
-import { commonPorts, parseScanPorts } from '../services/scanPorts'
-import { domainOnly, isMXToolboxApiKey, registrationDomain, type MXCommand } from '../services/domainLookup'
-import { longVanWhoisURL } from '../services/longVanWhois'
+import { isTool, labels, type Tool } from '../services/checks'
+import { getHistory, type CheckRecord } from '../services/storage'
 import { grantHost } from '../services/hostAccess'
-import { parseInput } from '../services/validation'
 import { dohQuery, dohRecordTypes, dohResolvers, type DoHRecordType, type DoHResolver } from '../services/network/dns-lookup'
 import { parseHTTPURL, type HTTPMethod } from '../services/network/http-ping'
 import { draftKey, jobKey, type CheckJob, type PopupDraft } from '../services/work'
@@ -21,39 +17,27 @@ import '../style.css'
 
 const tools: { id: Tool; icon: React.ReactNode; detail: string }[] = [
   { id: 'vm_info', icon: <HardDrive size={19} />, detail: 'Đọc từ tab Portal hiện tại' },
-  { id: 'ping', icon: <Radio size={19} />, detail: 'Độ trễ & mất gói' },
-  { id: 'traceroute', icon: <Network size={19} />, detail: 'Theo dõi đường đi' },
-  { id: 'tcp_check', icon: <Server size={19} />, detail: 'Kiểm tra cổng kết nối' },
-  { id: 'port_scan', icon: <ScanSearch size={19} />, detail: 'Quét tối đa 32 cổng TCP' },
-  { id: 'tls_check', icon: <ShieldCheck size={19} />, detail: 'Chứng chỉ & TLS' },
-  { id: 'mxtoolbox', icon: <MailSearch size={19} />, detail: 'DNS & email từ MXToolbox' },
-  { id: 'whois', icon: <UserRoundSearch size={19} />, detail: 'Thông tin đăng ký tên miền' },
-  { id: 'dns_lookup', icon: <Globe2 size={19} />, detail: 'Truy vấn qua DNS tùy chọn' },
-  { id: 'local_interfaces', icon: <Monitor size={19} />, detail: 'IP LAN & adapter' },
   { id: 'public_ip', icon: <Zap size={19} />, detail: 'IP Internet nhìn thấy' },
   { id: 'http_ping', icon: <Activity size={19} />, detail: 'Độ trễ phản hồi HTTP' },
-  { id: 'doh_lookup', icon: <Cloud size={19} />, detail: 'DNS qua HTTPS, không cần Agent' },
+  { id: 'doh_lookup', icon: <Cloud size={19} />, detail: 'DNS qua HTTPS' },
 ]
-const instantTools: Tool[] = ['local_interfaces', 'public_ip', 'vm_info']
+const instantTools: Tool[] = ['public_ip', 'vm_info']
 const dohTypeLabels: Record<DoHRecordType, string> = {
   AUTO: 'Tự động (domain → A, IP → PTR)', A: 'A (IPv4)', AAAA: 'AAAA (IPv6)', CNAME: 'CNAME',
   MX: 'MX', TXT: 'TXT', NS: 'NS', SOA: 'SOA', PTR: 'PTR', CAA: 'CAA', SRV: 'SRV',
 }
 const inputTools = tools.filter((item) => !instantTools.includes(item.id))
 const vmTools = tools.filter((item) => item.id === 'vm_info')
-const networkInfoTools = tools.filter((item) => ['local_interfaces', 'public_ip'].includes(item.id))
+const networkInfoTools = tools.filter((item) => item.id === 'public_ip')
+
+function toolForRecord(record: CheckRecord): Tool | undefined {
+  return tools.find((candidate) => labels[candidate.id] === record.tool)?.id
+}
 
 function App() {
   const [activeTab, setActiveTab] = useState<'tools' | 'auth' | 'password'>('auth')
   const [input, setInput] = useState('')
-  const [port, setPort] = useState(443)
-  const [pingCount, setPingCount] = useState(4)
-  const [maxHops, setMaxHops] = useState(20)
-  const [scanMode, setScanMode] = useState<'common' | 'custom'>('common')
-  const [customPorts, setCustomPorts] = useState('22,80,443,8080')
-  const [mxCommand, setMxCommand] = useState<MXCommand>('dns')
-  const [dnsRecordType, setDnsRecordType] = useState<DNSRecordType>('AUTO')
-  const [dnsServer, setDnsServer] = useState('')
+  const [httpCount, setHttpCount] = useState(4)
   const [httpMethod, setHttpMethod] = useState<HTTPMethod>('HEAD')
   const [dohRecordType, setDohRecordType] = useState<DoHRecordType>('AUTO')
   const [dohResolver, setDohResolver] = useState<DoHResolver>('cloudflare')
@@ -69,27 +53,16 @@ function App() {
   const [configBusy, setConfigBusy] = useState(false)
   const [configMessage, setConfigMessage] = useState('')
   const [configFailed, setConfigFailed] = useState(false)
-  const [hasMXKey, setHasMXKey] = useState<boolean | null>(null)
-  const [showMXKeyForm, setShowMXKeyForm] = useState(false)
-  const [mxKeyDraft, setMxKeyDraft] = useState('')
-  const [mxKeyError, setMxKeyError] = useState('')
-  const [mxKeySaving, setMxKeySaving] = useState(false)
-  const [mxKeySaved, setMxKeySaved] = useState(false)
   const [copyingCurrentVM, setCopyingCurrentVM] = useState(false)
   const [copiedCurrentVM, setCopiedCurrentVM] = useState(false)
   const resultRef = useRef<HTMLDivElement>(null)
   const progressRef = useRef<HTMLPreElement>(null)
   const busy = starting || job?.status === 'running'
   const progress = job?.progress ?? []
-  const mxDemo = tool === 'mxtoolbox' && input.trim().toLowerCase() === 'example.com' && mxCommand === 'dns'
-  const mxNeedsKey = tool === 'mxtoolbox' && hasMXKey === false && !mxDemo
   const inputPlaceholder = tool === 'http_ping' ? 'https://example.com/' : 'Domain hoặc IP'
 
   useEffect(() => {
     let mounted = true
-    void getSettings().then((settings) => {
-      if (mounted) setHasMXKey(isMXToolboxApiKey(settings.mxtoolboxApiKey))
-    }).catch(() => { if (mounted) setHasMXKey(null) })
     void chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
       if (mounted) setIsServicePage(Boolean(tab?.url && isPortalServiceUrl(tab.url)))
     }).catch(() => {})
@@ -97,10 +70,6 @@ function App() {
       if (mounted && isPortalVmConfig(saved[portalVmConfigKey])) setVmConfig(saved[portalVmConfigKey])
     }).catch(() => {})
     const changed = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
-      if (area === 'local' && changes.settings && mounted) {
-        const next = changes.settings.newValue as { mxtoolboxApiKey?: string } | undefined
-        setHasMXKey(isMXToolboxApiKey(next?.mxtoolboxApiKey ?? ''))
-      }
       if (area !== 'session' || !changes[jobKey] || !mounted) return
       const next = changes[jobKey].newValue as CheckJob | undefined
       setJob(next ?? null)
@@ -121,18 +90,12 @@ function App() {
       const draft = stored[draftKey] as PopupDraft | undefined
       if (draft) {
         setInput(draft.input)
-        setPort(draft.port)
-        setPingCount(draft.pingCount)
-        setMaxHops(draft.maxHops)
-        setScanMode(draft.scanMode)
-        setCustomPorts(draft.customPorts)
-        setMxCommand(draft.mxCommand)
-        setDnsRecordType(draft.dnsRecordType ?? 'AUTO')
-        setDnsServer(draft.dnsServer ?? '')
+        const legacyDraft = draft as PopupDraft & { pingCount?: number }
+        setHttpCount(draft.httpCount ?? legacyDraft.pingCount ?? 4)
         setHttpMethod(draft.httpMethod ?? 'HEAD')
         setDohRecordType(draft.dohRecordType ?? 'AUTO')
         setDohResolver(draft.dohResolver ?? 'cloudflare')
-        setTool(draft.tool)
+        setTool(isTool(draft.tool) ? draft.tool : null)
       }
       if (typeof stored.selectedTarget === 'string' && stored.selectedTarget) {
         setInput(stored.selectedTarget)
@@ -146,11 +109,13 @@ function App() {
       }
       if (response.job) {
         setJob((current) => current && current.id === response.job?.id && current.status !== 'running' ? current : response.job!)
-        if (response.job.status === 'running' || !draft?.tool) setTool(response.job.tool)
+        if (isTool(response.job.tool) && (response.job.status === 'running' || !isTool(draft?.tool))) setTool(response.job.tool)
         if (response.job.status === 'error' || response.job.status === 'interrupted') setError(response.job.error ?? '')
       } else if (response.error) setError(response.error)
-      setRecord((current) => current ?? (stored.displayedRecord as CheckRecord | undefined) ?? response.job?.record ?? null)
-      setRecent((current) => [...current, ...history.filter((item) => !current.some((saved) => saved.id === item.id))].slice(0, 5))
+      const restoredRecord = (stored.displayedRecord as CheckRecord | undefined) ?? response.job?.record
+      if (restoredRecord && toolForRecord(restoredRecord)) setRecord((current) => current ?? restoredRecord)
+      const supportedHistory = history.filter((item) => toolForRecord(item))
+      setRecent((current) => [...current, ...supportedHistory.filter((item) => !current.some((saved) => saved.id === item.id))].slice(0, 5))
       setReady(true)
     })().catch((cause) => { if (mounted) { setError(String(cause)); setReady(true) } })
     return () => { mounted = false; chrome.storage.onChanged.removeListener(changed) }
@@ -159,11 +124,11 @@ function App() {
   useLayoutEffect(() => {
     if (!ready) return
     const draft: PopupDraft = {
-      input, port, pingCount, maxHops, scanMode, customPorts, mxCommand, dnsRecordType, dnsServer,
+      input, httpCount,
       httpMethod, dohRecordType, dohResolver, tool,
     }
     void chrome.storage.session.set({ [draftKey]: draft })
-  }, [ready, input, port, pingCount, maxHops, scanMode, customPorts, mxCommand, dnsRecordType, dnsServer, httpMethod, dohRecordType, dohResolver, tool])
+  }, [ready, input, httpCount, httpMethod, dohRecordType, dohResolver, tool])
 
   useEffect(() => {
     progressRef.current?.scrollTo({ top: progressRef.current.scrollHeight })
@@ -184,49 +149,24 @@ function App() {
       scrollToResult()
       return
     }
-    let scanPorts = commonPorts
     try {
       if (selectedTool === 'http_ping') parseHTTPURL(input)
       else if (selectedTool === 'doh_lookup') dohQuery(input, dohRecordType)
-      else if (!instantTools.includes(selectedTool)) parseInput(input)
-      if (selectedTool === 'mxtoolbox' || selectedTool === 'whois') domainOnly(input)
-      if (selectedTool === 'port_scan' && scanMode === 'custom') scanPorts = parseScanPorts(customPorts)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       scrollToResult()
       return
     }
-    if (selectedTool === 'mxtoolbox') {
-      try {
-        const settings = await getSettings()
-        const validKey = isMXToolboxApiKey(settings.mxtoolboxApiKey)
-        setHasMXKey(validKey)
-        if (!validKey && (settings.mxtoolboxApiKey.trim() || !(domainOnly(input) === 'example.com' && mxCommand === 'dns'))) {
-          setShowMXKeyForm(true)
-          setMxKeySaved(false)
-          return
-        }
-      } catch {
-        setError('Không thể đọc API key MXToolbox. Hãy thử lại.')
-        scrollToResult()
-        return
-      }
-    }
     setTool(selectedTool)
     setStarting(true)
     scrollToResult()
     try {
-      if (selectedTool === 'whois') await grantHost(longVanWhoisURL(registrationDomain(input)))
       if (selectedTool === 'http_ping') await grantHost(parseHTTPURL(input).href)
-      if (selectedTool === 'mxtoolbox') {
-        const settings = await getSettings()
-        await grantHost(settings.mxtoolboxApiKey.trim() ? 'https://api.mxtoolbox.com/' : 'https://mxtoolbox.com/')
-      }
       const [tab] = selectedTool === 'vm_info' ?
         await chrome.tabs.query({ active: true, currentWindow: true }) : [undefined]
       const response = await chrome.runtime.sendMessage({
         type: 'toolkit:start-job',
-        request: { tool: selectedTool, input, port, scanPorts, mxCommand, pingCount, maxHops, dnsRecordType, dnsServer, httpMethod, dohRecordType, dohResolver, tabId: tab?.id },
+        request: { tool: selectedTool, input, httpCount, httpMethod, dohRecordType, dohResolver, tabId: tab?.id },
       }) as { job?: CheckJob; error?: string }
       if (response.error) throw new Error(response.error)
       if (response.job) setJob((current) =>
@@ -239,34 +179,13 @@ function App() {
 
   function showRecord(item: CheckRecord) {
     if (busy) return
-    const recordTool = tools.find((candidate) => labels[candidate.id] === item.tool)?.id
-    if (recordTool) setTool(recordTool)
+    const recordTool = toolForRecord(item)
+    if (!recordTool) return
+    setTool(recordTool)
     setRecord(item)
     setError('')
     void chrome.storage.session.set({ displayedRecord: item })
     requestAnimationFrame(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
-  }
-
-  async function saveMXKey(event: React.FormEvent) {
-    event.preventDefault()
-    const key = mxKeyDraft.trim()
-    if (!isMXToolboxApiKey(key)) {
-      setMxKeyError('API key MXToolbox phải là UUID hợp lệ.')
-      return
-    }
-    setMxKeySaving(true)
-    setMxKeyError('')
-    try {
-      const settings = await getSettings()
-      await chrome.storage.local.set({ settings: { ...settings, mxtoolboxApiKey: key } })
-      setHasMXKey(true)
-      setShowMXKeyForm(false)
-      setMxKeyDraft('')
-      setMxKeySaved(true)
-      setError('')
-    } catch {
-      setMxKeyError('Không thể lưu API key. Hãy thử lại.')
-    } finally { setMxKeySaving(false) }
   }
 
   async function copyPortalConfig() {
@@ -329,7 +248,7 @@ function App() {
   function toolOutput(groupTools: Tool[]) {
     if (!tool || !groupTools.includes(tool)) return null
     return <div className="tool-group-output" ref={resultRef}>
-      <div className="source-hint"><span className="hint-icon">{toolRequiresAgent(tool) ? <Monitor size={15} /> : <Globe2 size={15} />}</span>{tool === 'vm_info' ? 'Chỉ đọc tab chi tiết computing của Portal khi bạn nhấn nút' : tool === 'http_ping' ? 'Chạy trong trình duyệt · cần cấp quyền host' : tool === 'doh_lookup' ? 'Truy vấn DNS over HTTPS · không dùng Agent' : toolRequiresAgent(tool) ? 'Chạy từ máy bạn · cần Local Agent' : 'Dùng dịch vụ ngoài · có thể cần cấp quyền host'}</div>
+      <div className="source-hint"><span className="hint-icon"><Globe2 size={15} /></span>{tool === 'vm_info' ? 'Chỉ đọc tab chi tiết computing của Portal khi bạn nhấn nút' : tool === 'http_ping' ? 'Chạy trong trình duyệt · cần cấp quyền host' : tool === 'doh_lookup' ? 'Truy vấn DNS over HTTPS trong trình duyệt' : 'Lấy IP Public trực tiếp trong trình duyệt'}</div>
       {(busy || (error && progress.length > 0)) && <div className="checking" role="status">
         <div>{busy ? `Đang kiểm tra ${labels[tool]}` : `Tiến trình ${labels[tool]} đã dừng`}
           {busy && progress.at(-1)?.total ? ` · ${progress.at(-1)?.completed}/${progress.at(-1)?.total} cổng` : ''}
@@ -372,59 +291,7 @@ function App() {
       <section className="tool-section popup-tool-group domain-tool-section" aria-labelledby="input-tools-heading">
         <div className="section-title" id="input-tools-heading"><span>CÔNG CỤ DÙNG DOMAIN / IP</span></div>
         {(!tool || !instantTools.includes(tool)) && <div className="input-panel">
-          <div className="input-wrap"><Search size={18} /><input id="target" aria-label={tool === 'http_ping' ? 'URL HTTP hoặc HTTPS' : 'Domain hoặc địa chỉ IP'} placeholder={inputPlaceholder} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} /><button type="button" className="inline-check" disabled={busy || !tool} onClick={() => mxNeedsKey ? setShowMXKeyForm(true) : void run()}>{busy ? 'Đang chạy...' : mxNeedsKey ? 'Nhập API key' : tool ? 'Kiểm tra' : 'Chọn công cụ'}<ArrowRight size={14} /></button></div>
-          {tool && ['tcp_check', 'tls_check'].includes(tool) && <div className="port-row"><label htmlFor="port">PORT</label><input id="port" type="number" min={1} max={65535} value={port} onChange={(e) => setPort(Number(e.target.value))} /></div>}
-          {tool === 'ping' && <div className="port-row"><label htmlFor="ping-count">SỐ LẦN PING (1–5)</label><input id="ping-count" type="number" min={1} max={5} step={1} value={pingCount} onChange={(e) => setPingCount(Number(e.target.value))} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} /></div>}
-          {tool === 'traceroute' && <div className="port-row"><label htmlFor="max-hops">SỐ HOP TỐI ĐA (1–30)</label><input id="max-hops" type="number" min={1} max={30} step={1} value={maxHops} onChange={(e) => setMaxHops(Number(e.target.value))} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} /></div>}
-          {tool === 'port_scan' && <div className="scan-options">
-            <label htmlFor="scan-mode">CỔNG TCP CẦN QUÉT</label>
-            <select id="scan-mode" value={scanMode} onChange={(e) => setScanMode(e.target.value as 'common' | 'custom')}>
-              <option value="common">Cổng phổ biến ({commonPorts.length})</option>
-              <option value="custom">Nhập danh sách tùy chọn</option>
-            </select>
-            {scanMode === 'custom' && <input type="text" aria-label="Danh sách cổng TCP" placeholder="22,80,443,8000-8005" value={customPorts} onChange={(e) => setCustomPorts(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} />}
-            <small>Tối đa 32 cổng · 2 giây/cổng · chỉ quét khi bạn nhấn Kiểm tra.</small>
-          </div>}
-          {tool === 'mxtoolbox' && <div className="scan-options">
-            <label htmlFor="mx-command">LOẠI KIỂM TRA</label>
-            <select id="mx-command" value={mxCommand} onChange={(e) => setMxCommand(e.target.value as MXCommand)}>
-              <option value="dns">DNS/NS</option>
-              <option value="a">A</option><option value="aaaa">AAAA</option>
-              <option value="mx">MX</option><option value="txt">TXT</option><option value="spf">SPF</option>
-              <option value="dmarc">DMARC</option><option value="soa">SOA</option>
-            </select>
-            {hasMXKey === false && <div className="mx-key-prompt">
-              <div>Chưa có API key MXToolbox. Cần key để kiểm tra tên miền bất kỳ; chỉ DNS <code>example.com</code> dùng thử không cần key.</div>
-              {!showMXKeyForm && <button type="button" className="mx-key-open" onClick={() => { setShowMXKeyForm(true); setMxKeySaved(false) }}>Nhập API key</button>}
-              {showMXKeyForm && <form className="mx-key-form" onSubmit={(event) => void saveMXKey(event)}>
-                <label htmlFor="mx-key-popup">API key MXToolbox (UUID)</label>
-                <input id="mx-key-popup" type="password" autoComplete="off" spellCheck={false} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value={mxKeyDraft} onChange={(event) => { setMxKeyDraft(event.target.value); setMxKeyError('') }} />
-                <div className="mx-key-actions"><button type="submit" disabled={mxKeySaving}>{mxKeySaving ? 'Đang lưu...' : 'Lưu API key'}</button><button type="button" disabled={mxKeySaving} onClick={() => { setShowMXKeyForm(false); setMxKeyDraft(''); setMxKeyError('') }}>Hủy</button></div>
-                {mxKeyError && <p className="mx-key-error" role="alert">{mxKeyError}</p>}
-                <small>Key lưu trên thiết bị trong chrome.storage.local (không mã hóa); chỉ gửi tới MXToolbox khi bạn bấm Kiểm tra.</small>
-              </form>}
-            </div>}
-            {hasMXKey && <small>API key đã lưu. Có thể thay đổi trong Cài đặt.</small>}
-            {mxKeySaved && <small className="mx-key-saved" role="status">Đã lưu API key. Bây giờ bạn có thể bấm Kiểm tra.</small>}
-          </div>}
-          {tool === 'dns_lookup' && <div className="dns-options">
-            <div><label htmlFor="dns-record-type">LOẠI BẢN GHI</label>
-              <select id="dns-record-type" value={dnsRecordType} onChange={(event) => setDnsRecordType(event.target.value as DNSRecordType)}>
-                <option value="AUTO">Tự động (domain → IP, IP → PTR)</option>
-                <option value="A">A (IPv4)</option><option value="AAAA">AAAA (IPv6)</option>
-                <option value="MX">MX</option><option value="TXT">TXT</option>
-                <option value="NS">NS</option><option value="CNAME">CNAME</option><option value="PTR">PTR</option>
-              </select>
-            </div>
-            <div><label htmlFor="dns-server">DNS SERVER TÙY CHỌN</label>
-              <input id="dns-server" type="text" list="dns-server-presets" spellCheck={false}
-                placeholder="Trống = DNS hệ điều hành" value={dnsServer}
-                onChange={(event) => setDnsServer(event.target.value)}
-                onKeyDown={(event) => { if (event.key === 'Enter') void run() }} />
-              <datalist id="dns-server-presets"><option value="1.1.1.1" /><option value="8.8.8.8" /><option value="9.9.9.9" /></datalist>
-            </div>
-            <small>Nhập IPv4/IPv6, có thể kèm port; ví dụ 1.1.1.1, 8.8.8.8:53 hoặc [2001:4860:4860::8888]:53.</small>
-          </div>}
+          <div className="input-wrap"><Search size={18} /><input id="target" aria-label={tool === 'http_ping' ? 'URL HTTP hoặc HTTPS' : 'Domain hoặc địa chỉ IP'} placeholder={inputPlaceholder} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} /><button type="button" className="inline-check" disabled={busy || !tool} onClick={() => void run()}>{busy ? 'Đang chạy...' : tool ? 'Kiểm tra' : 'Chọn công cụ'}<ArrowRight size={14} /></button></div>
           {tool === 'http_ping' && <div className="dns-options">
             <div><label htmlFor="http-method">PHƯƠNG THỨC</label>
               <select id="http-method" value={httpMethod} onChange={(event) => setHttpMethod(event.target.value as HTTPMethod)}>
@@ -432,8 +299,8 @@ function App() {
               </select>
             </div>
             <div><label htmlFor="http-count">SỐ LẦN (1–5)</label>
-              <input id="http-count" type="number" min={1} max={5} step={1} value={pingCount}
-                onChange={(event) => setPingCount(Number(event.target.value))}
+              <input id="http-count" type="number" min={1} max={5} step={1} value={httpCount}
+                onChange={(event) => setHttpCount(Number(event.target.value))}
                 onKeyDown={(event) => { if (event.key === 'Enter') void run() }} />
             </div>
             <small>Đo thời gian tới response headers; 4xx/5xx vẫn là phản hồi HTTP, không phải lỗi mạng. Không phải ICMP RTT.</small>
