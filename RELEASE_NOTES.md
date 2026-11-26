@@ -1,28 +1,42 @@
-# IT Support Toolkit v0.1.9 — DNS Check và Authenticator cải tiến
+# IT Support Toolkit v0.2.0 — Browser-only
 
-**Tải về:** `ITSupportToolkit-Windows.zip` là bộ cài Windows đầy đủ cho Chrome/Edge. Giải nén toàn bộ rồi chạy `Install.cmd`. Có thể dùng `ITSupportToolkit-Windows.exe` để cài từ một file.
+**Tải về:** `ITSupportToolkit-Windows.zip` là bộ cài Windows cho Chrome/Edge. Giải nén toàn bộ rồi chạy `Install.cmd`, hoặc dùng `ITSupportToolkit-Windows.exe` để cài từ một file.
 
-Release này phát hành bộ cài Windows đầy đủ và ZIP Agent độc lập. Gói `ITSupportToolkit-Edge-Store.zip` được dựng riêng để nộp Microsoft Edge Add-ons và **không đính kèm GitHub Release**.
+Gói `ITSupportToolkit-Edge-Store.zip` được dựng riêng để cập nhật Microsoft Edge Add-ons và **không đính kèm GitHub Release**.
 
-## Thay đổi từ v0.1.8
+## Thay đổi từ v0.1.9
 
-- Thêm **DNS Check** chạy qua Windows Local Agent, hỗ trợ `AUTO`, `A`, `AAAA`, `MX`, `TXT`, `NS`, `CNAME`, `PTR` và DNS server IPv4/IPv6 tùy chọn, có thể kèm port.
-- `AUTO` tra A/AAAA cho domain và reverse PTR cho địa chỉ IP; extension nhận diện Agent cũ và hướng dẫn cập nhật.
-- Authenticator đưa mã OTP 34 px lên cùng hàng thông tin tài khoản và căn giữa khoảng trống của thẻ.
-- Nút **Chọn vùng QR** cho phép kéo khoanh vùng mã QR trực tiếp trên tab đang mở, không sử dụng camera; nhấn `Esc` để hủy.
-- Kéo sắp xếp Authenticator chuyển sang Pointer Events: không còn biểu tượng cấm của native drag, giữ con trỏ `grabbing`, hỗ trợ lăn bánh xe và tự cuộn khi kéo sát mép danh sách.
-- Giữ Import ảnh/TXT, mã hóa AES-256-GCM, thứ tự đã lưu, export TXT và điền nhanh TOTP trên Portal.
+- Chuyển hoàn toàn sang **Browser-only**: không còn Windows Local Agent, Native Messaging, service hoặc chương trình mạng native.
+- Giữ bốn công cụ chạy trực tiếp trong trình duyệt: **IP Public**, **HTTP Ping**, **DNS over HTTPS** và **Thông tin VM**.
+- Loại khỏi UI/runtime: ICMP Ping, Traceroute, TCP Port, Quét Port, DNS hệ điều hành, SSL/TLS, Mạng LAN, MXToolbox và WHOIS.
+- Kết quả cũ của các công cụ đã bỏ vẫn xem được trong trang lịch sử và báo cáo HTML.
+- Manifest bỏ quyền `nativeMessaging`; bộ cài Windows không còn build, chép hoặc đăng ký Agent.
+- Tự xóa API key MXToolbox/BKNS còn lưu từ phiên bản cũ.
+- Giữ Authenticator, Password Generator và các tiện ích Portal Long Vân.
+
+## Giới hạn
+
+- Manifest V3 không cho extension thực hiện ICMP, traceroute, mở TCP tùy ý hoặc đọc đầy đủ card mạng Windows.
+- **HTTP Ping** đo thời gian tới response headers, không phải ICMP RTT.
+- **DNS over HTTPS** gửi truy vấn tới Cloudflare, Google hoặc Quad9; không phải DNS hệ điều hành/VPN.
+- Không có backend, remote probe hoặc fallback từ xa.
 
 ## Kiểm tra
 
-- 122/122 bài test extension đạt; TypeScript, production build và `npm audit` đạt.
-- `go test ./...` và `go vet ./...` của Windows Local Agent đạt.
-- Bộ cài Windows, Agent và Edge Add-ons được kiểm tra bằng các script đóng gói; SHA-256 ghi bên dưới.
-- `Install.cmd` độc lập và gói Edge Add-ons không được tải lên GitHub Release.
+- 129/129 bài test extension đạt.
+- TypeScript và production build đạt.
+- 6/6 kiểm tra bộ cài Windows đạt.
+- Manifest trong cả hai gói là phiên bản **0.2.0**, không có `nativeMessaging`.
+- Gói Windows và gói Edge Store không chứa Agent, `native`, `it-support-host` hoặc `install-agent`.
 
 ## SHA-256
 
-- `ITSupportToolkit-Windows.zip`: `0FCA235C3F538EC680AB79AB3D6D37C845FCCFFBC011D8667068F9D4FC852326`
-- `ITSupportToolkit-Windows.exe`: `92D2B7DBAED76B07A58C6752BA5394463C8BE6F9EC179615E89E2133A21E8157`
-- `ITSupportToolkit-Agent-Windows.zip`: `37C06C28F3C63B21A399DF069B30E0A39AACFE6EE8792B754E97449F726A8A87`
-- Gói nộp riêng `ITSupportToolkit-Edge-Store.zip`: `650E69DC5ED68B2F0E432503FC139EA4F68075F4E53BEAF6671A43859063CD40`
+- `ITSupportToolkit-Windows.zip`: `749A3E09E07A1CD35050DDC6A935BE9C195BFCFB90F5FAB157DBA151027674D0`
+- `ITSupportToolkit-Windows.exe`: `B95CF2B06A34F32F64691C6CDDCC3DF7BEB1AF833DAE32B3E551B6C1B001B3E4`
+- `ITSupportToolkit-Edge-Store.zip`: `9A264C176557796F38DED655140817066285E38CED4E7087705A9B439AD30059`
+
+## Ghi chú
+
+- Chỉ đính kèm `ITSupportToolkit-Windows.zip`, `ITSupportToolkit-Windows.exe` và `SHA256SUMS.txt` vào GitHub Release.
+- Tải `ITSupportToolkit-Edge-Store.zip` lên Microsoft Partner Center để cập nhật Edge Add-ons; gói này không đính kèm GitHub Release.
+- EXE chưa được ký số nên Windows có thể hiển thị cảnh báo.

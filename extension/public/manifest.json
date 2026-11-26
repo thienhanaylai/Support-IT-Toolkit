@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "IT Support Toolkit",
-  "version": "0.1.9",
-  "description": "Công cụ kiểm tra mạng tại máy người dùng.",
+  "version": "0.2.0",
+  "description": "Công cụ kiểm tra mạng và hỗ trợ Portal trong trình duyệt.",
   "action": {
     "default_popup": "popup.html",
     "default_title": "IT Support Toolkit",
