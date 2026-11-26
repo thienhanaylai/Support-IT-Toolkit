@@ -78,7 +78,7 @@ export async function getVMInfoFromTab(tabId?: number): Promise<VMInfo> {
 export function formatVMInfo(data: Record<string, unknown>): string {
   const value = (field: keyof VMInfo) => typeof data[field] === 'string' ? data[field] : ''
   return [
-    `Link VM: ${value('linkVm')}`,
+    `[Link VM](${value('linkVm')})`,
     '',
     `Tên computing: ${value('computingName')}`,
     `Nhóm ảo hóa: ${value('virtualizationGroup')}`,

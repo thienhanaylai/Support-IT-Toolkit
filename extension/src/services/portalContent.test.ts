@@ -11,14 +11,24 @@ const config = {
   siteProvider: 'HCM', siteProviderId: '106066',
 }
 
-async function execute(url: string, body: string, sendMessage: ReturnType<typeof vi.fn>, writeText = vi.fn(async () => {})) {
+async function execute(
+  url: string,
+  body: string,
+  sendMessage: ReturnType<typeof vi.fn>,
+  writeText = vi.fn(async () => {}),
+  waitForTool = true,
+) {
   const dom = new JSDOM(`<!doctype html><body>${body}</body>`, { url, runScripts: 'outside-only' })
   Object.defineProperty(dom.window, 'chrome', { value: { runtime: { sendMessage } } })
   Object.defineProperty(dom.window.navigator, 'clipboard', { value: { writeText }, configurable: true })
   dom.window.eval(script)
-  await vi.waitFor(() => expect(dom.window.document.querySelector(
-    '.it-toolkit-portal-button, .it-toolkit-vm-info-copy-button, .it-toolkit-otp-button',
-  )).not.toBeNull())
+  if (waitForTool) {
+    await vi.waitFor(() => expect(dom.window.document.querySelector(
+      '.it-toolkit-portal-button, .it-toolkit-vm-info-copy-button, .it-toolkit-otp-button',
+    )).not.toBeNull())
+  } else {
+    await Promise.resolve()
+  }
   return dom
 }
 
@@ -48,7 +58,7 @@ it('places Copy configuration beside the Service attribute panel actions', async
 })
 
 it('places a quick VM copy button in the Information heading', async () => {
-  const text = 'Link VM: https://portal.longvan.vn/vm\n\nTên computing: COMPUTING-A\nVMID: 663312104'
+  const text = '[Link VM](https://portal.longvan.vn/vm)\n\nTên computing: COMPUTING-A\nVMID: 663312104'
   const sendMessage = vi.fn(async () => ({ info: { computingName: 'COMPUTING-A' }, text }))
   const writeText = vi.fn(async () => {})
   const dom = await execute(
@@ -107,6 +117,9 @@ it('fills the Portal OTP field from the matching Long Van Authenticator', async 
   const picker = dom.window.document.querySelector<HTMLButtonElement>('.it-toolkit-otp-picker')!
   picker.click()
   await vi.waitFor(() => expect(dom.window.document.querySelector<HTMLElement>('.it-toolkit-otp-menu')?.hidden).toBe(false))
+  const menu = dom.window.document.querySelector<HTMLElement>('.it-toolkit-otp-menu')!
+  expect(menu.parentElement).toBe(dom.window.document.body)
+  expect(menu.style.top || menu.style.bottom).not.toBe('')
   const github = [...dom.window.document.querySelectorAll<HTMLButtonElement>('.it-toolkit-otp-account')]
     .find((item) => item.textContent?.includes('GitHub'))!
   github.click()
@@ -114,6 +127,44 @@ it('fills the Portal OTP field from the matching Long Van Authenticator', async 
   expect(button.textContent).toBe('GitHub: 111111')
   dom.window.dispatchEvent(new dom.window.Event('pagehide'))
   dom.window.close()
+})
+
+it('keeps quick Auth paste off non-computing pages and removes it after Portal navigation', async () => {
+  const otpDialog = `<div class="ui-dialog" role="dialog">
+    <strong>Nhập mã xác thực để xem mật khẩu</strong>
+    <label for="portal-otp">Nhập mã OTP</label>
+    <input id="portal-otp" type="text" value="">
+  </div>`
+  const unrelatedMessage = vi.fn(async () => ({ codes: [
+    { id: 'longvan', issuer: 'LONGVAN-PT', label: '0917580860', code: '654321' },
+  ] }))
+  const unrelated = await execute(
+    'https://portal.longvan.vn/cloud-service-manager/manager/cloud-service-detail.xhtml?id=1',
+    otpDialog,
+    unrelatedMessage,
+    undefined,
+    false,
+  )
+  expect(unrelated.window.document.querySelector('.it-toolkit-otp-button')).toBeNull()
+  expect(unrelatedMessage).not.toHaveBeenCalledWith({ type: 'toolkit:get-authenticator-codes' })
+  unrelated.window.dispatchEvent(new unrelated.window.Event('pagehide'))
+  unrelated.window.close()
+
+  const sendMessage = vi.fn(async () => ({ codes: [
+    { id: 'longvan', issuer: 'LONGVAN-PT', label: '0917580860', code: '654321' },
+  ] }))
+  const computing = await execute(
+    'https://portal.longvan.vn/computing-manager/manager/computing/computing_detail.xhtml?id=1',
+    otpDialog,
+    sendMessage,
+  )
+  await vi.waitFor(() => expect(computing.window.document.querySelector('.it-toolkit-otp-button')).not.toBeNull())
+  computing.window.history.pushState({}, '', '/cloud-service-manager/manager/web-hosting-service-detail.xhtml?id=1')
+  computing.window.document.body.append(computing.window.document.createElement('span'))
+  await vi.waitFor(() => expect(computing.window.document.querySelector('.it-toolkit-otp-button')).toBeNull())
+  expect(computing.window.document.querySelector('.it-toolkit-otp-menu')).toBeNull()
+  computing.window.dispatchEvent(new computing.window.Event('pagehide'))
+  computing.window.close()
 })
 
 it('places Paste configuration inside Resources and reports the required order', async () => {

@@ -43,6 +43,10 @@ describe('Portal computing page', () => {
     })
     expect(formatVMInfo(info!)).toContain('Nhóm ảo hóa: \nNhóm: Dịch vụ')
     expect(formatVMInfo(info!)).not.toContain('SECRET-DO-NOT-COPY')
+    expect(formatVMInfo({
+      ...info!,
+      linkVm: 'https://portal.longvan.vn/computing-manager/manager/computing/computing_detail.xhtml?id=20.27079.4966&wsId=20.1087&orgId=LONGVAN',
+    })).toMatch(/^\[Link VM\]\(https:\/\/portal\.longvan\.vn\/computing-manager\/manager\/computing\/computing_detail\.xhtml\?id=20\.27079\.4966&wsId=20\.1087&orgId=LONGVAN\)\n\nTên computing: COMPUTING-A/)
     expect(getCopyText({ id: 'vm', at: '', tool: 'Thông tin VM', target: 'COMPUTING-A', source: 'Portal', status: 'ok', result: { ...info! } })).toContain('VMID: 663312104')
     const result = renderToStaticMarkup(createElement(Result, {
       record: { id: 'vm', at: '', tool: 'Thông tin VM', target: 'COMPUTING-A', source: 'Portal', status: 'ok', result: { ...info! } },

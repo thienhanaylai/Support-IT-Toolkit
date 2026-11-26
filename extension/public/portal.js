@@ -24,6 +24,7 @@
   let stopped = false
   let vmInfoToastTimer = 0
   let otpRefreshTimer = 0
+  const otpMenuId = 'it-toolkit-otp-menu-popover'
 
   function element(tag, className, text) {
     const node = document.createElement(tag)
@@ -116,6 +117,7 @@
   }
 
   function otpControl() {
+    if (location.pathname !== detailPath) return null
     const labels = [...document.querySelectorAll('label, strong, span, div')]
     const label = labels.find((node) =>
       (node.textContent ?? '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN') === 'nhập mã otp')
@@ -157,7 +159,52 @@
     scheduleRender()
   }
 
+  function removeOtpTool() {
+    for (const root of document.querySelectorAll('.it-toolkit-otp-tools')) root.remove()
+    for (const anchor of document.querySelectorAll('.it-toolkit-otp-anchor')) {
+      anchor.classList.remove('it-toolkit-otp-anchor')
+    }
+    document.getElementById(otpMenuId)?.remove()
+    window.clearTimeout(otpRefreshTimer)
+    state.otpBusy = false
+    state.otpLoaded = false
+    state.otpCodes = []
+    state.otpSelectedId = ''
+    state.otpMenuOpen = false
+    state.otpText = ''
+    state.otpKind = ''
+  }
+
+  function positionOtpMenu(menu, anchor) {
+    if (menu.hidden) return
+    const rect = anchor.getBoundingClientRect()
+    const viewportWidth = document.documentElement.clientWidth || window.innerWidth
+    const viewportHeight = document.documentElement.clientHeight || window.innerHeight
+    const margin = 8
+    const width = Math.max(120, Math.min(280, viewportWidth - margin * 2))
+    const left = Math.min(
+      Math.max(margin, rect.right - width),
+      Math.max(margin, viewportWidth - width - margin),
+    )
+    const spaceBelow = viewportHeight - rect.bottom - margin
+    const spaceAbove = rect.top - margin
+    const openAbove = spaceBelow < 150 && spaceAbove > spaceBelow
+    const available = Math.max(80, (openAbove ? spaceAbove : spaceBelow) - 6)
+    const maxHeight = Math.min(280, available)
+    const styles = {
+      width: `${Math.round(width)}px`,
+      left: `${Math.round(left)}px`,
+      maxHeight: `${Math.round(maxHeight)}px`,
+      top: openAbove ? 'auto' : `${Math.round(rect.bottom + 6)}px`,
+      bottom: openAbove ? `${Math.round(viewportHeight - rect.top + 6)}px` : 'auto',
+    }
+    for (const [name, value] of Object.entries(styles)) {
+      if (menu.style[name] !== value) menu.style[name] = value
+    }
+  }
+
   async function loadAuthenticatorCodes(openMenu = false) {
+    if (location.pathname !== detailPath) return null
     if (state.otpBusy) return selectedOtpCode()
     state.otpBusy = true
     state.otpText = ''
@@ -761,8 +808,15 @@
   }
 
   function renderOtpTool() {
+    if (location.pathname !== detailPath) {
+      removeOtpTool()
+      return
+    }
     const control = otpControl()
-    if (!control) return
+    if (!control) {
+      document.getElementById(otpMenuId)?.remove()
+      return
+    }
     let anchor = control.dialog?.querySelector('.it-toolkit-otp-anchor')
     if (!anchor) {
       const candidates = [...(control.dialog?.querySelectorAll('label, strong, span, div, p') ?? [])]
@@ -782,8 +836,9 @@
       picker.type = 'button'
       picker.title = 'Chọn mã Authenticator khác'
       picker.setAttribute('aria-label', 'Chọn mã Authenticator khác')
+      picker.setAttribute('aria-controls', otpMenuId)
       picker.addEventListener('click', toggleAuthenticatorCodes)
-      root.append(button, picker, element('div', 'it-toolkit-otp-menu'), element('span', 'it-toolkit-otp-status'))
+      root.append(button, picker, element('span', 'it-toolkit-otp-status'))
       anchor.append(root)
     }
     if (!state.otpLoaded && !state.otpBusy) void loadAuthenticatorCodes(false)
@@ -802,7 +857,13 @@
       picker.disabled = state.otpBusy
       picker.setAttribute('aria-expanded', String(state.otpMenuOpen))
     }
-    const menu = root.querySelector('.it-toolkit-otp-menu')
+    let menu = document.getElementById(otpMenuId)
+    if (!menu) {
+      menu = element('div', 'it-toolkit-otp-menu')
+      menu.id = otpMenuId
+      menu.setAttribute('role', 'listbox')
+      document.body.append(menu)
+    }
     if (menu) {
       menu.hidden = !state.otpMenuOpen
       const signature = `${state.otpSelectedId}|${state.otpCodes.map((item) => `${item.id}:${item.code}`).join('|')}`
@@ -820,6 +881,7 @@
           return itemButton
         }))
       }
+      positionOtpMenu(menu, root)
     }
     const status = root.querySelector('.it-toolkit-otp-status')
     if (status) {
@@ -836,8 +898,8 @@
     if (location.pathname === createPath) renderCreate()
     if (location.pathname === detailPath) {
       renderDetail()
-      renderOtpTool()
     }
+    renderOtpTool()
   }
 
   function scheduleRender() {
@@ -880,6 +942,7 @@
     window.removeEventListener('resize', scheduleRender)
     window.clearTimeout(vmInfoToastTimer)
     window.clearTimeout(otpRefreshTimer)
+    removeOtpTool()
     document.getElementById('it-toolkit-vm-info-toast')?.remove()
     document.getElementById('it-toolkit-password-options-popover')?.remove()
   }, { once: true })
