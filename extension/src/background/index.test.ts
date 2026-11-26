@@ -81,6 +81,7 @@ describe('context menu popup', () => {
     ) => boolean | void
     const listeners: Listener[] = []
     const groups = [{ id: 'vmware', name: 'Vmware', members: [] }]
+    const templates = [{ id: 'notice', name: 'Thông báo', content: 'Nội dung mẫu' }]
     vi.stubGlobal('chrome', {
       runtime: {
         onInstalled: { addListener: vi.fn() },
@@ -89,7 +90,8 @@ describe('context menu popup', () => {
       contextMenus: { create: vi.fn(), onClicked: { addListener: vi.fn() } },
       sidePanel: { setPanelBehavior: vi.fn(async () => {}) },
       storage: { local: { get: vi.fn(async (key: string) =>
-        key === 'tagElements' ? { tagElements: groups } : {}) } },
+        key === 'tagElements' ? { tagElements: groups } :
+          key === 'messageTemplates' ? { messageTemplates: templates } : {}) } },
     })
     await import('./index')
     const listener = listeners.at(-1)!
@@ -109,6 +111,14 @@ describe('context menu popup', () => {
     )).toBe(true)
     await vi.waitFor(() => expect(tags).toHaveBeenCalledWith({ groups, theme: 'light' }))
 
+    const messageTemplates = vi.fn()
+    expect(listener(
+      { type: 'toolkit:get-message-templates' },
+      { tab: { id: 8, url: 'https://portal.longvan.vn/computing-manager/manager/computing/computing_detail.xhtml?id=1' } },
+      messageTemplates,
+    )).toBe(true)
+    await vi.waitFor(() => expect(messageTemplates).toHaveBeenCalledWith({ templates }))
+
     const denied = vi.fn()
     expect(listener(
       { type: 'toolkit:get-authenticator-codes' },
@@ -124,6 +134,16 @@ describe('context menu popup', () => {
       deniedTags,
     )).toBe(false)
     expect(deniedTags).toHaveBeenCalledWith({ error: 'Chỉ có thể dùng Tag Element trên trang Portal Long Vân.' })
+
+    const deniedTemplates = vi.fn()
+    expect(listener(
+      { type: 'toolkit:get-message-templates' },
+      { tab: { id: 9, url: 'https://portal.longvan.vn.evil.test/' } },
+      deniedTemplates,
+    )).toBe(false)
+    expect(deniedTemplates).toHaveBeenCalledWith({
+      error: 'Chỉ có thể dùng template tin nhắn trên trang Portal Long Vân.',
+    })
   })
 
   it('opens the QR region picker on the active tab', async () => {

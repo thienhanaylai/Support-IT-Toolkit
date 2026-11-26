@@ -17,6 +17,9 @@ import {
 } from '../services/authenticatorQR'
 import { loadTagElementGroups } from '../services/tagElements'
 import { getSettings } from '../services/storage'
+import {
+  deleteMessageTemplate, loadMessageTemplates, saveMessageTemplate,
+} from '../services/messageTemplates'
 
 registerJobs()
 
@@ -164,6 +167,9 @@ chrome.runtime.onMessage.addListener((message: {
   tabId?: unknown
   token?: unknown
   region?: unknown
+  templateId?: unknown
+  name?: unknown
+  content?: unknown
 }, sender, respond) => {
   const tabId = sender.tab?.id
   const url = sender.tab?.url
@@ -229,6 +235,39 @@ chrome.runtime.onMessage.addListener((message: {
     }
     void Promise.all([loadTagElementGroups(), getSettings()]).then(
       ([groups, settings]) => respond({ groups, theme: settings.theme }),
+      (error) => respond({ error: error instanceof Error ? error.message : String(error) }),
+    )
+    return true
+  }
+  if (message?.type === 'toolkit:get-message-templates') {
+    if (!url || !isPortalPageUrl(url)) {
+      respond({ error: 'Chỉ có thể dùng template tin nhắn trên trang Portal Long Vân.' })
+      return false
+    }
+    void loadMessageTemplates().then(
+      (templates) => respond({ templates }),
+      (error) => respond({ error: error instanceof Error ? error.message : String(error) }),
+    )
+    return true
+  }
+  if (message?.type === 'toolkit:save-message-template') {
+    if (!url || !isPortalPageUrl(url)) {
+      respond({ error: 'Chỉ có thể lưu template tin nhắn trên trang Portal Long Vân.' })
+      return false
+    }
+    void saveMessageTemplate(message.name, message.content, message.templateId).then(
+      (result) => respond(result),
+      (error) => respond({ error: error instanceof Error ? error.message : String(error) }),
+    )
+    return true
+  }
+  if (message?.type === 'toolkit:delete-message-template') {
+    if (!url || !isPortalPageUrl(url)) {
+      respond({ error: 'Chỉ có thể xóa template tin nhắn trên trang Portal Long Vân.' })
+      return false
+    }
+    void deleteMessageTemplate(message.templateId).then(
+      (templates) => respond({ templates }),
       (error) => respond({ error: error instanceof Error ? error.message : String(error) }),
     )
     return true

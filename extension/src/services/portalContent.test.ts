@@ -93,10 +93,16 @@ it('composes editable VM info, extra text, and a configured Element group before
       { id: 'vuong', name: 'Lê Ngọc Vương', elementId: '@10.19530321:team.longvan.vn' },
     ],
   }]
-  const sendMessage = vi.fn(async (message: { type: string }) =>
-    message.type === 'toolkit:get-tag-elements'
-      ? { groups, theme: 'dark' }
-      : { info: { computingName: 'COMPUTING-A' }, text })
+  const templates = [{ id: 'notice', name: 'Thông báo', content: 'Template mẫu' }]
+  const sendMessage = vi.fn(async (message: { type: string } & Record<string, unknown>) => {
+    if (message.type === 'toolkit:get-tag-elements') return { groups, theme: 'dark' }
+    if (message.type === 'toolkit:get-message-templates') return { templates }
+    if (message.type === 'toolkit:save-message-template') {
+      const template = { id: 'notice', name: String(message.name), content: String(message.content) }
+      return { template, templates: [template] }
+    }
+    return { info: { computingName: 'COMPUTING-A' }, text }
+  })
   const writeText = vi.fn(async () => {})
   const dom = await execute(
     'https://portal.longvan.vn/computing-manager/manager/computing/computing_detail.xhtml?id=1',
@@ -118,21 +124,45 @@ it('composes editable VM info, extra text, and a configured Element group before
   expect(dialog.parentElement?.classList.contains('is-dark')).toBe(true)
   expect(sendMessage).toHaveBeenCalledWith({ type: 'toolkit:get-current-vm-info' })
   expect(sendMessage).toHaveBeenCalledWith({ type: 'toolkit:get-tag-elements' })
+  expect(sendMessage).toHaveBeenCalledWith({ type: 'toolkit:get-message-templates' })
 
   vmText.value = `${text}\nTrạng thái: cần kiểm tra`
   vmText.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
   const extra = dialog.querySelector<HTMLTextAreaElement>('.it-toolkit-vm-composer-extra')!
-  extra.value = 'Ghi chú bổ sung'
-  extra.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
-  dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-tag-buttons button')!.click()
+  const templateSelect = dialog.querySelector<HTMLSelectElement>('.it-toolkit-vm-composer-template-select')!
+  await vi.waitFor(() => expect(templateSelect.querySelectorAll('option')).toHaveLength(2))
+  templateSelect.value = 'notice'
+  templateSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
+  await vi.waitFor(() => expect(dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-template-insert')?.disabled).toBe(false))
+  dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-template-insert')!.click()
+  await vi.waitFor(() => expect(extra.value).toBe('Template mẫu'))
+  const prompt = vi.spyOn(dom.window, 'prompt').mockReturnValue('Thông báo cập nhật')
+  dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-template-save')!.click()
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({
+    type: 'toolkit:save-message-template',
+    templateId: 'notice',
+    name: 'Thông báo cập nhật',
+    content: 'Template mẫu',
+  }))
+  prompt.mockRestore()
+
+  const groupButton = dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-tag-buttons button')!
+  groupButton.click()
   await vi.waitFor(() => expect(extra.value)
     .toContain('(Lê Ngọc Vương)[@10.19530321:team.longvan.vn]'))
+  extra.value = 'Template mẫu'
+  extra.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+  expect(groupButton.disabled).toBe(false)
+  groupButton.click()
+  await vi.waitFor(() => expect(extra.value)
+    .toBe('Template mẫu\n\n(Lê Ngọc Vương)[@10.19530321:team.longvan.vn]'))
   dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-copy')!.click()
   await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(
-    `${text}\nTrạng thái: cần kiểm tra\n\nGhi chú bổ sung\n\n(Lê Ngọc Vương)[@10.19530321:team.longvan.vn]`,
+    `${text}\nTrạng thái: cần kiểm tra\n\nTemplate mẫu\n\n(Lê Ngọc Vương)[@10.19530321:team.longvan.vn]`,
   ))
-  await vi.waitFor(() => expect(dialog.querySelector('.it-toolkit-vm-composer-status')?.textContent)
-    .toContain('Đã sao chép toàn bộ'))
+  await vi.waitFor(() => expect(dom.window.document.querySelector('.it-toolkit-vm-composer')).toBeNull())
+  await vi.waitFor(() => expect(dom.window.document.querySelector('.it-toolkit-vm-info-copy-status')?.textContent)
+    .toContain('Đã sao chép toàn bộ nội dung nâng cao'))
   dom.window.dispatchEvent(new dom.window.Event('pagehide'))
   dom.window.close()
 })

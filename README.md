@@ -32,6 +32,7 @@ Quyền `https://portal.longvan.vn/*` là quyền tùy chọn và chỉ được
 - Hộp xác thực hai lớp: nhận diện dialog `dlgEnabled2FA` trên các trang Portal và điền mã TOTP hiện tại; content script không nhận secret.
 - Tag Element: tab riêng để sao chép liên hệ theo lĩnh vực hoặc từng người dưới dạng `(Tên)[@id:domain]`, kèm quản lý/import danh sách trong Cài đặt.
 - Copy VM nâng cao trên Portal: chỉnh sửa thông tin VM, thêm ghi chú và chèn liên hệ theo lĩnh vực trước khi sao chép một lần.
+- Template tin nhắn trong Copy VM nâng cao: chèn lặp lại, lưu mới/ghi đè, xóa và tự đóng hộp sau khi sao chép thành công.
 - Giao diện dùng bảng màu xanh/vàng đồng bộ Portal Long Vân, hỗ trợ theme Sáng/Tối được chọn trong Cài đặt.
 - Trang Cài đặt dùng tab độc lập cho Tùy chọn, Tag Element, Authenticator, Quyền Portal và Lịch sử.
 - Extension không tự bấm Lưu/Tạo VM.
