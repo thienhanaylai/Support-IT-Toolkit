@@ -32,6 +32,11 @@ export function safePingCount(n: number): number {
   return n
 }
 
+export function safeHTTPCount(n: number): number {
+  if (!Number.isInteger(n) || n < 1 || n > 5) throw new Error('Số lần HTTP Ping phải từ 1 đến 5')
+  return n
+}
+
 export function safeMaxHops(n: number): number {
   if (!Number.isInteger(n) || n < 1 || n > 30) throw new Error('Số hop Traceroute phải từ 1 đến 30')
   return n

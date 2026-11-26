@@ -46,6 +46,7 @@ async function execute(job: CheckJob, request: CheckRequest): Promise<void> {
         job.progress = [...job.progress, { ...event, text: event.text.slice(0, 2000) }].slice(-100)
         write()
       }, request.tabId, request.dnsRecordType, request.dnsServer,
+      request.httpMethod ?? 'HEAD', request.dohRecordType ?? 'AUTO', request.dohResolver ?? 'cloudflare',
     )
     job.status = 'done'
     job.record = record

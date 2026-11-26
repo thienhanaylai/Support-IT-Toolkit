@@ -23,7 +23,7 @@
   "side_panel": { "default_path": "sidepanel.html" },
   "options_page": "options.html",
   "permissions": ["storage", "activeTab", "scripting", "contextMenus", "sidePanel", "nativeMessaging"],
-  "host_permissions": ["https://ifconfig.me/*"],
+  "host_permissions": ["https://ifconfig.me/*", "https://cloudflare-dns.com/*", "https://dns.google/*", "https://dns.quad9.net/*"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"

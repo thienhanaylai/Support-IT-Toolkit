@@ -7,25 +7,33 @@ import { commonPorts } from './scanPorts'
 import { getVMInfoFromTab } from './vmInfo'
 import { longVanWhoisLookup } from './longVanWhois'
 import { getSettings, saveRecord, type CheckRecord } from './storage'
-import { parseInput, safeMaxHops, safePingCount, safePort, safeTimeout } from './validation'
+import { parseInput, safeHTTPCount, safeMaxHops, safePingCount, safePort, safeTimeout } from './validation'
+import { dohResolverLabel, type DoHRecordType, type DoHResolver } from './network/dns-lookup'
+import { parseHTTPURL, type HTTPMethod } from './network/http-ping'
 
-export type Tool = 'ping' | 'traceroute' | 'tcp_check' | 'port_scan' | 'dns_lookup' | 'tls_check' | 'local_interfaces' | 'public_ip' | 'vm_info' | 'mxtoolbox' | 'whois'
+export type Tool = 'ping' | 'traceroute' | 'tcp_check' | 'port_scan' | 'dns_lookup' | 'doh_lookup' | 'tls_check' | 'local_interfaces' | 'public_ip' | 'http_ping' | 'vm_info' | 'mxtoolbox' | 'whois'
 export type DNSRecordType = 'AUTO' | 'A' | 'AAAA' | 'MX' | 'TXT' | 'NS' | 'CNAME' | 'PTR'
 export const labels: Record<Tool, string> = {
   ping: 'Ping', traceroute: 'Traceroute', tcp_check: 'TCP Port', port_scan: 'Quét Port',
-  dns_lookup: 'DNS Check', tls_check: 'SSL / TLS',
-  local_interfaces: 'Mạng LAN', public_ip: 'IP Public', vm_info: 'Thông tin VM',
+  dns_lookup: 'DNS Check', doh_lookup: 'DNS over HTTPS', tls_check: 'SSL / TLS',
+  local_interfaces: 'Mạng LAN', public_ip: 'IP Public', http_ping: 'HTTP Ping', vm_info: 'Thông tin VM',
   mxtoolbox: 'MXToolbox', whois: 'WHOIS',
 }
 const external = new Set<Tool>(['mxtoolbox', 'whois'])
-const browser = new Set<Tool>(['public_ip', 'vm_info', ...external])
+const browser = new Set<Tool>(['public_ip', 'http_ping', 'doh_lookup', 'vm_info', ...external])
 
-export async function runCheck(tool: Tool, input: string, portInput: number, scanPorts: number[] = commonPorts, mxCommand: MXCommand = 'dns', pingCount = 4, maxHops = 20, onProgress?: (event: NativeProgress) => void, tabId?: number, dnsRecordType: DNSRecordType = 'AUTO', dnsServer = ''): Promise<CheckRecord> {
+export async function runCheck(tool: Tool, input: string, portInput: number, scanPorts: number[] = commonPorts, mxCommand: MXCommand = 'dns', pingCount = 4, maxHops = 20, onProgress?: (event: NativeProgress) => void, tabId?: number, dnsRecordType: DNSRecordType = 'AUTO', dnsServer = '', httpMethod: HTTPMethod = 'HEAD', dohRecordType: DoHRecordType = 'AUTO', dohResolver: DoHResolver = 'cloudflare', signal?: AbortSignal): Promise<CheckRecord> {
   onProgress?.({ text: 'Đang đọc cài đặt...' })
   const settings = await getSettings()
   const timeoutMs = safeTimeout(settings.timeoutMs)
   let host = ''
-  if (tool !== 'local_interfaces' && tool !== 'public_ip' && tool !== 'vm_info') host = parseInput(input).host
+  if (tool === 'http_ping') {
+    host = parseHTTPURL(input).href
+  } else if (tool === 'doh_lookup') {
+    host = input.trim()
+  } else if (tool !== 'local_interfaces' && tool !== 'public_ip' && tool !== 'vm_info') {
+    host = parseInput(input).host
+  }
   let target = tool === 'local_interfaces' ? 'Máy này' : tool === 'public_ip' ? 'Đường truyền hiện tại' : host
   let result: Record<string, unknown>
   let source = 'Máy người dùng · Local Agent'
@@ -42,8 +50,18 @@ export async function runCheck(tool: Tool, input: string, portInput: number, sca
     target = registrationDomain(host)
     result = await longVanWhoisLookup(target, timeoutMs, (text) => onProgress?.({ text }))
     source = 'Trang WHOIS Long Vân'
+  } else if (tool === 'http_ping') {
+    result = await runBrowserTool('http_ping', {
+      input: host, method: httpMethod, count: safeHTTPCount(pingCount), timeoutMs,
+    }, onProgress, signal)
+    source = 'Trình duyệt · Fetch HTTP'
+  } else if (tool === 'doh_lookup') {
+    result = await runBrowserTool('doh_lookup', {
+      input: host, recordType: dohRecordType, resolver: dohResolver, timeoutMs,
+    }, onProgress, signal)
+    source = `DNS over HTTPS · ${dohResolverLabel(dohResolver)}`
   } else if (tool === 'public_ip') {
-    result = await runBrowserTool('public_ip', { timeoutMs }, onProgress)
+    result = await runBrowserTool('public_ip', { timeoutMs }, onProgress, signal)
     if (!publicIP(result)) throw new Error('ifconfig.me không trả về địa chỉ IP hợp lệ')
     source = 'Trình duyệt · Fetch ifconfig.me'
   } else {
@@ -70,6 +88,8 @@ export async function runCheck(tool: Tool, input: string, portInput: number, sca
     (typeof result.loss === 'number' && result.loss > 0) || result.verified === false ||
     (typeof result.Status === 'number' && result.Status !== 0) || result.timedOut === true ||
     (typeof result.timeoutCount === 'number' && result.timeoutCount > 0) ||
+    (tool === 'http_ping' && typeof result.okCount === 'number' && typeof result.received === 'number' && result.okCount < result.received) ||
+    (tool === 'doh_lookup' && (result.status !== 'NOERROR' || (Array.isArray(result.records) && result.records.length === 0))) ||
     (tool === 'dns_lookup' && Array.isArray(result.records) && result.records.length === 0) ||
     (tool === 'mxtoolbox' && Array.isArray(result.records) && result.records.length === 0) ||
     (tool === 'vm_info' && (!result.vmName || !result.vmp || !result.host || !result.resourcePool || !result.group)) ? 'warn' : 'ok'

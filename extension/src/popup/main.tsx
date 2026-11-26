@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ArrowRight, ClipboardCopy, Clock3, Globe2, HardDrive, KeyRound, LockKeyhole, MailSearch, Monitor, Network, Radio, RotateCw, ScanSearch, Search, Server, Settings2, ShieldCheck, UserRoundSearch, Wrench, Zap } from 'lucide-react'
+import { Activity, ArrowRight, ClipboardCopy, Clock3, Cloud, Globe2, HardDrive, KeyRound, LockKeyhole, MailSearch, Monitor, Network, Radio, RotateCw, ScanSearch, Search, Server, Settings2, ShieldCheck, UserRoundSearch, Wrench, Zap } from 'lucide-react'
 import { HistoryItem } from '../components/HistoryItem'
 import { Result } from '../components/Result'
 import { PasswordGenerator } from '../components/PasswordGenerator'
@@ -12,6 +12,8 @@ import { domainOnly, isMXToolboxApiKey, registrationDomain, type MXCommand } fro
 import { longVanWhoisURL } from '../services/longVanWhois'
 import { grantHost } from '../services/hostAccess'
 import { parseInput } from '../services/validation'
+import { dohQuery, dohRecordTypes, dohResolvers, type DoHRecordType, type DoHResolver } from '../services/network/dns-lookup'
+import { parseHTTPURL, type HTTPMethod } from '../services/network/http-ping'
 import { draftKey, jobKey, type CheckJob, type PopupDraft } from '../services/work'
 import { buildVmName, copyServiceConfig, isPortalServiceUrl, isPortalVmConfig, portalVmConfigKey, type PortalVmConfig } from '../services/portalVmConfig'
 import type { VMInfo } from '../services/vmInfo'
@@ -29,8 +31,14 @@ const tools: { id: Tool; icon: React.ReactNode; detail: string }[] = [
   { id: 'dns_lookup', icon: <Globe2 size={19} />, detail: 'Truy vấn qua DNS tùy chọn' },
   { id: 'local_interfaces', icon: <Monitor size={19} />, detail: 'IP LAN & adapter' },
   { id: 'public_ip', icon: <Zap size={19} />, detail: 'IP Internet nhìn thấy' },
+  { id: 'http_ping', icon: <Activity size={19} />, detail: 'Độ trễ phản hồi HTTP' },
+  { id: 'doh_lookup', icon: <Cloud size={19} />, detail: 'DNS qua HTTPS, không cần Agent' },
 ]
 const instantTools: Tool[] = ['local_interfaces', 'public_ip', 'vm_info']
+const dohTypeLabels: Record<DoHRecordType, string> = {
+  AUTO: 'Tự động (domain → A, IP → PTR)', A: 'A (IPv4)', AAAA: 'AAAA (IPv6)', CNAME: 'CNAME',
+  MX: 'MX', TXT: 'TXT', NS: 'NS', SOA: 'SOA', PTR: 'PTR', CAA: 'CAA', SRV: 'SRV',
+}
 const inputTools = tools.filter((item) => !instantTools.includes(item.id))
 const vmTools = tools.filter((item) => item.id === 'vm_info')
 const networkInfoTools = tools.filter((item) => ['local_interfaces', 'public_ip'].includes(item.id))
@@ -46,6 +54,9 @@ function App() {
   const [mxCommand, setMxCommand] = useState<MXCommand>('dns')
   const [dnsRecordType, setDnsRecordType] = useState<DNSRecordType>('AUTO')
   const [dnsServer, setDnsServer] = useState('')
+  const [httpMethod, setHttpMethod] = useState<HTTPMethod>('HEAD')
+  const [dohRecordType, setDohRecordType] = useState<DoHRecordType>('AUTO')
+  const [dohResolver, setDohResolver] = useState<DoHResolver>('cloudflare')
   const [tool, setTool] = useState<Tool | null>(null)
   const [ready, setReady] = useState(false)
   const [starting, setStarting] = useState(false)
@@ -72,6 +83,7 @@ function App() {
   const progress = job?.progress ?? []
   const mxDemo = tool === 'mxtoolbox' && input.trim().toLowerCase() === 'example.com' && mxCommand === 'dns'
   const mxNeedsKey = tool === 'mxtoolbox' && hasMXKey === false && !mxDemo
+  const inputPlaceholder = tool === 'http_ping' ? 'https://example.com/' : 'Domain hoặc IP'
 
   useEffect(() => {
     let mounted = true
@@ -117,6 +129,9 @@ function App() {
         setMxCommand(draft.mxCommand)
         setDnsRecordType(draft.dnsRecordType ?? 'AUTO')
         setDnsServer(draft.dnsServer ?? '')
+        setHttpMethod(draft.httpMethod ?? 'HEAD')
+        setDohRecordType(draft.dohRecordType ?? 'AUTO')
+        setDohResolver(draft.dohResolver ?? 'cloudflare')
         setTool(draft.tool)
       }
       if (typeof stored.selectedTarget === 'string' && stored.selectedTarget) {
@@ -143,9 +158,12 @@ function App() {
 
   useLayoutEffect(() => {
     if (!ready) return
-    const draft: PopupDraft = { input, port, pingCount, maxHops, scanMode, customPorts, mxCommand, dnsRecordType, dnsServer, tool }
+    const draft: PopupDraft = {
+      input, port, pingCount, maxHops, scanMode, customPorts, mxCommand, dnsRecordType, dnsServer,
+      httpMethod, dohRecordType, dohResolver, tool,
+    }
     void chrome.storage.session.set({ [draftKey]: draft })
-  }, [ready, input, port, pingCount, maxHops, scanMode, customPorts, mxCommand, dnsRecordType, dnsServer, tool])
+  }, [ready, input, port, pingCount, maxHops, scanMode, customPorts, mxCommand, dnsRecordType, dnsServer, httpMethod, dohRecordType, dohResolver, tool])
 
   useEffect(() => {
     progressRef.current?.scrollTo({ top: progressRef.current.scrollHeight })
@@ -168,7 +186,9 @@ function App() {
     }
     let scanPorts = commonPorts
     try {
-      if (!instantTools.includes(selectedTool)) parseInput(input)
+      if (selectedTool === 'http_ping') parseHTTPURL(input)
+      else if (selectedTool === 'doh_lookup') dohQuery(input, dohRecordType)
+      else if (!instantTools.includes(selectedTool)) parseInput(input)
       if (selectedTool === 'mxtoolbox' || selectedTool === 'whois') domainOnly(input)
       if (selectedTool === 'port_scan' && scanMode === 'custom') scanPorts = parseScanPorts(customPorts)
     } catch (e) {
@@ -197,6 +217,7 @@ function App() {
     scrollToResult()
     try {
       if (selectedTool === 'whois') await grantHost(longVanWhoisURL(registrationDomain(input)))
+      if (selectedTool === 'http_ping') await grantHost(parseHTTPURL(input).href)
       if (selectedTool === 'mxtoolbox') {
         const settings = await getSettings()
         await grantHost(settings.mxtoolboxApiKey.trim() ? 'https://api.mxtoolbox.com/' : 'https://mxtoolbox.com/')
@@ -205,7 +226,7 @@ function App() {
         await chrome.tabs.query({ active: true, currentWindow: true }) : [undefined]
       const response = await chrome.runtime.sendMessage({
         type: 'toolkit:start-job',
-        request: { tool: selectedTool, input, port, scanPorts, mxCommand, pingCount, maxHops, dnsRecordType, dnsServer, tabId: tab?.id },
+        request: { tool: selectedTool, input, port, scanPorts, mxCommand, pingCount, maxHops, dnsRecordType, dnsServer, httpMethod, dohRecordType, dohResolver, tabId: tab?.id },
       }) as { job?: CheckJob; error?: string }
       if (response.error) throw new Error(response.error)
       if (response.job) setJob((current) =>
@@ -308,7 +329,7 @@ function App() {
   function toolOutput(groupTools: Tool[]) {
     if (!tool || !groupTools.includes(tool)) return null
     return <div className="tool-group-output" ref={resultRef}>
-      <div className="source-hint"><span className="hint-icon">{toolRequiresAgent(tool) ? <Monitor size={15} /> : <Globe2 size={15} />}</span>{tool === 'vm_info' ? 'Chỉ đọc tab chi tiết computing của Portal khi bạn nhấn nút' : toolRequiresAgent(tool) ? 'Chạy từ máy bạn · cần Local Agent' : 'Dùng dịch vụ ngoài · có thể cần cấp quyền host'}</div>
+      <div className="source-hint"><span className="hint-icon">{toolRequiresAgent(tool) ? <Monitor size={15} /> : <Globe2 size={15} />}</span>{tool === 'vm_info' ? 'Chỉ đọc tab chi tiết computing của Portal khi bạn nhấn nút' : tool === 'http_ping' ? 'Chạy trong trình duyệt · cần cấp quyền host' : tool === 'doh_lookup' ? 'Truy vấn DNS over HTTPS · không dùng Agent' : toolRequiresAgent(tool) ? 'Chạy từ máy bạn · cần Local Agent' : 'Dùng dịch vụ ngoài · có thể cần cấp quyền host'}</div>
       {(busy || (error && progress.length > 0)) && <div className="checking" role="status">
         <div>{busy ? `Đang kiểm tra ${labels[tool]}` : `Tiến trình ${labels[tool]} đã dừng`}
           {busy && progress.at(-1)?.total ? ` · ${progress.at(-1)?.completed}/${progress.at(-1)?.total} cổng` : ''}
@@ -351,7 +372,7 @@ function App() {
       <section className="tool-section popup-tool-group domain-tool-section" aria-labelledby="input-tools-heading">
         <div className="section-title" id="input-tools-heading"><span>CÔNG CỤ DÙNG DOMAIN / IP</span></div>
         {(!tool || !instantTools.includes(tool)) && <div className="input-panel">
-          <div className="input-wrap"><Search size={18} /><input id="target" aria-label="Domain hoặc địa chỉ IP" placeholder="Domain hoặc IP" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} /><button type="button" className="inline-check" disabled={busy || !tool} onClick={() => mxNeedsKey ? setShowMXKeyForm(true) : void run()}>{busy ? 'Đang chạy...' : mxNeedsKey ? 'Nhập API key' : tool ? 'Kiểm tra' : 'Chọn công cụ'}<ArrowRight size={14} /></button></div>
+          <div className="input-wrap"><Search size={18} /><input id="target" aria-label={tool === 'http_ping' ? 'URL HTTP hoặc HTTPS' : 'Domain hoặc địa chỉ IP'} placeholder={inputPlaceholder} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} /><button type="button" className="inline-check" disabled={busy || !tool} onClick={() => mxNeedsKey ? setShowMXKeyForm(true) : void run()}>{busy ? 'Đang chạy...' : mxNeedsKey ? 'Nhập API key' : tool ? 'Kiểm tra' : 'Chọn công cụ'}<ArrowRight size={14} /></button></div>
           {tool && ['tcp_check', 'tls_check'].includes(tool) && <div className="port-row"><label htmlFor="port">PORT</label><input id="port" type="number" min={1} max={65535} value={port} onChange={(e) => setPort(Number(e.target.value))} /></div>}
           {tool === 'ping' && <div className="port-row"><label htmlFor="ping-count">SỐ LẦN PING (1–5)</label><input id="ping-count" type="number" min={1} max={5} step={1} value={pingCount} onChange={(e) => setPingCount(Number(e.target.value))} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} /></div>}
           {tool === 'traceroute' && <div className="port-row"><label htmlFor="max-hops">SỐ HOP TỐI ĐA (1–30)</label><input id="max-hops" type="number" min={1} max={30} step={1} value={maxHops} onChange={(e) => setMaxHops(Number(e.target.value))} onKeyDown={(e) => { if (e.key === 'Enter') void run() }} /></div>}
@@ -403,6 +424,33 @@ function App() {
               <datalist id="dns-server-presets"><option value="1.1.1.1" /><option value="8.8.8.8" /><option value="9.9.9.9" /></datalist>
             </div>
             <small>Nhập IPv4/IPv6, có thể kèm port; ví dụ 1.1.1.1, 8.8.8.8:53 hoặc [2001:4860:4860::8888]:53.</small>
+          </div>}
+          {tool === 'http_ping' && <div className="dns-options">
+            <div><label htmlFor="http-method">PHƯƠNG THỨC</label>
+              <select id="http-method" value={httpMethod} onChange={(event) => setHttpMethod(event.target.value as HTTPMethod)}>
+                <option value="HEAD">HEAD</option><option value="GET">GET</option>
+              </select>
+            </div>
+            <div><label htmlFor="http-count">SỐ LẦN (1–5)</label>
+              <input id="http-count" type="number" min={1} max={5} step={1} value={pingCount}
+                onChange={(event) => setPingCount(Number(event.target.value))}
+                onKeyDown={(event) => { if (event.key === 'Enter') void run() }} />
+            </div>
+            <small>Đo thời gian tới response headers; 4xx/5xx vẫn là phản hồi HTTP, không phải lỗi mạng. Không phải ICMP RTT.</small>
+          </div>}
+          {tool === 'doh_lookup' && <div className="dns-options">
+            <div><label htmlFor="doh-record-type">LOẠI BẢN GHI</label>
+              <select id="doh-record-type" value={dohRecordType} onChange={(event) => setDohRecordType(event.target.value as DoHRecordType)}>
+                {dohRecordTypes.map((type) => <option key={type} value={type}>{dohTypeLabels[type]}</option>)}
+              </select>
+            </div>
+            <div><label htmlFor="doh-resolver">RESOLVER</label>
+              <select id="doh-resolver" value={dohResolver} onChange={(event) => setDohResolver(event.target.value as DoHResolver)}>
+                {(Object.entries(dohResolvers) as [DoHResolver, { label: string }][]).map(([value, item]) =>
+                  <option key={value} value={value}>{item.label}</option>)}
+              </select>
+            </div>
+            <small>Kết quả từ resolver DoH công khai, không đại diện DNS hệ điều hành hoặc VPN.</small>
           </div>}
         </div>}
         <div className="tool-grid">{inputTools.map((item) => <button type="button" key={item.id} title={`${labels[item.id]} — ${item.detail}`} aria-label={`${labels[item.id]}: ${item.detail}`} disabled={busy} className={`tool ${tool === item.id ? 'selected' : ''}`} onClick={() => { setTool(item.id); setError('') }}>

@@ -1,15 +1,15 @@
 import { publicIP } from '../formatRecord'
 import type { NativeProgress } from '../nativeHost'
+import { abortError, withTimeout } from './timeout'
 
 export const publicIPEndpoint = 'https://ifconfig.me/ip'
 
 export async function fetchPublicIP(
   timeoutMs: number,
   onProgress?: (event: NativeProgress) => void,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> {
-  const timeout = Number.isFinite(timeoutMs) ? Math.min(10_000, Math.max(500, Math.trunc(timeoutMs))) : 3_000
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeout)
+  const scope = withTimeout(timeoutMs, signal)
   onProgress?.({ text: 'Đang lấy IP Public từ ifconfig.me...' })
   try {
     const response = await fetch(publicIPEndpoint, {
@@ -17,7 +17,7 @@ export async function fetchPublicIP(
       cache: 'no-store',
       credentials: 'omit',
       redirect: 'follow',
-      signal: controller.signal,
+      signal: scope.signal,
       headers: { Accept: 'text/plain' },
     })
     if (!response.ok) throw new Error(`ifconfig.me thất bại: HTTP ${response.status}`)
@@ -29,9 +29,10 @@ export async function fetchPublicIP(
     if (!publicIP(result)) throw new Error('ifconfig.me không trả về địa chỉ IP hợp lệ')
     return result
   } catch (error) {
-    if (controller.signal.aborted) throw new Error('ifconfig.me hết thời gian chờ')
+    const abort = abortError(scope, signal, 'ifconfig.me')
+    if (abort) throw abort
     throw error
   } finally {
-    clearTimeout(timer)
+    scope.cleanup()
   }
 }

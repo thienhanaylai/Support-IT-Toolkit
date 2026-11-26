@@ -2,6 +2,8 @@ import type { MXCommand } from './domainLookup'
 import type { NativeProgress } from './nativeHost'
 import type { DNSRecordType, Tool } from './checks'
 import type { CheckRecord } from './storage'
+import type { HTTPMethod } from './network/http-ping'
+import type { DoHRecordType, DoHResolver } from './network/dns-lookup'
 
 export const jobKey = 'currentCheck'
 export const draftKey = 'popupDraft'
@@ -16,6 +18,9 @@ export type CheckRequest = {
   maxHops: number
   dnsRecordType?: DNSRecordType
   dnsServer?: string
+  httpMethod?: HTTPMethod
+  dohRecordType?: DoHRecordType
+  dohResolver?: DoHResolver
   tabId?: number
 }
 
@@ -38,5 +43,8 @@ export type PopupDraft = {
   mxCommand: MXCommand
   dnsRecordType?: DNSRecordType
   dnsServer?: string
+  httpMethod?: HTTPMethod
+  dohRecordType?: DoHRecordType
+  dohResolver?: DoHResolver
   tool: Tool | null
 }

@@ -411,3 +411,62 @@ it('keeps the DNS example.com demo available without an MXToolbox API key', asyn
     type: 'toolkit:start-job', request: expect.objectContaining({ tool: 'mxtoolbox', input: 'example.com' }),
   })))
 })
+
+it('shows HTTP Ping and DoH as independent browser tools with their own options', async () => {
+  document.body.innerHTML = '<div id="root"></div>'
+  Element.prototype.scrollIntoView = vi.fn()
+  const draft = {
+    input: 'https://example.com/path', port: 443, pingCount: 3, maxHops: 20,
+    scanMode: 'common', customPorts: '22,80,443', mxCommand: 'dns',
+    dnsRecordType: 'AUTO', dnsServer: '', httpMethod: 'GET',
+    dohRecordType: 'CAA', dohResolver: 'quad9', tool: 'http_ping',
+  }
+  const sendMessage = vi.fn(async (message: { type: string }) =>
+    message.type === 'toolkit:get-job' ? {} :
+      { job: { id: 'browser-job', tool: 'http_ping', status: 'running', progress: [] } })
+  const contains = vi.fn(async () => false)
+  const request = vi.fn(async () => true)
+  vi.stubGlobal('chrome', {
+    runtime: { sendMessage },
+    tabs: { query: vi.fn(async () => []) },
+    permissions: { contains, request },
+    storage: {
+      session: {
+        get: vi.fn(async (key: string | string[]) => Array.isArray(key) ? { [draftKey]: draft } : {}),
+        set: vi.fn(async () => {}),
+        remove: vi.fn(async () => {}),
+      },
+      local: { get: vi.fn(async (key: string) => key === 'history' ? { history: [] } : {}) },
+      onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
+    },
+  })
+  await import('./main')
+  await showTools()
+
+  expect(document.querySelector<HTMLInputElement>('#target')?.placeholder).toBe('https://example.com/')
+  expect(document.querySelector<HTMLSelectElement>('#http-method')?.value).toBe('GET')
+  expect(document.querySelector<HTMLInputElement>('#http-count')?.value).toBe('3')
+  document.querySelector<HTMLButtonElement>('.inline-check')!.click()
+  await vi.waitFor(() => expect(request).toHaveBeenCalledWith({ origins: ['https://example.com/*'] }))
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+    type: 'toolkit:start-job',
+    request: expect.objectContaining({
+      tool: 'http_ping', input: 'https://example.com/path', pingCount: 3, httpMethod: 'GET',
+    }),
+  })))
+
+  // Finish the mocked job so the UI permits selecting another tool.
+  const changed = (chrome.storage.onChanged.addListener as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]
+  changed?.({
+    [jobKey]: { newValue: { id: 'browser-job', tool: 'http_ping', status: 'done', progress: [] } },
+  }, 'session')
+  await vi.waitFor(() => expect([...document.querySelectorAll<HTMLButtonElement>('.tool')]
+    .find((button) => button.textContent?.includes('DNS over HTTPS'))?.disabled).toBe(false))
+  const doh = [...document.querySelectorAll<HTMLButtonElement>('.tool')]
+    .find((button) => button.textContent?.includes('DNS over HTTPS'))!
+  doh.click()
+  await vi.waitFor(() => expect(document.querySelector('#doh-record-type')).not.toBeNull())
+  expect(document.querySelector<HTMLSelectElement>('#doh-record-type')?.value).toBe('CAA')
+  expect(document.querySelector<HTMLSelectElement>('#doh-resolver')?.value).toBe('quad9')
+  expect(document.querySelector('.domain-tool-section')?.textContent).toContain('không đại diện DNS hệ điều hành')
+})
