@@ -1,39 +1,30 @@
-# IT Support Toolkit v0.2.0 — Browser-only
+# IT Support Toolkit v0.2.1 — Tùy chọn ký tự đặc biệt
 
 **Tải về:** `ITSupportToolkit-Windows.zip` là bộ cài Windows cho Chrome/Edge. Giải nén toàn bộ rồi chạy `Install.cmd`, hoặc dùng `ITSupportToolkit-Windows.exe` để cài từ một file.
 
 Gói `ITSupportToolkit-Edge-Store.zip` được dựng riêng để cập nhật Microsoft Edge Add-ons và **không đính kèm GitHub Release**.
 
-## Thay đổi từ v0.1.9
+## Thay đổi từ v0.2.0
 
-- Chuyển hoàn toàn sang **Browser-only**: không còn Windows Local Agent, Native Messaging, service hoặc chương trình mạng native.
-- Giữ bốn công cụ chạy trực tiếp trong trình duyệt: **IP Public**, **HTTP Ping**, **DNS over HTTPS** và **Thông tin VM**.
-- Loại khỏi UI/runtime: ICMP Ping, Traceroute, TCP Port, Quét Port, DNS hệ điều hành, SSL/TLS, Mạng LAN, MXToolbox và WHOIS.
-- Kết quả cũ của các công cụ đã bỏ vẫn xem được trong trang lịch sử và báo cáo HTML.
-- Manifest bỏ quyền `nativeMessaging`; bộ cài Windows không còn build, chép hoặc đăng ký Agent.
-- Tự xóa API key MXToolbox/BKNS còn lưu từ phiên bản cũ.
-- Giữ Authenticator, Password Generator và các tiện ích Portal Long Vân.
-
-## Giới hạn
-
-- Manifest V3 không cho extension thực hiện ICMP, traceroute, mở TCP tùy ý hoặc đọc đầy đủ card mạng Windows.
-- **HTTP Ping** đo thời gian tới response headers, không phải ICMP RTT.
-- **DNS over HTTPS** gửi truy vấn tới Cloudflare, Google hoặc Quad9; không phải DNS hệ điều hành/VPN.
-- Không có backend, remote probe hoặc fallback từ xa.
+- Thêm tùy chọn **Số ký tự đặc biệt**, mặc định **3**, trong popup và bảng tùy chọn tạo mật khẩu trên Portal.
+- Mật khẩu được tạo có đúng số ký tự đặc biệt đã chọn; các ký tự còn lại lấy từ những nhóm đang bật.
+- Tùy chọn cũ chưa có trường này tự dùng giá trị mặc định 3.
+- Kiểm tra độ dài tối thiểu để chứa đủ số ký tự đặc biệt và các nhóm đã chọn, tránh sinh mật khẩu không đúng cấu hình.
+- Giữ nguyên mô hình Browser-only của v0.2.0: không có Local Agent, Native Messaging hoặc chương trình mạng native.
 
 ## Kiểm tra
 
-- 129/129 bài test extension đạt.
+- 130/130 bài test extension đạt.
 - TypeScript và production build đạt.
 - 6/6 kiểm tra bộ cài Windows đạt.
-- Manifest trong cả hai gói là phiên bản **0.2.0**, không có `nativeMessaging`.
+- Manifest trong cả hai gói là phiên bản **0.2.1**, không có `nativeMessaging`.
 - Gói Windows và gói Edge Store không chứa Agent, `native`, `it-support-host` hoặc `install-agent`.
 
 ## SHA-256
 
-- `ITSupportToolkit-Windows.zip`: `749A3E09E07A1CD35050DDC6A935BE9C195BFCFB90F5FAB157DBA151027674D0`
-- `ITSupportToolkit-Windows.exe`: `B95CF2B06A34F32F64691C6CDDCC3DF7BEB1AF833DAE32B3E551B6C1B001B3E4`
-- `ITSupportToolkit-Edge-Store.zip`: `9A264C176557796F38DED655140817066285E38CED4E7087705A9B439AD30059`
+- `ITSupportToolkit-Windows.zip`: `235104CD4669C56250AF1DB86F9BC3EAF9163E3B570468B0773D86498F48756C`
+- `ITSupportToolkit-Windows.exe`: `C519A6DCD3F2FFB6BA8F7C5598FC8B0712A284ADF9E9E87968194542312E8CB4`
+- `ITSupportToolkit-Edge-Store.zip`: `F1ED7D33413776443C63F7F191BDC1AC708C432BBE891098E737CD0862877FAF`
 
 ## Ghi chú
 

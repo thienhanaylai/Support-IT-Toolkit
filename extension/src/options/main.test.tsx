@@ -17,7 +17,7 @@ async function openSettings(initialHistory = records) {
   const permissionRequest = vi.fn(async () => { portalAllowed = true; return true })
   const permissionRemove = vi.fn(async () => { portalAllowed = false; return true })
   vi.stubGlobal('chrome', {
-    runtime: { id: 'abcdefghijklmnopabcdefghijklmnop', getManifest: () => ({ version: '0.2.0' }) },
+    runtime: { id: 'abcdefghijklmnopabcdefghijklmnop', getManifest: () => ({ version: '0.2.1' }) },
     storage: { local: { get, set, remove }, onChanged: {
       addListener: (listener: typeof onChanged) => { onChanged = listener },
       removeListener: vi.fn(),
