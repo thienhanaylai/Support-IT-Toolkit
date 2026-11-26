@@ -18,7 +18,7 @@ func Ping(ctx context.Context, target string, count, timeout int, progress func(
 	}
 	defer client.Close()
 
-	lines := []string{fmt.Sprintf("Pinging %s [%s] with 28 bytes of data:", target, address.String())}
+	lines := []string{fmt.Sprintf("Pinging %s [%s] with 32 bytes of data:", target, address.String())}
 	emit := func(line string) {
 		lines = append(lines, line)
 		if progress != nil {
@@ -43,11 +43,11 @@ func Ping(ctx context.Context, target string, count, timeout int, progress func(
 			if probe.RTT == 0 {
 				timeText = "time<1ms"
 			}
-			ttl := probe.TTL
-			if ttl <= 0 {
-				ttl = 128
+			if address.To4() != nil {
+				emit(fmt.Sprintf("Reply from %s: bytes=32 %s TTL=%d", probe.Address.String(), timeText, probe.TTL))
+			} else {
+				emit(fmt.Sprintf("Reply from %s: %s", probe.Address.String(), timeText))
 			}
-			emit(fmt.Sprintf("Reply from %s: bytes=28 %s TTL=%d", probe.Address.String(), timeText, ttl))
 		} else {
 			emit(statusText(probe.Status))
 		}

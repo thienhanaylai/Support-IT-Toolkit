@@ -8,6 +8,7 @@ import (
 	"net"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -184,6 +185,29 @@ func TestDNSServerAddress(t *testing.T) {
 	for _, invalid := range []string{"dns.google", "1.1.1.1:0", "1.1.1.1:70000"} {
 		if _, err := dnsServerAddress(invalid); err == nil {
 			t.Fatalf("expected invalid DNS server %q to fail", invalid)
+		}
+	}
+}
+
+func TestLocalInterfacesKeepsPublicSchemaWhileUsingIPHelperText(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows IP Helper API")
+	}
+	result := dispatch(request{Action: "local_interfaces", TimeoutMs: 3000})
+	if result["success"] != true {
+		t.Fatalf("local interfaces failed: %v", result)
+	}
+	text, ok := result["ipconfig"].(string)
+	if !ok || !strings.Contains(text, "Windows IP Configuration") {
+		t.Fatalf("missing compatible ipconfig text: %v", result["ipconfig"])
+	}
+	adapters, ok := result["adapters"].([]response)
+	if !ok || len(adapters) == 0 {
+		t.Fatalf("missing connected adapters: %T %v", result["adapters"], result["adapters"])
+	}
+	for _, adapter := range adapters {
+		if len(adapter) != 3 || adapter["name"] == nil || adapter["ipAddresses"] == nil || adapter["mac"] == nil {
+			t.Fatalf("public adapter schema changed: %v", adapter)
 		}
 	}
 }

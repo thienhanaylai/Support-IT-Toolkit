@@ -95,7 +95,7 @@ func (c *client) echo4(destination net.IP, timeout, ttl int) (ProbeResult, error
 	if ip == nil {
 		return ProbeResult{}, errors.New("địa chỉ ICMP IPv4 không hợp lệ")
 	}
-	request := []byte("IT Support Toolkit ICMP probe")
+	request := []byte("abcdefghijklmnopqrstuvwabcdefghi")
 	buffer := make([]byte, int(unsafe.Sizeof(icmpEchoReply{}))+len(request)+16)
 	options := ipOptionInformation{TTL: uint8(ttl)}
 	count, _, callErr := procIcmpSendEcho.Call(
@@ -131,7 +131,7 @@ func (c *client) echo6(destination net.IP, timeout, ttl int) (ProbeResult, error
 	if ip == nil || destination.To4() != nil {
 		return ProbeResult{}, errors.New("địa chỉ ICMP IPv6 không hợp lệ")
 	}
-	request := []byte("IT Support Toolkit ICMP probe")
+	request := []byte("abcdefghijklmnopqrstuvwabcdefghi")
 	// ICMPV6_ECHO_REPLY_LH is 36 bytes. IPV6_ADDRESS_EX is packed: the
 	// 16-byte address starts at byte 6; Status and RTT are at 28 and 32.
 	buffer := make([]byte, 36+len(request)+32)

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	toolkiticmp "it-support-toolkit/native-agent/internal/icmp"
+	toolkitnetwork "it-support-toolkit/native-agent/internal/network"
 	"it-support-toolkit/native-agent/internal/security"
 )
 
@@ -433,32 +434,20 @@ func tlsCheck(req request, timeout int) (response, error) {
 }
 
 func localInterfaces() (response, error) {
-	list, err := net.Interfaces()
+	result, err := toolkitnetwork.Adapters()
 	if err != nil {
 		return nil, err
 	}
-	adapters := make([]response, 0)
-	for _, item := range list {
-		if item.Flags&net.FlagUp == 0 || item.Flags&net.FlagLoopback != 0 {
+	adapters := make([]response, 0, len(result.Adapters))
+	for _, item := range result.Adapters {
+		if item.Status != "Connected" {
 			continue
 		}
-		addrs, _ := item.Addrs()
-		ips := make([]string, 0)
-		for _, addr := range addrs {
-			ips = append(ips, addr.String())
-		}
-		adapters = append(adapters, response{"name": item.Name, "ipAddresses": ips, "mac": item.HardwareAddr.String()})
+		adapters = append(adapters, response{
+			"name": item.Name, "ipAddresses": item.IPAddresses, "mac": item.MAC,
+		})
 	}
-	result := response{"adapters": adapters}
-	if runtime.GOOS == "windows" {
-		// Fixed OS commands with no user-controlled arguments.
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		defer cancel()
-		if raw, err := exec.CommandContext(ctx, "ipconfig", "/all").CombinedOutput(); err == nil {
-			result["ipconfig"] = trimOutput(raw, 16000) // includes gateway and DNS in system locale
-		}
-	}
-	return result, nil
+	return response{"adapters": adapters, "ipconfig": trimOutput([]byte(result.Text), 16000)}, nil
 }
 
 func publicIP(timeout int) (response, error) {
