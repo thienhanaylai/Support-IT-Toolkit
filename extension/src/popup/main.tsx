@@ -1,10 +1,11 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Activity, ArrowRight, Check, ClipboardCopy, Clock3, Cloud, Globe2, HardDrive, KeyRound, LockKeyhole, RotateCw, Search, Settings2, Tags, Wrench, Zap } from 'lucide-react'
+import { Activity, ArrowRight, ClipboardCopy, Clock3, Cloud, Globe2, HardDrive, KeyRound, LockKeyhole, RotateCw, Search, Settings2, Tags, Wrench, Zap } from 'lucide-react'
 import { HistoryItem } from '../components/HistoryItem'
 import { Result } from '../components/Result'
 import { PasswordGenerator } from '../components/PasswordGenerator'
 import { Authenticator } from '../components/Authenticator'
+import { TagElements } from '../components/TagElements'
 import { isTool, labels, type Tool } from '../services/checks'
 import { getHistory, type CheckRecord } from '../services/storage'
 import { grantHost } from '../services/hostAccess'
@@ -13,9 +14,6 @@ import { parseHTTPURL, type HTTPMethod } from '../services/network/http-ping'
 import { draftKey, jobKey, type CheckJob, type PopupDraft } from '../services/work'
 import { buildVmName, copyServiceConfig, isPortalServiceUrl, isPortalVmConfig, portalVmConfigKey, type PortalVmConfig } from '../services/portalVmConfig'
 import type { VMInfo } from '../services/vmInfo'
-import {
-  formatTagElement, loadTagElementGroups, tagElementsStorageKey, type TagElementGroup,
-} from '../services/tagElements'
 import '../style.css'
 
 const tools: { id: Tool; icon: React.ReactNode; detail: string }[] = [
@@ -38,7 +36,7 @@ function toolForRecord(record: CheckRecord): Tool | undefined {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'tools' | 'auth' | 'password'>('auth')
+  const [activeTab, setActiveTab] = useState<'tools' | 'auth' | 'password' | 'tags'>('auth')
   const [input, setInput] = useState('')
   const [httpCount, setHttpCount] = useState(4)
   const [httpMethod, setHttpMethod] = useState<HTTPMethod>('HEAD')
@@ -58,10 +56,6 @@ function App() {
   const [configFailed, setConfigFailed] = useState(false)
   const [copyingCurrentVM, setCopyingCurrentVM] = useState(false)
   const [copiedCurrentVM, setCopiedCurrentVM] = useState(false)
-  const [tagGroups, setTagGroups] = useState<TagElementGroup[]>([])
-  const [activeTagGroupId, setActiveTagGroupId] = useState('')
-  const [copiedTagMemberId, setCopiedTagMemberId] = useState('')
-  const [tagCopyError, setTagCopyError] = useState('')
   const resultRef = useRef<HTMLDivElement>(null)
   const progressRef = useRef<HTMLPreElement>(null)
   const busy = starting || job?.status === 'running'
@@ -78,16 +72,6 @@ function App() {
     }).catch(() => {})
     const changed = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
       if (!mounted) return
-      if (area === 'local' && changes[tagElementsStorageKey]) {
-        const next = changes[tagElementsStorageKey].newValue
-        if (Array.isArray(next)) {
-          setTagGroups(next as TagElementGroup[])
-          setActiveTagGroupId((current) =>
-            (next as TagElementGroup[]).some((group) => group.id === current)
-              ? current : (next as TagElementGroup[])[0]?.id ?? '')
-        }
-        return
-      }
       if (area === 'session' && changes[jobKey]) {
         const next = changes[jobKey].newValue as CheckJob | undefined
         setJob(next ?? null)
@@ -100,11 +84,10 @@ function App() {
     }
     chrome.storage.onChanged.addListener(changed)
     void (async () => {
-      const [stored, response, history, savedTagGroups] = await Promise.all([
+      const [stored, response, history] = await Promise.all([
         chrome.storage.session.get([draftKey, 'selectedTarget', 'displayedRecord']),
         chrome.runtime.sendMessage({ type: 'toolkit:get-job' }) as Promise<{ job?: CheckJob; error?: string }>,
         getHistory(),
-        loadTagElementGroups(),
       ])
       if (!mounted) return
       const draft = stored[draftKey] as PopupDraft | undefined
@@ -136,8 +119,6 @@ function App() {
       if (restoredRecord && toolForRecord(restoredRecord)) setRecord((current) => current ?? restoredRecord)
       const supportedHistory = history.filter((item) => toolForRecord(item))
       setRecent((current) => [...current, ...supportedHistory.filter((item) => !current.some((saved) => saved.id === item.id))].slice(0, 5))
-      setTagGroups(savedTagGroups)
-      setActiveTagGroupId(savedTagGroups[0]?.id ?? '')
       setReady(true)
     })().catch((cause) => { if (mounted) { setError(String(cause)); setReady(true) } })
     return () => { mounted = false; chrome.storage.onChanged.removeListener(changed) }
@@ -267,19 +248,6 @@ function App() {
     }
   }
 
-  async function copyTagMember(group: TagElementGroup, memberId: string) {
-    const member = group.members.find((item) => item.id === memberId)
-    if (!member) return
-    setTagCopyError('')
-    try {
-      await navigator.clipboard.writeText(formatTagElement(member))
-      setCopiedTagMemberId(member.id)
-    } catch {
-      setCopiedTagMemberId('')
-      setTagCopyError('Không thể sao chép Tag Element.')
-    }
-  }
-
   function toolOutput(groupTools: Tool[]) {
     if (!tool || !groupTools.includes(tool)) return null
     return <div className="tool-group-output" ref={resultRef}>
@@ -316,6 +284,10 @@ function App() {
       <button type="button" role="tab" aria-selected={activeTab === 'password'}
         className={activeTab === 'password' ? 'active' : ''} onClick={() => setActiveTab('password')}>
         <LockKeyhole size={18} /> Mật khẩu
+      </button>
+      <button type="button" role="tab" aria-selected={activeTab === 'tags'}
+        className={activeTab === 'tags' ? 'active' : ''} onClick={() => setActiveTab('tags')}>
+        <Tags size={18} /> Tag
       </button>
       <button type="button" role="tab" aria-selected={activeTab === 'tools'}
         className={activeTab === 'tools' ? 'active' : ''} onClick={() => setActiveTab('tools')}>
@@ -362,37 +334,9 @@ function App() {
       </section>
       <section className="tool-section popup-tool-group vm-tool-section" aria-labelledby="vm-tools-heading">
         <div className="section-title" id="vm-tools-heading"><span>THÔNG TIN VM</span></div>
-        <div className="vm-tools-layout">
-          <div className="tool-grid vm-tool-grid">{vmTools.map((item) => <button type="button" key={item.id} title={`${labels[item.id]} — ${item.detail}`} aria-label={`${labels[item.id]}: ${item.detail}`} disabled={busy} className={`tool ${tool === item.id ? 'selected' : ''}`} onClick={() => { setTool(item.id); setError(''); void run(item.id) }}>
-            <span className="tool-icon">{item.icon}</span><strong>{labels[item.id]}</strong><small>{item.detail}</small>
-          </button>)}</div>
-          <div className="tag-elements-quick" aria-label="Tag Element">
-            <div className="tag-elements-quick-heading"><span><Tags size={14} /> TAG ELEMENT</span>
-              <a href="options.html#tag-elements" target="_blank" rel="noreferrer" aria-label="Quản lý Tag Element">Sửa</a>
-            </div>
-            {tagGroups.length ? <>
-              <div className="tag-group-tabs" role="tablist" aria-label="Lĩnh vực Tag Element">
-                {tagGroups.map((group) => <button key={group.id} type="button" role="tab"
-                  aria-selected={activeTagGroupId === group.id}
-                  className={activeTagGroupId === group.id ? 'active' : ''}
-                  onClick={() => { setActiveTagGroupId(group.id); setCopiedTagMemberId(''); setTagCopyError('') }}>
-                  {group.name}
-                </button>)}
-              </div>
-              {tagGroups.filter((group) => group.id === activeTagGroupId).map((group) =>
-                <div className="tag-member-buttons" key={group.id}>
-                  {group.members.length ? group.members.map((member) => <button type="button" key={member.id}
-                    className={copiedTagMemberId === member.id ? 'is-copied' : ''}
-                    title={`Sao chép ${formatTagElement(member)}`}
-                    aria-label={`Sao chép Tag Element của ${member.name}`}
-                    onClick={() => void copyTagMember(group, member.id)}>
-                    {copiedTagMemberId === member.id && <Check size={12} />}{copiedTagMemberId === member.id ? 'Đã chép' : member.name}
-                  </button>) : <span className="tag-elements-empty">Chưa có thành viên.</span>}
-                </div>)}
-            </> : <a className="tag-elements-empty-link" href="options.html#tag-elements" target="_blank" rel="noreferrer">Thêm danh sách trong Cài đặt</a>}
-            {tagCopyError && <span className="tag-elements-error" role="alert">{tagCopyError}</span>}
-          </div>
-        </div>
+        <div className="tool-grid">{vmTools.map((item) => <button type="button" key={item.id} title={`${labels[item.id]} — ${item.detail}`} aria-label={`${labels[item.id]}: ${item.detail}`} disabled={busy} className={`tool ${tool === item.id ? 'selected' : ''}`} onClick={() => { setTool(item.id); setError(''); void run(item.id) }}>
+          <span className="tool-icon">{item.icon}</span><strong>{labels[item.id]}</strong><small>{item.detail}</small>
+        </button>)}</div>
         {toolOutput(vmTools.map((item) => item.id))}
       </section>
       <section className="tool-section popup-tool-group network-info-section" aria-labelledby="network-info-heading">
@@ -414,7 +358,8 @@ function App() {
       {!tool && <div className="source-hint"><span className="hint-icon"><Globe2 size={15} /></span>Chọn một công cụ để bắt đầu</div>}
       <div className="section-title history-title"><span>GẦN ĐÂY</span><button className="history-link" onClick={() => { void chrome.windows.getCurrent().then((w) => chrome.sidePanel.open({ windowId: w.id! })).catch(() => chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel.html') })) }}>Xem tất cả <ArrowRight size={13} /></button></div>
       {recent.length ? recent.map((item) => <HistoryItem key={item.id} record={item} selected={record?.id === item.id} onClick={() => showRecord(item)} />) : <p className="empty"><Clock3 size={16} /> Chưa có lượt kiểm tra nào.</p>}
-    </div> : activeTab === 'password' ? <div className="password-tab-content"><PasswordGenerator standalone /></div> : <Authenticator />}
+    </div> : activeTab === 'password' ? <div className="password-tab-content"><PasswordGenerator standalone /></div>
+      : activeTab === 'tags' ? <TagElements /> : <Authenticator />}
   </main>
 }
 createRoot(document.getElementById('root')!).render(<App />)

@@ -15,6 +15,7 @@ import {
   authenticatorQRPickerKey, importAuthenticatorFromScreenshot,
   showAuthenticatorQRRegionPicker, type AuthenticatorQRRegion,
 } from '../services/authenticatorQR'
+import { loadTagElementGroups } from '../services/tagElements'
 
 registerJobs()
 
@@ -218,6 +219,17 @@ chrome.runtime.onMessage.addListener((message: {
         remaining: authenticatorRemainingSeconds(entry),
       })),
     }), (error) => respond({ error: error instanceof Error ? error.message : String(error) }))
+    return true
+  }
+  if (message?.type === 'toolkit:get-tag-elements') {
+    if (!url || !isPortalPageUrl(url)) {
+      respond({ error: 'Chỉ có thể dùng Tag Element trên trang Portal Long Vân.' })
+      return false
+    }
+    void loadTagElementGroups().then(
+      (groups) => respond({ groups }),
+      (error) => respond({ error: error instanceof Error ? error.message : String(error) }),
+    )
     return true
   }
   if (message?.type === 'toolkit:copy-vm-config') {

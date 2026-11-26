@@ -57,7 +57,7 @@ it('places Copy configuration beside the Service attribute panel actions', async
   dom.window.close()
 })
 
-it('places a quick VM copy button in the Information heading', async () => {
+it('places quick and advanced VM copy buttons in the Information heading', async () => {
   const text = '[Link VM](https://portal.longvan.vn/vm)\n\nTên computing: COMPUTING-A\nVMID: 663312104'
   const sendMessage = vi.fn(async () => ({ info: { computingName: 'COMPUTING-A' }, text }))
   const writeText = vi.fn(async () => {})
@@ -70,8 +70,10 @@ it('places a quick VM copy button in the Information heading', async () => {
     sendMessage,
     writeText,
   )
-  const button = dom.window.document.querySelector<HTMLButtonElement>('.it-toolkit-vm-info-copy-button')!
-  expect(button.textContent).toBe('Sao chép thông tin VM')
+  const button = dom.window.document.querySelector<HTMLButtonElement>('.it-toolkit-vm-info-copy-quick')!
+  const advanced = dom.window.document.querySelector<HTMLButtonElement>('.it-toolkit-vm-info-copy-advanced')!
+  expect(button.textContent).toBe('Copy nhanh')
+  expect(advanced.textContent).toBe('Copy nâng cao')
   expect(button.closest('.mb-1')?.textContent).toContain('Thông tin')
   button.click()
   await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ type: 'toolkit:get-current-vm-info' }))
@@ -80,6 +82,56 @@ it('places a quick VM copy button in the Information heading', async () => {
   expect(button.classList.contains('is-copied')).toBe(true)
   expect(dom.window.document.querySelector('.it-toolkit-vm-info-copy-status')?.textContent)
     .toContain('Đã sao chép COMPUTING-A')
+  dom.window.dispatchEvent(new dom.window.Event('pagehide'))
+  dom.window.close()
+})
+
+it('composes editable VM info, extra text, and a configured Element group before one copy', async () => {
+  const text = '[Link VM](https://portal.longvan.vn/vm)\n\nTên computing: COMPUTING-A\nVMID: 663312104'
+  const groups = [{
+    id: 'vmware', name: 'Vmware', members: [
+      { id: 'vuong', name: 'Lê Ngọc Vương', elementId: '@10.19530321:team.longvan.vn' },
+    ],
+  }]
+  const sendMessage = vi.fn(async (message: { type: string }) =>
+    message.type === 'toolkit:get-tag-elements'
+      ? { groups }
+      : { info: { computingName: 'COMPUTING-A' }, text })
+  const writeText = vi.fn(async () => {})
+  const dom = await execute(
+    'https://portal.longvan.vn/computing-manager/manager/computing/computing_detail.xhtml?id=1',
+    `<form id="frmMain"><div class="card">
+      <div class="mb-1"><span>Thông tin</span></div>
+      <div class="ui-g-12">Tên computing: <span class="FontBold">COMPUTING-A</span></div>
+    </div></form>`,
+    sendMessage,
+    writeText,
+  )
+  dom.window.document.querySelector<HTMLButtonElement>('.it-toolkit-vm-info-copy-advanced')!.click()
+  const dialog = await vi.waitFor(() => {
+    const value = dom.window.document.querySelector<HTMLElement>('.it-toolkit-vm-composer')
+    expect(value).not.toBeNull()
+    return value!
+  })
+  const vmText = dialog.querySelector<HTMLTextAreaElement>('.it-toolkit-vm-composer-vm')!
+  await vi.waitFor(() => expect(vmText.value).toBe(text))
+  expect(sendMessage).toHaveBeenCalledWith({ type: 'toolkit:get-current-vm-info' })
+  expect(sendMessage).toHaveBeenCalledWith({ type: 'toolkit:get-tag-elements' })
+
+  vmText.value = `${text}\nTrạng thái: cần kiểm tra`
+  vmText.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+  const extra = dialog.querySelector<HTMLTextAreaElement>('.it-toolkit-vm-composer-extra')!
+  extra.value = 'Ghi chú bổ sung'
+  extra.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+  dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-tag-buttons button')!.click()
+  await vi.waitFor(() => expect(extra.value)
+    .toContain('(Lê Ngọc Vương)[@10.19530321:team.longvan.vn]'))
+  dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-copy')!.click()
+  await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(
+    `${text}\nTrạng thái: cần kiểm tra\n\nGhi chú bổ sung\n\n(Lê Ngọc Vương)[@10.19530321:team.longvan.vn]`,
+  ))
+  await vi.waitFor(() => expect(dialog.querySelector('.it-toolkit-vm-composer-status')?.textContent)
+    .toContain('Đã sao chép toàn bộ'))
   dom.window.dispatchEvent(new dom.window.Event('pagehide'))
   dom.window.close()
 })

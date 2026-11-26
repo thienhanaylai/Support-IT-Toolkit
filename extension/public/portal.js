@@ -12,6 +12,9 @@
     passwordValue: '', passwordCopied: false,
     vmName: '', vmNameBusy: false, vmNameText: '', vmNameKind: '',
     vmInfoBusy: false, vmInfoCopied: false, vmInfoText: '', vmInfoKind: '',
+    vmComposerOpen: false, vmComposerLoading: false, vmComposerCopying: false,
+    vmComposerVmText: '', vmComposerExtraText: '', vmComposerTagGroups: [],
+    vmComposerAddedGroups: [], vmComposerText: '', vmComposerKind: '',
     otpBusy: false, otpLoaded: false, otpCodes: [], otpSelectedId: '',
     otpMenuOpen: false, otpText: '', otpKind: '',
   }
@@ -112,6 +115,195 @@
     } finally {
       state.vmInfoBusy = false
       scheduleRender()
+    }
+  }
+
+  function closeVmComposer() {
+    state.vmComposerOpen = false
+    state.vmComposerLoading = false
+    state.vmComposerCopying = false
+    state.vmComposerText = ''
+    state.vmComposerKind = ''
+    scheduleRender()
+  }
+
+  async function openVmComposer() {
+    if (state.vmComposerLoading) return
+    state.vmComposerOpen = true
+    state.vmComposerLoading = true
+    state.vmComposerCopying = false
+    state.vmComposerVmText = ''
+    state.vmComposerExtraText = ''
+    state.vmComposerTagGroups = []
+    state.vmComposerAddedGroups = []
+    state.vmComposerText = 'Đang tải thông tin VM và Tag Element...'
+    state.vmComposerKind = 'working'
+    scheduleRender()
+    try {
+      const [vmResponse, tagResponse] = await Promise.all([
+        sendMessage({ type: 'toolkit:get-current-vm-info' }),
+        sendMessage({ type: 'toolkit:get-tag-elements' }),
+      ])
+      if (vmResponse?.error) throw new Error(vmResponse.error)
+      if (tagResponse?.error) throw new Error(tagResponse.error)
+      if (!vmResponse?.text) throw new Error('Không có thông tin VM để soạn nội dung.')
+      state.vmComposerVmText = vmResponse.text
+      state.vmComposerTagGroups = Array.isArray(tagResponse?.groups) ? tagResponse.groups : []
+      state.vmComposerText = ''
+      state.vmComposerKind = ''
+    } catch (error) {
+      state.vmComposerText = error instanceof Error ? error.message : String(error)
+      state.vmComposerKind = 'error'
+    } finally {
+      state.vmComposerLoading = false
+      scheduleRender()
+    }
+  }
+
+  function tagGroupText(group) {
+    if (!Array.isArray(group?.members)) return ''
+    return group.members.map((member) => {
+      const name = typeof member?.name === 'string' ? member.name.trim() : ''
+      const elementId = typeof member?.elementId === 'string' ? member.elementId.trim() : ''
+      return name && elementId ? `(${name})[${elementId}]` : ''
+    }).filter(Boolean).join('\n')
+  }
+
+  function addTagGroupToComposer(group) {
+    const text = tagGroupText(group)
+    if (!text) {
+      state.vmComposerText = `Lĩnh vực ${group?.name || ''} chưa có thành viên.`
+      state.vmComposerKind = 'error'
+      scheduleRender()
+      return
+    }
+    if (state.vmComposerAddedGroups.includes(group.id)) return
+    state.vmComposerExtraText = [state.vmComposerExtraText.trim(), text].filter(Boolean).join('\n\n')
+    state.vmComposerAddedGroups = [...state.vmComposerAddedGroups, group.id]
+    state.vmComposerText = `Đã thêm liên hệ ${group.name}.`
+    state.vmComposerKind = 'success'
+    scheduleRender()
+  }
+
+  async function copyVmComposer() {
+    if (state.vmComposerCopying || state.vmComposerLoading) return
+    const combined = [state.vmComposerVmText.trim(), state.vmComposerExtraText.trim()].filter(Boolean).join('\n\n')
+    if (!combined) {
+      state.vmComposerText = 'Chưa có nội dung để sao chép.'
+      state.vmComposerKind = 'error'
+      scheduleRender()
+      return
+    }
+    state.vmComposerCopying = true
+    state.vmComposerText = 'Đang sao chép...'
+    state.vmComposerKind = 'working'
+    scheduleRender()
+    try {
+      await navigator.clipboard.writeText(combined)
+      state.vmComposerText = 'Đã sao chép toàn bộ nội dung.'
+      state.vmComposerKind = 'success'
+    } catch (error) {
+      state.vmComposerText = error instanceof Error ? error.message : 'Không thể sao chép nội dung.'
+      state.vmComposerKind = 'error'
+    } finally {
+      state.vmComposerCopying = false
+      scheduleRender()
+    }
+  }
+
+  function renderVmComposer() {
+    let overlay = document.querySelector('.it-toolkit-vm-composer-overlay')
+    if (!state.vmComposerOpen) {
+      overlay?.remove()
+      return
+    }
+    if (!overlay) {
+      overlay = element('div', 'it-toolkit-vm-composer-overlay')
+      const dialog = element('div', 'it-toolkit-vm-composer')
+      dialog.setAttribute('role', 'dialog')
+      dialog.setAttribute('aria-modal', 'true')
+      dialog.setAttribute('aria-labelledby', 'it-toolkit-vm-composer-title')
+      const header = element('div', 'it-toolkit-vm-composer-header')
+      const titleWrap = element('div')
+      const title = element('strong', '', 'Copy thông tin VM nâng cao')
+      title.id = 'it-toolkit-vm-composer-title'
+      titleWrap.append(title, element('small', '', 'Chỉnh sửa, bổ sung nội dung và chèn liên hệ Tag Element.'))
+      const close = element('button', 'it-toolkit-vm-composer-close', '×')
+      close.type = 'button'
+      close.setAttribute('aria-label', 'Đóng')
+      close.addEventListener('click', closeVmComposer)
+      header.append(titleWrap, close)
+
+      const vmLabel = element('label', 'it-toolkit-vm-composer-field')
+      vmLabel.append(element('span', '', 'Thông tin VM (có thể chỉnh sửa)'))
+      const vmText = element('textarea', 'it-toolkit-vm-composer-vm')
+      vmText.rows = 8
+      vmText.addEventListener('input', () => { state.vmComposerVmText = vmText.value })
+      vmLabel.append(vmText)
+
+      const extraLabel = element('label', 'it-toolkit-vm-composer-field')
+      extraLabel.append(element('span', '', 'Nội dung bổ sung'))
+      const extraText = element('textarea', 'it-toolkit-vm-composer-extra')
+      extraText.rows = 5
+      extraText.placeholder = 'Nhập ghi chú hoặc nội dung cần gửi thêm...'
+      extraText.addEventListener('input', () => { state.vmComposerExtraText = extraText.value })
+      extraLabel.append(extraText)
+
+      const tags = element('div', 'it-toolkit-vm-composer-tags')
+      tags.append(element('strong', '', 'Thêm liên hệ theo lĩnh vực'), element('div', 'it-toolkit-vm-composer-tag-buttons'))
+      const footer = element('div', 'it-toolkit-vm-composer-footer')
+      const status = element('span', 'it-toolkit-vm-composer-status')
+      status.setAttribute('role', 'status')
+      const actions = element('div', 'it-toolkit-vm-composer-actions')
+      const cancel = element('button', 'it-toolkit-vm-composer-cancel', 'Hủy')
+      cancel.type = 'button'
+      cancel.addEventListener('click', closeVmComposer)
+      const copy = element('button', 'it-toolkit-vm-composer-copy', 'Sao chép tất cả')
+      copy.type = 'button'
+      copy.addEventListener('click', copyVmComposer)
+      actions.append(cancel, copy)
+      footer.append(status, actions)
+      dialog.append(header, vmLabel, extraLabel, tags, footer)
+      overlay.append(dialog)
+      overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) closeVmComposer()
+      })
+      document.body.append(overlay)
+    }
+    const vmText = overlay.querySelector('.it-toolkit-vm-composer-vm')
+    const extraText = overlay.querySelector('.it-toolkit-vm-composer-extra')
+    if (vmText && vmText.value !== state.vmComposerVmText) vmText.value = state.vmComposerVmText
+    if (extraText && extraText.value !== state.vmComposerExtraText) extraText.value = state.vmComposerExtraText
+    if (vmText) vmText.disabled = state.vmComposerLoading
+    if (extraText) extraText.disabled = state.vmComposerLoading
+    const buttons = overlay.querySelector('.it-toolkit-vm-composer-tag-buttons')
+    if (buttons) {
+      const signature = state.vmComposerTagGroups.map((group) =>
+        `${group.id}:${group.name}:${tagGroupText(group)}:${state.vmComposerAddedGroups.includes(group.id)}`).join('|')
+      if (buttons.dataset.signature !== signature) {
+        buttons.replaceChildren()
+        for (const group of state.vmComposerTagGroups) {
+          const added = state.vmComposerAddedGroups.includes(group.id)
+          const button = element('button', added ? 'is-added' : '', added ? `✓ ${group.name}` : group.name)
+          button.type = 'button'
+          button.disabled = !tagGroupText(group) || added
+          button.addEventListener('click', () => addTagGroupToComposer(group))
+          buttons.append(button)
+        }
+        if (!state.vmComposerTagGroups.length) buttons.append(element('small', '', 'Chưa có lĩnh vực Tag Element.'))
+        buttons.dataset.signature = signature
+      }
+    }
+    const status = overlay.querySelector('.it-toolkit-vm-composer-status')
+    if (status) {
+      if (status.textContent !== state.vmComposerText) status.textContent = state.vmComposerText
+      status.className = `it-toolkit-vm-composer-status${state.vmComposerKind ? ` is-${state.vmComposerKind}` : ''}`
+    }
+    const copy = overlay.querySelector('.it-toolkit-vm-composer-copy')
+    if (copy) {
+      copy.disabled = state.vmComposerLoading || state.vmComposerCopying
+      const label = state.vmComposerCopying ? 'Đang sao chép...' : 'Sao chép tất cả'
+      if (copy.textContent !== label) copy.textContent = label
     }
   }
 
@@ -519,7 +711,9 @@
   }
 
   function handlePasswordOptionsKey(event) {
-    if (event.key === 'Escape') closePasswordOptions()
+    if (event.key !== 'Escape') return
+    closePasswordOptions()
+    if (state.vmComposerOpen) closeVmComposer()
   }
 
   async function copyGeneratedPassword() {
@@ -828,12 +1022,19 @@
     let root = heading.querySelector(':scope > .it-toolkit-vm-info-copy')
     if (!root) {
       root = element('div', 'it-toolkit-vm-info-copy')
-      const button = element('button', 'it-toolkit-vm-info-copy-button', 'Sao chép thông tin VM')
-      button.type = 'button'
-      button.title = 'Sao chép toàn bộ thông tin VM đang xem'
-      button.addEventListener('click', copyCurrentVmInfo)
-      root.append(button)
       heading.append(root)
+    }
+    if (!root.querySelector('.it-toolkit-vm-info-copy-quick')) {
+      root.replaceChildren()
+      const quick = element('button', 'it-toolkit-vm-info-copy-button it-toolkit-vm-info-copy-quick', 'Copy nhanh')
+      quick.type = 'button'
+      quick.title = 'Sao chép ngay toàn bộ thông tin VM'
+      quick.addEventListener('click', copyCurrentVmInfo)
+      const advanced = element('button', 'it-toolkit-vm-info-copy-button it-toolkit-vm-info-copy-advanced', 'Copy nâng cao')
+      advanced.type = 'button'
+      advanced.title = 'Chỉnh sửa, thêm nội dung và Tag Element trước khi sao chép'
+      advanced.addEventListener('click', openVmComposer)
+      root.append(quick, advanced)
     }
     let status = document.getElementById('it-toolkit-vm-info-toast')
     if (!status) {
@@ -843,13 +1044,20 @@
       status.setAttribute('aria-live', 'polite')
       document.body.append(status)
     }
-    const button = root.querySelector('.it-toolkit-vm-info-copy-button')
-    if (button) {
-      button.disabled = state.vmInfoBusy
-      button.classList.toggle('is-copied', state.vmInfoCopied)
-      button.classList.toggle('is-error', state.vmInfoKind === 'error')
-      const label = state.vmInfoBusy ? 'Đang lấy...' : state.vmInfoCopied ? '✓ Đã sao chép' : 'Sao chép thông tin VM'
-      if (button.textContent !== label) button.textContent = label
+    const quick = root.querySelector('.it-toolkit-vm-info-copy-quick')
+    if (quick) {
+      quick.disabled = state.vmInfoBusy
+      quick.classList.toggle('is-copied', state.vmInfoCopied)
+      quick.classList.toggle('is-error', state.vmInfoKind === 'error')
+      const label = state.vmInfoBusy ? 'Đang lấy...' : state.vmInfoCopied ? '✓ Đã sao chép' : 'Copy nhanh'
+      if (quick.textContent !== label) quick.textContent = label
+    }
+    const advanced = root.querySelector('.it-toolkit-vm-info-copy-advanced')
+    if (advanced) {
+      advanced.disabled = state.vmComposerLoading
+      advanced.classList.toggle('is-open', state.vmComposerOpen)
+      const label = state.vmComposerLoading ? 'Đang mở...' : 'Copy nâng cao'
+      if (advanced.textContent !== label) advanced.textContent = label
     }
     if (status) {
       if (status.textContent !== state.vmInfoText) status.textContent = state.vmInfoText
@@ -959,6 +1167,7 @@
     if (location.pathname === detailPath) {
       renderDetail()
     }
+    renderVmComposer()
     renderOtpTool()
   }
 
@@ -1003,6 +1212,7 @@
     window.clearTimeout(vmInfoToastTimer)
     window.clearTimeout(otpRefreshTimer)
     removeOtpTool()
+    document.querySelector('.it-toolkit-vm-composer-overlay')?.remove()
     document.getElementById('it-toolkit-vm-info-toast')?.remove()
     document.getElementById('it-toolkit-password-options-popover')?.remove()
   }, { once: true })

@@ -73,13 +73,14 @@ describe('context menu popup', () => {
     }))
   })
 
-  it('allows OTP lookup on any Portal page and rejects other origins', async () => {
+  it('allows OTP and Tag Element lookup on Portal pages and rejects other origins', async () => {
     type Listener = (
       message: { type?: string },
       sender: { tab?: { id?: number; url?: string } },
       respond: (value: unknown) => void,
     ) => boolean | void
     const listeners: Listener[] = []
+    const groups = [{ id: 'vmware', name: 'Vmware', members: [] }]
     vi.stubGlobal('chrome', {
       runtime: {
         onInstalled: { addListener: vi.fn() },
@@ -87,7 +88,8 @@ describe('context menu popup', () => {
       },
       contextMenus: { create: vi.fn(), onClicked: { addListener: vi.fn() } },
       sidePanel: { setPanelBehavior: vi.fn(async () => {}) },
-      storage: { local: { get: vi.fn(async () => ({})) } },
+      storage: { local: { get: vi.fn(async (key: string) =>
+        key === 'tagElements' ? { tagElements: groups } : {}) } },
     })
     await import('./index')
     const listener = listeners.at(-1)!
@@ -99,6 +101,14 @@ describe('context menu popup', () => {
     )).toBe(true)
     await vi.waitFor(() => expect(allowed).toHaveBeenCalledWith({ codes: [] }))
 
+    const tags = vi.fn()
+    expect(listener(
+      { type: 'toolkit:get-tag-elements' },
+      { tab: { id: 8, url: 'https://portal.longvan.vn/computing-manager/manager/computing/computing_detail.xhtml?id=1' } },
+      tags,
+    )).toBe(true)
+    await vi.waitFor(() => expect(tags).toHaveBeenCalledWith({ groups }))
+
     const denied = vi.fn()
     expect(listener(
       { type: 'toolkit:get-authenticator-codes' },
@@ -106,6 +116,14 @@ describe('context menu popup', () => {
       denied,
     )).toBe(false)
     expect(denied).toHaveBeenCalledWith({ error: 'Chỉ có thể điền OTP trên trang Portal Long Vân.' })
+
+    const deniedTags = vi.fn()
+    expect(listener(
+      { type: 'toolkit:get-tag-elements' },
+      { tab: { id: 9, url: 'https://portal.longvan.vn.evil.test/' } },
+      deniedTags,
+    )).toBe(false)
+    expect(deniedTags).toHaveBeenCalledWith({ error: 'Chỉ có thể dùng Tag Element trên trang Portal Long Vân.' })
   })
 
   it('opens the QR region picker on the active tab', async () => {

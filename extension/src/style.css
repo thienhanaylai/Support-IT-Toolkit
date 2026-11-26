@@ -93,7 +93,7 @@ a {
 }
 .popup-tabs {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 3px;
   padding: 5px 18px 0;
   border-bottom: 1px solid #dfe9e6;
@@ -871,122 +871,6 @@ h1 span {
 .vm-tool-section,
 .network-info-section {
   margin-top: 12px;
-}
-.vm-tools-layout {
-  display: grid;
-  grid-template-columns: minmax(135px, 1fr) minmax(0, 2fr);
-  gap: 8px;
-  align-items: stretch;
-}
-.vm-tool-grid {
-  grid-template-columns: 1fr;
-}
-.tag-elements-quick {
-  min-width: 0;
-  padding: 7px 8px;
-  border: 1px solid #dbe8e4;
-  border-radius: 8px;
-  background: #f7fbf9;
-}
-.tag-elements-quick-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: #536d6b;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.7px;
-}
-.tag-elements-quick-heading > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.tag-elements-quick-heading svg {
-  color: #008f6a;
-}
-.tag-elements-quick-heading a {
-  color: #087457;
-  letter-spacing: 0;
-}
-.tag-elements-quick-heading a:hover {
-  text-decoration: underline;
-}
-.tag-group-tabs {
-  display: flex;
-  gap: 4px;
-  margin-top: 7px;
-  padding-bottom: 2px;
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
-.tag-group-tabs button {
-  flex: none;
-  max-width: 120px;
-  padding: 4px 7px;
-  overflow: hidden;
-  border: 1px solid #d6e6e0;
-  border-radius: 99px;
-  background: #fff;
-  color: #657d7b;
-  font-size: 8px;
-  font-weight: 750;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tag-group-tabs button:hover,
-.tag-group-tabs button.active {
-  border-color: #61bea0;
-  background: #e5f6ef;
-  color: #087457;
-}
-.tag-member-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  min-height: 25px;
-  margin-top: 6px;
-}
-.tag-member-buttons button {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 150px;
-  padding: 5px 8px;
-  overflow: hidden;
-  border: 1px solid #b7ddcf;
-  border-radius: 5px;
-  background: #edf8f3;
-  color: #087457;
-  font-size: 9px;
-  font-weight: 750;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.tag-member-buttons button:hover {
-  background: #dff3ea;
-}
-.tag-member-buttons button.is-copied {
-  border-color: #16996e;
-  background: #16996e;
-  color: #fff;
-}
-.tag-elements-empty,
-.tag-elements-empty-link,
-.tag-elements-error {
-  display: block;
-  margin-top: 6px;
-  color: #7c918e;
-  font-size: 9px;
-  line-height: 1.4;
-}
-.tag-elements-empty-link {
-  color: #087457;
-  text-decoration: underline;
-}
-.tag-elements-error {
-  color: #a43b35;
 }
 .tool-group-output {
   margin-top: 11px;
@@ -2469,6 +2353,173 @@ h1 span {
   display: block;
 }
 
+/* Tag Element tab */
+.tag-tab-content {
+  min-height: 570px;
+  padding: 16px 18px 22px;
+}
+.tag-tab-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tag-tab-heading h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #203741;
+  font-size: 21px;
+  letter-spacing: -0.5px;
+}
+.tag-tab-heading h1 svg {
+  color: #008f6a;
+}
+.tag-tab-heading p {
+  margin: 5px 0 0;
+  color: #7c9097;
+  font-size: 10px;
+}
+.tag-tab-heading > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid #b9dfd0;
+  border-radius: 6px;
+  background: #eff9f5;
+  color: #087457;
+  font-size: 10px;
+  font-weight: 800;
+}
+.tag-tab-heading > a:hover {
+  background: #ddf4e9;
+}
+.tag-tab-list {
+  display: grid;
+  gap: 9px;
+  max-height: calc(100vh - 165px);
+  margin-top: 14px;
+  padding-right: 3px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: #7b9994 transparent;
+  scrollbar-width: thin;
+}
+.tag-tab-card {
+  overflow: hidden;
+  border: 1px solid #dce7e7;
+  border-radius: 9px;
+  background: #fbfdfc;
+  box-shadow: 0 2px 7px #17263308;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.tag-tab-card.is-copied {
+  border-color: #19b784;
+  box-shadow: 0 0 0 2px #19b78424;
+}
+.tag-tab-group-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 54px;
+  padding: 9px 12px;
+  border: 0;
+  background: #f2faf6;
+  color: #203741;
+  text-align: left;
+}
+.tag-tab-group-copy:hover:not(:disabled) {
+  background: #e7f6ef;
+}
+.tag-tab-group-copy > span:first-child strong,
+.tag-tab-group-copy > span:first-child small {
+  display: block;
+}
+.tag-tab-group-copy > span:first-child strong {
+  font-size: 12px;
+}
+.tag-tab-group-copy > span:first-child small {
+  margin-top: 2px;
+  color: #7c9097;
+  font-size: 9px;
+}
+.tag-tab-group-copy > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  color: #087457;
+  font-size: 10px;
+  font-weight: 800;
+}
+.tag-tab-members {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 7px;
+}
+.tag-tab-members button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid #e0e9e7;
+  border-radius: 6px;
+  background: #fff;
+  color: #29434a;
+  text-align: left;
+}
+.tag-tab-members button:hover {
+  border-color: #70cbae;
+  background: #f5fbf8;
+}
+.tag-tab-members button.is-copied {
+  border-color: #19b784;
+  background: #e9f8f1;
+  color: #087457;
+}
+.tag-tab-members button > span {
+  min-width: 0;
+}
+.tag-tab-members strong,
+.tag-tab-members small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tag-tab-members strong {
+  font-size: 10px;
+}
+.tag-tab-members small {
+  margin-top: 2px;
+  color: #7c9097;
+  font-size: 8px;
+}
+.tag-tab-members svg {
+  flex: none;
+  color: #087457;
+}
+.tag-tab-empty {
+  margin: 0;
+  padding: 12px;
+  color: #81949a;
+  font-size: 10px;
+}
+.tag-tab-error {
+  margin: 12px 0 0;
+  color: #a43b35;
+  font-size: 10px;
+}
+
 /* Authenticator tab */
 .auth-content {
   padding: 20px 24px 26px;
@@ -3166,37 +3217,39 @@ html.auth-is-reordering * {
     background: #2b3d42;
     color: #b4d6d7;
   }
-  .tag-elements-quick {
-    border-color: #375047;
-    background: #172723;
+  .tag-tab-heading h1 {
+    color: #e8f1f0;
   }
-  .tag-elements-quick-heading,
-  .tag-elements-empty {
-    color: #adc3c4;
+  .tag-tab-heading p,
+  .tag-tab-group-copy > span:first-child small,
+  .tag-tab-members small,
+  .tag-tab-empty {
+    color: #a2b8bd;
   }
-  .tag-elements-quick-heading svg,
-  .tag-elements-quick-heading a,
-  .tag-elements-empty-link {
-    color: #8ee8bc;
-  }
-  .tag-group-tabs button {
-    border-color: #3b5750;
-    background: #1b2d29;
-    color: #adc3c4;
-  }
-  .tag-group-tabs button:hover,
-  .tag-group-tabs button.active {
-    border-color: #52b995;
-    background: #214b3d;
-    color: #9ee7c1;
-  }
-  .tag-member-buttons button {
+  .tag-tab-heading > a,
+  .tag-tab-group-copy {
     border-color: #3b6250;
     background: #1c332d;
     color: #9ee7c1;
   }
-  .tag-member-buttons button:hover {
+  .tag-tab-heading > a:hover,
+  .tag-tab-group-copy:hover:not(:disabled) {
     background: #285344;
+  }
+  .tag-tab-card {
+    border-color: #375047;
+    background: #172723;
+  }
+  .tag-tab-members button {
+    border-color: #354a50;
+    background: #1b272b;
+    color: #e8f1f0;
+  }
+  .tag-tab-members button:hover,
+  .tag-tab-members button.is-copied {
+    border-color: #52b995;
+    background: #214b3d;
+    color: #9ee7c1;
   }
   .tool.selected .tool-icon {
     background: #215849;

@@ -397,7 +397,7 @@ it('shows HTTP Ping and DoH as independent browser tools with their own options'
   expect(document.querySelector('.domain-tool-section')?.textContent).toContain('không đại diện DNS hệ điều hành')
 })
 
-it('shows Tag Element beside VM info and copies the complete recognized mention', async () => {
+it('shows Tag Element as a separate tab and copies a complete contact group', async () => {
   document.body.innerHTML = '<div id="root"></div>'
   const writeText = vi.fn(async () => {})
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
@@ -418,16 +418,20 @@ it('shows Tag Element beside VM info and copies the complete recognized mention'
     },
   })
   await import('./main')
-  await showTools()
+  await vi.waitFor(() => expect([...document.querySelectorAll<HTMLButtonElement>('.popup-tabs button')]
+    .find((button) => button.textContent?.includes('Tag'))).toBeDefined())
+  const tagTab = [...document.querySelectorAll<HTMLButtonElement>('.popup-tabs button')]
+    .find((button) => button.textContent?.includes('Tag'))!
+  tagTab.click()
   const tagPanel = await vi.waitFor(() => {
-    const panel = document.querySelector('.tag-elements-quick')
+    const panel = document.querySelector('.tag-tab-content')
     expect(panel).not.toBeNull()
     return panel!
   })
-  expect(document.querySelector('.vm-tools-layout')?.contains(tagPanel)).toBe(true)
+  expect(tagTab.getAttribute('aria-selected')).toBe('true')
   expect(tagPanel.textContent).toContain('Vmware')
   expect(tagPanel.textContent).toContain('Lê Ngọc Vương')
-  tagPanel.querySelector<HTMLButtonElement>('.tag-member-buttons button')!.click()
+  tagPanel.querySelector<HTMLButtonElement>('.tag-tab-group-copy')!.click()
   await vi.waitFor(() => expect(writeText)
     .toHaveBeenCalledWith('(Lê Ngọc Vương)[@10.19530321:team.longvan.vn]'))
   await vi.waitFor(() => expect(tagPanel.textContent).toContain('Đã chép'))
