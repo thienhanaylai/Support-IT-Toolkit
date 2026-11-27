@@ -1,95 +1,150 @@
-# IT Support Toolkit
+<p align="center">
+  <img src="logo-toolkit.png" alt="IT Support Toolkit" width="220">
+</p>
 
-Extension Chrome/Edge Manifest V3 chạy **Browser-only**, không có Native Agent, backend, tài khoản hoặc telemetry.
+<h1 align="center">IT Support Toolkit</h1>
 
-## Chức năng
+<p align="center">
+  Extension hỗ trợ kỹ thuật trên Chrome và Microsoft Edge, tối ưu cho quy trình vận hành Portal Long Vân.
+</p>
 
-### Công cụ mạng Browser-only
+<p align="center">
+  <a href="https://github.com/thienhanaylai/Support-IT-Toolkit/releases/tag/v0.2.2.2"><img src="https://img.shields.io/badge/version-0.2.2.2-1565c0" alt="Version 0.2.2.2"></a>
+  <img src="https://img.shields.io/badge/Manifest-V3-00a86b" alt="Manifest V3">
+  <img src="https://img.shields.io/badge/runtime-Browser--only-0b3a67" alt="Browser-only">
+  <img src="https://img.shields.io/badge/tests-151%20passed-f2b705" alt="151 tests passed">
+</p>
 
-| Công cụ | Nguồn | Ghi chú |
+---
+
+## Giới thiệu
+
+**IT Support Toolkit** tập hợp các thao tác hỗ trợ kỹ thuật thường dùng vào một extension duy nhất:
+
+- Kiểm tra IP Public, HTTP Ping và DNS over HTTPS.
+- Quản lý mã TOTP Authenticator và tạo mật khẩu an toàn.
+- Sao chép, đối chiếu và điền cấu hình VM trên Portal Long Vân.
+- Soạn nội dung bàn giao VM bằng template và liên kết người dùng Matrix.
+- Lưu lịch sử cục bộ và xuất báo cáo khi người dùng yêu cầu.
+
+Extension chạy hoàn toàn trong trình duyệt, không cần Native Agent, backend, tài khoản riêng hoặc quyền Administrator. Dự án không thu thập telemetry.
+
+## Tải nhanh
+
+Tải bản mới nhất tại:
+
+**[GitHub Releases — IT Support Toolkit v0.2.2.2](https://github.com/thienhanaylai/Support-IT-Toolkit/releases/tag/v0.2.2.2)**
+
+| Gói | Mục đích |
+|---|---|
+| `ITSupportToolkit-Windows.exe` | Cài/cập nhật bằng một file trên Windows. |
+| `ITSupportToolkit-Windows.zip` | Bộ cài có mã script đọc được, dùng cho Chrome hoặc Edge. |
+| `ITSupportToolkit-Edge-Store.zip` | Gói riêng để nộp Microsoft Edge Add-ons; không nằm trong GitHub Release. |
+
+> [!NOTE]
+> EXE chỉ chép extension production vào `%LOCALAPPDATA%\ITSupportToolkit\extension`. Nó không gọi PowerShell/CMD, không chạy script tạm, không dùng UI Automation và không tải mã thực thi từ Internet.
+
+> [!WARNING]
+> EXE hiện chưa được ký Authenticode nên Windows SmartScreen hoặc một số engine heuristic có thể hiển thị cảnh báo.
+
+## Tính năng chính
+
+### Công cụ mạng
+
+| Công cụ | Cách hoạt động | Ghi chú |
 |---|---|---|
-| IP Public | Fetch `https://ifconfig.me/ip` | Validate IPv4/IPv6; không gửi cookie. |
-| HTTP Ping | Fetch từ trình duyệt | HEAD/GET, 1–5 lần, đo tới response headers; không phải ICMP RTT. |
-| DNS over HTTPS | Cloudflare, Google hoặc Quad9 | Hỗ trợ A, AAAA, CNAME, MX, TXT, NS, SOA, PTR, CAA, SRV. |
-| Thông tin VM | Tab Portal hiện tại | Chỉ đọc DOM trang chi tiết computing khi người dùng nhấn nút. |
+| **IP Public** | Fetch `https://ifconfig.me/ip` | Kiểm tra và xác thực IPv4/IPv6, không gửi cookie. |
+| **HTTP Ping** | HEAD/GET trực tiếp từ trình duyệt | Thực hiện 1–5 lần và đo tới response headers; không phải ICMP RTT. |
+| **DNS over HTTPS** | Cloudflare, Google hoặc Quad9 | Hỗ trợ A, AAAA, CNAME, MX, TXT, NS, SOA, PTR, CAA và SRV. |
+| **Thông tin VM** | Đọc DOM tab Portal hiện tại | Chỉ chạy khi người dùng chủ động nhấn nút. |
 
-Các công cụ native cũ—ICMP Ping, Traceroute, TCP Port, Quét Port, DNS hệ điều hành, SSL/TLS và Mạng LAN—đã bị loại khỏi UI/runtime. Kết quả cũ vẫn có thể xem trong lịch sử.
+Các công cụ native cũ như ICMP Ping, Traceroute, TCP Port, quét Port, DNS hệ điều hành, SSL/TLS và mạng LAN không còn nằm trong UI/runtime Browser-only.
 
-### Authenticator và mật khẩu
+### Hỗ trợ Portal Long Vân
 
-- Authenticator hỗ trợ TOTP, import liên kết/ảnh/TXT, chọn vùng QR, sắp xếp, tìm kiếm, sao chép và export TXT.
-- Secret TOTP được mã hóa AES-GCM trước khi lưu trong `chrome.storage.local`. Khóa mở tự động cũng nằm trong vùng lưu trữ extension; đây không thay thế mật khẩu chính hoặc kho khóa phần cứng.
-- Password Generator dùng `crypto.getRandomValues()`, hỗ trợ các nhóm ký tự, độ dài 4–128, số ký tự đặc biệt (mặc định 3) và danh sách loại trừ.
-- Mật khẩu gần đây chỉ được giữ trong `chrome.storage.session`, không ghi vào lịch sử hoặc báo cáo.
+Quyền truy cập `https://portal.longvan.vn/*` là quyền tùy chọn, chỉ được yêu cầu sau khi người dùng chủ động cấp.
 
-### Portal Long Vân
+| Khu vực | Chức năng |
+|---|---|
+| **Trang Dịch vụ** | Sao chép CORE, RAM, Internet, Storage, OS, Site Provider, loại dịch vụ, chủ sở hữu và mã dịch vụ. |
+| **Tạo Computing** | Dán tài nguyên, đối chiếu OS/Site, gợi ý tên VM và hỗ trợ tạo mật khẩu. |
+| **Tạo Computing nâng cao** | Chọn **Full clone** trước, sau đó điền Tên → Template → Cấu hình triển khai → CPU → RAM → Internet → Reservation → Disk. |
+| **Chi tiết Computing** | Sao chép Link VM, Tên computing, Nhóm ảo hóa, Nhóm, Tên VM, VMID, VMP, Host và Resource Pool. |
+| **Xác thực hai lớp** | Nhận diện hộp OTP và điền mã TOTP hiện tại mà không đưa secret vào content script. |
 
-Quyền `https://portal.longvan.vn/*` là quyền tùy chọn và chỉ được yêu cầu khi người dùng cấp.
+Extension không tự nhấn **Lưu** hoặc **Tạo VM**. Người dùng luôn kiểm tra và xác nhận dữ liệu trước khi gửi form.
 
-- Trang Dịch vụ: sao chép CORE, RAM, Internet, Storage, OS, Site Provider, chủ sở hữu và mã dịch vụ.
-- Trang Tạo computing và Tạo computing nâng cao: sao chép cả loại dịch vụ, dán tài nguyên, gợi ý tên VM, tạo mật khẩu và điền Template/Cấu hình triển khai theo thứ tự an toàn.
-- Trang chi tiết computing: sao chép Link VM, Tên computing, Nhóm ảo hóa, Nhóm, Tên VM, VMID, VMP, Host và ResourcePool.
-- Hộp xác thực hai lớp: nhận diện dialog `dlgEnabled2FA` trên các trang Portal và điền mã TOTP hiện tại; content script không nhận secret.
-- Tag Element: tab riêng để sao chép liên hệ theo lĩnh vực hoặc từng người dưới dạng `(Tên)[@id:domain]`, kèm quản lý/import danh sách trong Cài đặt.
-- Copy VM nâng cao trên Portal: chỉnh sửa thông tin VM, thêm ghi chú và chèn liên hệ theo lĩnh vực trước khi sao chép một lần.
-- Template tin nhắn trong Copy VM nâng cao: quản lý tập trung trong Cài đặt, chèn lặp lại và tự đóng hộp sau khi sao chép thành công.
-- Giao diện dùng bảng màu xanh/vàng đồng bộ Portal Long Vân, hỗ trợ theme Sáng/Tối được chọn trong Cài đặt.
-- Trang Cài đặt dùng tab độc lập cho Tùy chọn, Tag Element, Authenticator, Quyền Portal và Lịch sử.
-- Extension không tự bấm Lưu/Tạo VM.
+### Copy VM, template và Matrix Tag
+
+- Chỉnh sửa thông tin VM và thêm nội dung trước khi sao chép.
+- Chọn template để chèn ngay; hỗ trợ tạo, cập nhật và xóa template.
+- Template đã lưu hiển thị gọn theo từng dòng với nút chỉnh sửa và thùng rác.
+- Quản lý Tag Element theo từng lĩnh vực hoặc từng thành viên.
+- Tag được xuất dưới dạng liên kết Matrix chuẩn:
+
+```text
+[username](https://matrix.to/#/@iduser:domain)
+```
+
+- Giao diện dùng bảng màu xanh/vàng của Portal, hỗ trợ theme Sáng và Tối.
+
+### Authenticator và Password Generator
+
+- TOTP Authenticator: import liên kết, ảnh hoặc TXT; chọn vùng QR; tìm kiếm, sắp xếp, chỉnh sửa nhãn và export TXT.
+- Secret TOTP được mã hóa AES-GCM trước khi lưu trong `chrome.storage.local`.
+- Password Generator sử dụng `crypto.getRandomValues()`, hỗ trợ độ dài 4–128, nhóm ký tự, số ký tự đặc biệt và danh sách loại trừ.
+- Mật khẩu gần đây chỉ tồn tại trong `chrome.storage.session`, không ghi vào lịch sử hoặc báo cáo.
 
 ## Cài đặt
 
-### Từ mã nguồn
+### Cách 1: Dùng gói Windows
+
+1. Tải `ITSupportToolkit-Windows.exe` từ trang Release.
+2. Chạy file để chép extension vào:
+
+   ```text
+   %LOCALAPPDATA%\ITSupportToolkit\extension
+   ```
+
+3. Mở `chrome://extensions/` hoặc `edge://extensions/`.
+4. Bật **Developer mode**.
+5. Chọn **Load unpacked** và trỏ tới thư mục extension ở bước 2.
+
+Bạn cũng có thể giải nén `ITSupportToolkit-Windows.zip` và chạy `Install.cmd`.
+
+### Cách 2: Build từ mã nguồn
 
 Yêu cầu Node.js 20+ và npm:
 
 ```powershell
-cd extension
+git clone https://github.com/thienhanaylai/Support-IT-Toolkit.git
+cd Support-IT-Toolkit\extension
 npm ci
 npm run build
 ```
 
-Mở `chrome://extensions/` hoặc `edge://extensions/`, bật **Developer mode**, chọn **Load unpacked** và trỏ tới `extension/dist`.
-
-Không cần Go, quyền Administrator, Local Agent hoặc đăng ký Native Messaging để chạy extension.
-
-### Gói Windows
-
-```powershell
-.\packaging\build-release.ps1 -Force
-```
-
-Script tạo:
-
-- `release/ITSupportToolkit-Windows.zip`
-- `release/ITSupportToolkit-Windows.exe`
-
-Gói Windows chỉ chép extension vào `%LOCALAPPDATA%\ITSupportToolkit\extension` và hướng dẫn Load unpacked. Nó không cài chương trình mạng native, service hoặc Native Messaging Host. Launcher EXE thuần Go chỉ nhúng file extension production, chép trực tiếp vào thư mục cài và không gọi PowerShell, chạy script tạm, dùng UI Automation hay tải mã từ mạng.
-
-### Microsoft Edge Add-ons
-
-```powershell
-.\packaging\build-edge-store.ps1 -Force
-```
-
-Xem hướng dẫn tại [`packaging/EDGE_STORE.md`](packaging/EDGE_STORE.md). Gói trên chợ là bản Browser-only hoàn chỉnh.
+Sau đó bật **Developer mode**, chọn **Load unpacked** và trỏ tới `extension/dist`.
 
 ### Cập nhật bản Load unpacked
 
-- Nếu load trực tiếp từ `extension/dist`: chạy lại `npm run build`, rồi bấm **Reload/Tải lại**.
+- Nếu load từ `extension/dist`: chạy lại `npm run build`, rồi bấm **Reload/Tải lại**.
 - Nếu load từ `%LOCALAPPDATA%\ITSupportToolkit\extension`: chạy bộ cài mới, rồi bấm **Reload/Tải lại**.
 - Refresh các tab Portal đang mở để nạp content script mới.
-- Giữ nguyên đường dẫn và Extension ID để giữ dữ liệu trong `chrome.storage.local`.
+- Giữ nguyên đường dẫn và Extension ID để bảo toàn dữ liệu trong `chrome.storage.local`.
 
-## Dữ liệu và quyền riêng tư
+## Quyền riêng tư và bảo mật
 
 - Manifest không yêu cầu `nativeMessaging`.
-- IP Public gửi request tới ifconfig.me.
+- Không có backend riêng, tài khoản extension hoặc telemetry.
+- IP Public gửi request tới `ifconfig.me`.
 - HTTP Ping xin quyền theo đúng origin HTTP/HTTPS do người dùng nhập.
-- DoH gửi truy vấn tới resolver công cộng đã chọn; không dùng cho tên miền/IP nội bộ nhạy cảm nếu bạn không chấp nhận việc gửi truy vấn ra ngoài.
-- Lịch sử lưu cục bộ tối đa 50 kết quả khi tùy chọn lưu được bật.
+- DNS over HTTPS gửi truy vấn tới resolver công cộng đã chọn.
+- Lịch sử chỉ lưu cục bộ tối đa 50 kết quả khi tùy chọn lưu được bật.
 - Báo cáo HTML chỉ được tạo khi người dùng chủ động xuất.
-- Các trường nhạy cảm phổ biến như API key, authorization, password và token được loại khỏi dữ liệu lưu/xuất.
+- Các trường phổ biến như API key, authorization, password và token được loại khỏi dữ liệu lưu/xuất.
+
+> [!IMPORTANT]
+> Không dùng DNS resolver công cộng cho tên miền hoặc IP nội bộ nhạy cảm nếu chính sách của tổ chức không cho phép gửi truy vấn ra ngoài.
 
 ## Phát triển và kiểm thử
 
@@ -100,7 +155,20 @@ npm test
 npm run build
 cd ..
 .\packaging\test-setup.ps1
+.\packaging\build-release.ps1 -Force
 .\packaging\build-edge-store.ps1 -Force
 ```
 
-Tài liệu `docs/zero-cmd-*.md` và `RELEASE_NOTES.md` mô tả các mốc phát hành/lịch sử trước khi chuyển sang Browser-only.
+Các script đóng gói xác minh phiên bản Manifest, file bắt buộc, cấu trúc ZIP và việc không có `nativeMessaging`.
+
+## Tài liệu
+
+- [Ghi chú phát hành](RELEASE_NOTES.md)
+- [Hướng dẫn gói Windows](packaging/INSTALL.md)
+- [Hướng dẫn Microsoft Edge Add-ons](packaging/EDGE_STORE.md)
+
+---
+
+<p align="center">
+  <strong>IT Support Toolkit</strong> — công cụ hỗ trợ kỹ thuật nhanh, minh bạch và chạy trực tiếp trong trình duyệt.
+</p>
