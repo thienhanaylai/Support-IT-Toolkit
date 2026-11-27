@@ -439,58 +439,78 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
   function reservationSelect(): HTMLSelectElement | null {
     return advancedCreate ? choiceField('Cấu hình reservation')?.select ?? null : null
   }
-  function cloneField(): Element | null {
-    if (!advancedCreate) return null
+  function cloneLabel(): HTMLLabelElement | null {
+    // Both computing_create.xhtml and computing_create_plus.xhtml render the clone
+    // choice as a PrimeFaces Inplace labelled "Hình thức Clone: ".
     const form = document.getElementById('frmMain')
-    const label = [...(form?.querySelectorAll('label') ?? [])]
-      .find((node) => normalizedLabel(node.textContent) === normalizedLabel('Hình thức clone'))
-    return label?.closest('.ui-g-12, [class*="p-col"]') ?? label?.parentElement ?? null
+    return [...(form?.querySelectorAll<HTMLLabelElement>('label') ?? [])]
+      .find((node) => normalizedLabel(node.textContent).startsWith('hình thức clone')) ?? null
+  }
+  function cloneSelect(): HTMLSelectElement | null {
+    const label = cloneLabel()
+    if (!label) return null
+    // The clone choice lives in a PrimeFaces Inplace that sits next to its label.
+    // Scope to that row so Resource Pool or Instance selects in the same panel are ignored.
+    const inplace = label.parentElement?.querySelector<HTMLElement>('.ui-inplace[id]') ??
+      label.closest('.ui-g-12, [class*="p-col"]')?.querySelector<HTMLElement>('.ui-inplace[id]') ?? null
+    const scope = inplace ?? label.closest('.ui-g-12, [class*="p-col"]') ?? label.parentElement
+    return scope?.querySelector<HTMLSelectElement>('select:not([disabled])') ?? null
   }
   function fullCloneSelection(): {
     selected: boolean
     source: string
     apply: () => void
   } | null {
-    const field = cloneField()
-    if (!field) return null
+    const label = cloneLabel()
+    if (!label) return null
     const full = (value: string | null | undefined) => normalizedChoice(value ?? '') === 'full'
-    const select = field.querySelector<HTMLSelectElement>('select:not([disabled])')
+    const select = cloneSelect()
     if (select) {
       const option = [...select.options].find((item) => full(item.textContent) || full(item.value))
       if (!option) return null
       const widget = widgetFor(select)
-      if (!widget?.selectValue || !widget.triggerChange) throw new Error('Ô Hình thức clone chưa sẵn sàng.')
+      const inplace = select.closest<HTMLElement>('.ui-inplace[id]')
+      const display = inplace?.querySelector<HTMLElement>('.ui-inplace-display') ?? null
+      const save = inplace?.querySelector<HTMLElement>('.ui-inplace-save, button[title="Save"]') ?? null
+      const selectSource = select.id.endsWith('_input') ? select.id.slice(0, -'_input'.length) : select.id
       return {
         selected: select.value === option.value,
-        source: select.id.endsWith('_input') ? select.id.slice(0, -'_input'.length) : select.id,
+        source: inplace?.id || selectSource,
         apply: () => {
-          widget.selectValue!(option.value)
-          widget.triggerChange!()
+          // Inplace starts in display mode; open the editor before writing the select.
+          if (display && display.style.display !== 'none') display.click()
+          if (widget?.selectValue) widget.selectValue(option.value)
+          else select.value = option.value
+          if (select.value !== option.value) select.value = option.value
+          // The hidden select alone does not persist the change: Inplace only commits on Save.
+          if (save) save.click()
+          else if (widget?.triggerChange) widget.triggerChange()
         },
       }
     }
 
-    const radios = [...field.querySelectorAll<HTMLInputElement>('input[type="radio"]:not([disabled])')]
+    const field = label.closest('.ui-g-12, [class*="p-col"]') ?? label.parentElement
+    const radios = [...(field?.querySelectorAll<HTMLInputElement>('input[type="radio"]:not([disabled])') ?? [])]
     const radio = radios.find((item) => {
-      const label = item.id
-        ? [...field.querySelectorAll<HTMLLabelElement>('label')].find((node) => node.htmlFor === item.id)
+      const radioLabel = item.id
+        ? [...(field?.querySelectorAll<HTMLLabelElement>('label') ?? [])].find((node) => node.htmlFor === item.id)
         : null
-      return full(item.value) || full(label?.textContent)
+      return full(item.value) || full(radioLabel?.textContent)
     })
     if (radio) {
-      const label = radio.id
-        ? [...field.querySelectorAll<HTMLLabelElement>('label')].find((node) => node.htmlFor === radio.id)
+      const radioLabel = radio.id
+        ? [...(field?.querySelectorAll<HTMLLabelElement>('label') ?? [])].find((node) => node.htmlFor === radio.id)
         : null
       const group = radio.closest<HTMLElement>('.ui-selectonebutton[id], .ui-selectoneradio[id], [role="radiogroup"][id]')
       const source = group?.id || radio.name || radio.id.replace(/[:_]\d+$/, '')
       return {
         selected: radio.checked,
         source,
-        apply: () => (label ?? radio).click(),
+        apply: () => (radioLabel ?? radio).click(),
       }
     }
 
-    const button = [...field.querySelectorAll<HTMLElement>('button, [role="radio"], .ui-button')]
+    const button = [...(field?.querySelectorAll<HTMLElement>('button, [role="radio"], .ui-button') ?? [])]
       .find((item) => full(item.textContent) || full(item.getAttribute('aria-label')))
     if (!button) return null
     const group = button.closest<HTMLElement>('[id]')
@@ -509,7 +529,13 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
     if (!control) throw new Error('Không tìm thấy lựa chọn Full trong ô Hình thức clone.')
     if (!control.selected) {
       if (!control.source) throw new Error('Không xác định được ô Hình thức clone.')
-      await waitForUpdate(control.source, control.apply)
+      try {
+        await waitForUpdate(control.source, control.apply)
+      } catch (cause) {
+        // Some Portal builds report a PrimeFaces AJAX error for the deployment panel while
+        // still keeping the chosen clone mode. Accept the error only when Full is really set.
+        if (!fullCloneSelection()?.selected) throw cause
+      }
     }
     if (!fullCloneSelection()?.selected) throw new Error('Portal chưa giữ Hình thức clone Full vừa chọn.')
   }
@@ -736,11 +762,11 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
   }
 
   try {
-    // Clone mode is the first advanced choice because changing it can rerender every field below.
-    // Reacquire the Name and all later controls only after Portal confirms Full clone.
+    // Clone mode is applied last. Portal rebuilds the deployment panel, which owns
+    // "Hình thức clone", whenever Template, deployment or resources change, so selecting
+    // Full earlier is silently reset back to Linked. The Name is preserved through every
+    // rerender and is re-applied after each AJAX update.
     if (advancedCreate) {
-      await chooseFullClone()
-      applied.push('Hình thức clone: Full')
       fillAdvancedName()
       applied.push('Tên')
     }
@@ -809,7 +835,13 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
       if (!desiredReservation) {
         throw new Error(`Không tìm thấy Cấu hình reservation cho loại dịch vụ "${config.serviceType || config.serviceTypeId}".`)
       }
-      await selectOption(reservation, desiredReservation, 'Cấu hình reservation')
+      try {
+        await selectOption(reservation, desiredReservation, 'Cấu hình reservation')
+      } catch (cause) {
+        // Row-scoped reservation selects can report a PrimeFaces AJAX error even though the
+        // browser already holds the new option. Continue only when the value really changed.
+        if (reservationSelect()?.value !== desiredReservation.value) throw cause
+      }
       if (reservationSelect()?.value !== desiredReservation.value) {
         throw new Error('Portal chưa giữ Cấu hình reservation vừa chọn.')
       }
@@ -839,6 +871,13 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
         throw new Error('Portal chưa giữ Cấu hình storage reservation vừa chọn.')
       }
       applied.push('Disk Reservation')
+
+      // Full clone is the final change. Anything selected before Template, deployment,
+      // reservation or disk is reverted to Linked when Portal rerenders the deployment panel.
+      if (cloneLabel()) {
+        await chooseFullClone()
+        applied.push('Hình thức clone: Full')
+      }
       return result()
     }
 
@@ -858,8 +897,28 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
     if (diskSelect()?.value !== desiredDiskType) {
       throw new Error('Portal chưa giữ loại Disk vừa chọn.')
     }
-    await setNumber('Disk', config.diskGB)
+    try {
+      await setNumber('Disk', config.diskGB)
+    } catch (cause) {
+      // Row-scoped disk inputs (for example j_idt131:0:j_idt144) can report an AJAX
+      // error while the field already holds the requested size. Continue only when the
+      // value really matches so the clone step can still run last.
+      const current = numberInput('Disk')
+      const currentWidget = current ? widgetFor(current) : undefined
+      const currentValue = currentWidget?.getValue
+        ? Number(currentWidget.getValue())
+        : current ? Number(current.value) : NaN
+      if (currentValue !== config.diskGB) throw cause
+    }
     applied.push('Disk')
+
+    // Full clone is always the final change, also on the standard create page.
+    // Portal rerenders the deployment panel after every resource update and resets
+    // the clone mode back to LINKED if it was chosen earlier.
+    if (cloneLabel()) {
+      await chooseFullClone()
+      applied.push('Hình thức clone: Full')
+    }
     return result()
   } catch (cause) {
     return error(cause instanceof Error ? cause.message : 'Không thể điền cấu hình vào Portal.')

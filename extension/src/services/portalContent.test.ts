@@ -334,8 +334,8 @@ it('adds advanced VM paste and password tools to the matching create cards', asy
     if (message.type === 'toolkit:paste-vm-config') {
       return {
         applied: [
-          'Hình thức clone: Full', 'Tên', 'Cấu hình triển khai', 'CPU', 'RAM',
-          'Internet', 'Cấu hình reservation', 'Disk Pool', 'Disk', 'Disk Reservation',
+          'Tên', 'Cấu hình triển khai', 'CPU', 'RAM', 'Internet', 'Cấu hình reservation',
+          'Disk Pool', 'Disk', 'Disk Reservation', 'Hình thức clone: Full',
         ],
       }
     }
@@ -376,7 +376,9 @@ it('adds advanced VM paste and password tools to the matching create cards', asy
   pasteButton.click()
   await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ type: 'toolkit:paste-vm-config' }))
   await vi.waitFor(() => expect(dom.window.document.querySelector('.it-toolkit-plus-tools .it-toolkit-portal-status')?.textContent)
-    .toContain('Hình thức clone: Full → Tên → Cấu hình triển khai'))
+    .toContain('Tên → Cấu hình triển khai'))
+  await vi.waitFor(() => expect(dom.window.document.querySelector('.it-toolkit-plus-tools .it-toolkit-portal-status')?.textContent)
+    .toContain('Hình thức clone: Full'))
 
   const passwordButton = dom.window.document.querySelector<HTMLButtonElement>('.it-toolkit-password-button')!
   expect(passwordButton.textContent).toBe('Tạo mật khẩu')

@@ -648,8 +648,8 @@
     if (state.busy) return
     state.busy = true
     const order = location.pathname === createPlusPath
-      ? 'Hình thức clone: Full → Tên → Template → Cấu hình triển khai → CPU → RAM → Internet → Reservation → Disk'
-      : 'Template (nếu cần) → CPU → RAM → Internet → Disk'
+      ? 'Tên → Template → Cấu hình triển khai → CPU → RAM → Internet → Reservation → Disk → Hình thức clone: Full'
+      : 'Template (nếu cần) → CPU → RAM → Internet → Disk → Hình thức clone: Full'
     setStatus(`Đang điền ${order}. Vui lòng không thao tác trên form...`, 'working')
     try {
       const response = await sendMessage({ type: 'toolkit:paste-vm-config' })

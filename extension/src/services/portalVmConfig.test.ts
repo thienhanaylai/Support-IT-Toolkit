@@ -59,6 +59,7 @@ function serviceTable() {
 }
 
 function createForm() {
+  window.history.replaceState({}, '', '/computing-manager/manager/computing/computing_create.xhtml')
   document.body.innerHTML = `<form id="frmMain">
     <div class="ui-g-12 ui-md-4"><label>Template *</label><select id="template_input"><option value="118498" selected>Windows Server 2022 Standard (64-bit)</option></select></div>
     <div class="ui-g-12 ui-md-4"><label>Khu vực *</label><select id="site_input"><option value="106066" selected>HCM</option></select></div>
@@ -70,16 +71,74 @@ function createForm() {
   </fieldset><button type="submit" id="create-vm">Tạo VM</button></form>`
 }
 
+function addCloneInplace() {
+  document.getElementById('frmMain')!.insertAdjacentHTML('beforeend', `
+    <div class="ui-g-12 deployment-panel">
+      <div class="ui-g-12"><label>Resource Pool</label>
+        <select id="pool_select_input"><option value="pool">POOL5-SC</option></select>
+      </div>
+      <div style="display: flex; margin-top: 5px">
+        <label id="clone_label" class="ui-outputlabel ui-widget"><span class="ui-outputlabel-label">Hình thức Clone: </span></label>
+        <span id="clone_inplace" class="ui-inplace ui-hidden-container underline" data-widget="widget_clone_inplace">
+          <span id="clone_display" class="ui-inplace-display" style="display:inline" tabindex="0" role="button">
+            <label class="ui-outputlabel ui-widget FontBold"><span class="ui-outputlabel-label" data-inplace-text>LINKED</span></label>
+          </span>
+          <span id="clone_content" class="ui-inplace-content" style="display:none">
+            <div id="advanced_clone" class="ui-selectonemenu ui-widget">
+              <div class="ui-helper-hidden-accessible">
+                <select id="advanced_clone_input" name="advanced_clone_input" tabindex="-1" aria-hidden="true">
+                  <option value="">Chọn</option>
+                  <option value="FULL">FULL</option>
+                  <option value="LINKED" selected="selected">LINKED</option>
+                </select>
+              </div>
+              <span class="ui-selectonemenu-label">LINKED</span>
+            </div>
+            <span id="clone_editor" class="ui-inplace-editor">
+              <button type="button" class="ui-inplace-save" title="Save">Save</button>
+              <button type="button" class="ui-inplace-cancel" title="Cancel">Cancel</button>
+            </span>
+          </span>
+        </span>
+      </div>
+    </div>`)
+}
+
 function createPlusForm() {
   window.history.replaceState({}, '', '/computing-manager/manager/computing/computing_create_plus.xhtml')
   document.body.innerHTML = `<form id="frmMain">
     <div class="card"><div class="ui-g-12">
       <h5>Thông tin cơ bản</h5>
-      <div class="ui-g-12 ui-md-6"><label>Hình thức clone</label><select id="advanced_clone_input">
-        <option value="LINKED" selected>Linked</option>
-        <option value="FULL">Full</option>
-      </select></div>
       <div class="ui-g-12 ui-md-6"><label>Tên</label><input id="advanced_name" type="text"></div>
+      <div class="ui-g-12 deployment-panel">
+        <div class="ui-g-12"><label>Resource Pool</label>
+          <select id="pool_select_input"><option value="pool">POOL5-SC</option></select>
+        </div>
+        <div style="display: flex; margin-top: 5px">
+          <label id="clone_label" class="ui-outputlabel ui-widget"><span class="ui-outputlabel-label">Hình thức Clone: </span></label>
+          <span id="clone_inplace" class="ui-inplace ui-hidden-container underline" data-widget="widget_clone_inplace">
+            <span id="clone_display" class="ui-inplace-display" style="display:inline" tabindex="0" role="button">
+              <label class="ui-outputlabel ui-widget FontBold"><span class="ui-outputlabel-label" data-inplace-text>LINKED</span></label>
+            </span>
+            <span id="clone_content" class="ui-inplace-content" style="display:none">
+              <div id="advanced_clone" class="ui-selectonemenu ui-widget">
+                <div class="ui-helper-hidden-accessible">
+                  <select id="advanced_clone_input" name="advanced_clone_input" tabindex="-1" aria-hidden="true">
+                    <option value="">Chọn</option>
+                    <option value="FULL">FULL</option>
+                    <option value="LINKED" selected="selected">LINKED</option>
+                  </select>
+                </div>
+                <span class="ui-selectonemenu-label">LINKED</span>
+              </div>
+              <span id="clone_editor" class="ui-inplace-editor">
+                <button type="button" class="ui-inplace-save" title="Save">Save</button>
+                <button type="button" class="ui-inplace-cancel" title="Cancel">Cancel</button>
+              </span>
+            </span>
+          </span>
+        </div>
+      </div>
       <div class="ui-g-12 ui-md-6"><label>Template</label><select id="advanced_template_input">
         <option value="20.1012.7635" selected>Windows Server 2022 Standard (64-bit)</option>
       </select></div>
@@ -230,7 +289,7 @@ describe('Service configuration', () => {
 })
 
 describe('Create computing form', () => {
-  function mockPrimeFaces(failAt?: string, revertOnceAt?: string) {
+  function mockPrimeFaces(failAt?: string, revertOnceAt?: string, resetSelectAt?: string) {
     const order: string[] = []
     const events = new Map<string, Set<(...args: unknown[]) => void>>()
     const pf: { widgets: Record<string, unknown> } = { widgets: {} }
@@ -264,9 +323,29 @@ describe('Create computing form', () => {
               if (option.value === value) option.setAttribute('selected', 'selected')
               else option.removeAttribute('selected')
             }
+            const display = select.closest('.ui-selectonemenu')?.querySelector('.ui-selectonemenu-label')
+            if (display) display.textContent = select.selectedOptions[0]?.textContent ?? ''
           },
           triggerChange: () => change(select.id.slice(0, -'_input'.length)),
         }
+      }
+      // PrimeFaces Inplace: clicking the display opens the editor, Save commits with AJAX.
+      for (const inplace of document.querySelectorAll<HTMLElement>('.ui-inplace[id]')) {
+        const display = inplace.querySelector<HTMLElement>('.ui-inplace-display')
+        const content = inplace.querySelector<HTMLElement>('.ui-inplace-content')
+        const save = inplace.querySelector<HTMLElement>('.ui-inplace-save')
+        display?.addEventListener('click', () => {
+          display.style.display = 'none'
+          if (content) content.style.display = ''
+        })
+        save?.addEventListener('click', () => {
+          const text = inplace.querySelector<HTMLElement>('[data-inplace-text]')
+          const select = inplace.querySelector<HTMLSelectElement>('select')
+          if (text && select) text.textContent = select.selectedOptions[0]?.textContent ?? ''
+          if (display) display.style.display = 'inline'
+          if (content) content.style.display = 'none'
+          change(inplace.id)
+        })
       }
       for (const row of document.querySelectorAll<HTMLElement>('#templateMappingAC_panel tbody tr')) {
         row.addEventListener('click', () => {
@@ -284,7 +363,13 @@ describe('Create computing form', () => {
     function change(source: string) {
       order.push(source)
       queueMicrotask(() => {
-        if (source === failAt) { emit('pfAjaxError', source); return }
+        if (source === failAt) {
+          if (source === resetSelectAt) {
+            const select = document.getElementById(`${source}_input`) as HTMLSelectElement | null
+            if (select) select.value = ''
+          }
+          emit('pfAjaxError', source); return
+        }
         if (source === revertOnceAt && !reverted) {
           reverted = true
           const input = document.getElementById(`${source}_input`) as HTMLInputElement | null
@@ -365,14 +450,16 @@ describe('Create computing form', () => {
     const result = await pasteServiceConfigIntoDOM(config)
 
     expect(result).toEqual({ applied: [
-      'Hình thức clone: Full', 'Tên', 'Cấu hình triển khai', 'CPU', 'RAM', 'Internet', 'Cấu hình reservation',
-      'Disk Pool', 'Disk', 'Disk Reservation',
+      'Tên', 'Cấu hình triển khai', 'CPU', 'RAM', 'Internet', 'Cấu hình reservation',
+      'Disk Pool', 'Disk', 'Disk Reservation', 'Hình thức clone: Full',
     ] })
     expect(order).toEqual([
-      'advanced_clone', 'templateMappingAC', 'advanced_cpu', 'advanced_ram', 'advanced_bandwidth',
+      'templateMappingAC', 'advanced_cpu', 'advanced_ram', 'advanced_bandwidth',
       'advanced_reservation', 'advanced_disk_pool', 'advanced_disk', 'advanced_disk_type',
+      'clone_inplace',
     ])
     expect((document.getElementById('advanced_clone_input') as HTMLSelectElement).value).toBe('FULL')
+    expect(document.querySelector('[data-inplace-text]')?.textContent).toBe('FULL')
     expect((document.getElementById('advanced_name') as HTMLInputElement).value)
       .toBe('chuxuanha-20.2985.9322')
     expect(['advanced_cpu', 'advanced_ram', 'advanced_bandwidth', 'advanced_disk']
@@ -383,6 +470,59 @@ describe('Create computing form', () => {
     expect((document.getElementById('advanced_reservation_input') as HTMLSelectElement).value)
       .toBe('smart-reservation')
     expect((document.getElementById('advanced_disk_pool_input') as HTMLSelectElement).value).toBe('pool')
+  })
+
+  it('switches the standard create page clone from LINKED to FULL as the final step', async () => {
+    createForm()
+    addCloneInplace()
+    const order = mockPrimeFaces()
+
+    const result = await pasteServiceConfigIntoDOM(config)
+
+    expect(result).toEqual({
+      applied: ['CPU', 'RAM', 'Internet', 'Disk', 'Hình thức clone: Full'],
+    })
+    expect(order).toEqual(['cpu', 'ram', 'internet', 'disk_type', 'disk', 'clone_inplace'])
+    expect((document.getElementById('advanced_clone_input') as HTMLSelectElement).value).toBe('FULL')
+    expect(document.querySelector('[data-inplace-text]')?.textContent).toBe('FULL')
+    expect((document.getElementById('pool_select_input') as HTMLSelectElement).value).toBe('pool')
+  })
+
+  it('keeps the disk size when Portal reports an AJAX error but the field holds the value', async () => {
+    createForm()
+    addCloneInplace()
+    const order = mockPrimeFaces('disk')
+
+    const result = await pasteServiceConfigIntoDOM(config)
+
+    expect(result.error).toBeUndefined()
+    expect(result.applied).toEqual(['CPU', 'RAM', 'Internet', 'Disk', 'Hình thức clone: Full'])
+    expect((document.getElementById('disk_input') as HTMLInputElement).value).toBe('50')
+    expect(order.at(-1)).toBe('clone_inplace')
+  })
+
+  it('keeps the chosen reservation when Portal reports an AJAX error but still holds the option', async () => {
+    createPlusForm()
+    const order = mockPrimeFaces('advanced_reservation')
+
+    const result = await pasteServiceConfigIntoDOM(config)
+
+    expect(result.error).toBeUndefined()
+    expect(order.at(-1)).toBe('clone_inplace')
+    expect((document.getElementById('advanced_reservation_input') as HTMLSelectElement).value)
+      .toBe('smart-reservation')
+    expect((document.getElementById('advanced_clone_input') as HTMLSelectElement).value).toBe('FULL')
+  })
+
+  it('still stops when a reservation AJAX error leaves the old option in place', async () => {
+    createPlusForm()
+    const order = mockPrimeFaces('advanced_reservation', undefined, 'advanced_reservation')
+
+    const result = await pasteServiceConfigIntoDOM(config)
+
+    expect(result.error).toMatch(/không cập nhật/)
+    expect(result.applied).toEqual(['Tên', 'Cấu hình triển khai', 'CPU', 'RAM', 'Internet'])
+    expect(order).not.toContain('clone_inplace')
   })
 
   it('skips OS and Site comparison when the copied service has neither value', async () => {

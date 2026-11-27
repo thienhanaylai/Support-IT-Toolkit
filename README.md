@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/thienhanaylai/Support-IT-Toolkit/releases/tag/v0.2.2.3"><img src="https://img.shields.io/badge/version-0.2.2.3-1565c0" alt="Version 0.2.2.3"></a>
+  <a href="https://github.com/thienhanaylai/Support-IT-Toolkit/releases/tag/v0.2.2.4"><img src="https://img.shields.io/badge/version-0.2.2.4-1565c0" alt="Version 0.2.2.4"></a>
   <img src="https://img.shields.io/badge/Manifest-V3-00a86b" alt="Manifest V3">
   <img src="https://img.shields.io/badge/runtime-Browser--only-0b3a67" alt="Browser-only">
-  <img src="https://img.shields.io/badge/tests-151%20passed-f2b705" alt="151 tests passed">
+  <img src="https://img.shields.io/badge/tests-155%20passed-f2b705" alt="155 tests passed">
 </p>
 
 ---
@@ -33,13 +33,16 @@ Extension chạy hoàn toàn trong trình duyệt, không cần Native Agent, ba
 
 Tải bản mới nhất tại:
 
-**[GitHub Releases — IT Support Toolkit v0.2.2.3](https://github.com/thienhanaylai/Support-IT-Toolkit/releases/tag/v0.2.2.3)**
+**[GitHub Releases — IT Support Toolkit v0.2.2.4](https://github.com/thienhanaylai/Support-IT-Toolkit/releases/tag/v0.2.2.4)**
 
 | Gói | Mục đích |
 |---|---|
-| `ITSupportToolkit-Windows.exe` | Cài/cập nhật bằng một file trên Windows. |
-| `ITSupportToolkit-Windows.zip` | Bộ cài có mã script đọc được, dùng cho Chrome hoặc Edge. |
-| `ITSupportToolkit-Edge-Store.zip` | Gói riêng để nộp Microsoft Edge Add-ons. |
+| `ITSupportToolkit-Edge-Store.zip` | Gói riêng để nộp/cập nhật Microsoft Edge Add-ons (bản 0.2.2.4). |
+| `ITSupportToolkit-Windows.exe` | Cài/cập nhật bằng một file trên Windows (bản 0.2.2.3). |
+| `ITSupportToolkit-Windows.zip` | Bộ cài có mã script đọc được (bản 0.2.2.3). |
+
+> [!NOTE]
+> Bản **0.2.2.4** chỉ đóng gói gói Edge Add-ons. Bộ cài Windows vẫn dùng bản **0.2.2.3** cho đến lần đóng gói tiếp theo.
 
 > [!NOTE]
 > EXE chỉ chép extension production vào `%LOCALAPPDATA%\ITSupportToolkit\extension`. Nó không gọi PowerShell/CMD, không chạy script tạm, không dùng UI Automation và không tải mã thực thi từ Internet.
@@ -67,8 +70,8 @@ Quyền truy cập `https://portal.longvan.vn/*` là quyền tùy chọn, chỉ 
 | Khu vực | Chức năng |
 |---|---|
 | **Trang Dịch vụ** | Sao chép CORE, RAM, Internet, Storage, OS, Site Provider, loại dịch vụ, chủ sở hữu và mã dịch vụ. |
-| **Tạo Computing** | Dán tài nguyên, đối chiếu OS/Site, gợi ý tên VM và hỗ trợ tạo mật khẩu. |
-| **Tạo Computing nâng cao** | Chọn **Full clone** trước, sau đó điền Tên → Template → Cấu hình triển khai → CPU → RAM → Internet → Reservation → Disk. |
+| **Tạo Computing** | Dán tài nguyên, đối chiếu OS/Site, gợi ý tên VM, hỗ trợ tạo mật khẩu và tự chuyển **Hình thức Clone** từ LINKED sang FULL sau cùng. |
+| **Tạo Computing nâng cao** | Điền Tên → Template → Cấu hình triển khai → CPU → RAM → Internet → Reservation → Disk, sau đó chuyển **Hình thức Clone** sang **Full** ở bước cuối. |
 | **Chi tiết Computing** | Sao chép Link VM, Tên computing, Nhóm ảo hóa, Nhóm, Tên VM, VMID, VMP, Host và Resource Pool. |
 | **Xác thực hai lớp** | Nhận diện hộp OTP và điền mã TOTP hiện tại mà không đưa secret vào content script. |
 

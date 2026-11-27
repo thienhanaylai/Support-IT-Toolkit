@@ -1,31 +1,46 @@
-# IT Support Toolkit v0.2.2.3 — Chuẩn hóa nút Lưu và danh sách template
+# IT Support Toolkit v0.2.2.4 — Hình thức Clone FULL ở bước cuối
 
-**Tải về:** dùng `ITSupportToolkit-Windows.exe` để cập nhật bằng một file, hoặc giải nén `ITSupportToolkit-Windows.zip` rồi chạy `Install.cmd`.
+**Tải về:** `ITSupportToolkit-Edge-Store.zip` để cập nhật Microsoft Edge Add-ons.
 
-Gói `ITSupportToolkit-Edge-Store.zip` dùng để cập nhật Microsoft Edge Add-ons và được đính kèm trong GitHub Release này.
+Bản này chỉ đóng gói gói Edge Add-ons. Bộ cài Windows vẫn dùng bản **0.2.2.3**.
 
-## Thay đổi từ v0.2.2.2
+## Thay đổi từ v0.2.2.3
 
-- Chuyển **Lưu danh sách Tag Element** và **Lưu template** sang góc phải.
-- Chuẩn hóa vị trí **Lưu cài đặt** và **Lưu Authenticator**; nút Hủy nằm trước, nút Lưu nằm ngoài cùng bên phải.
-- Giữ các nút lưu tùy chọn mật khẩu và lưu trên Portal ở phía phải.
-- Ngăn tên hoặc nội dung template dài, đặc biệt URL Matrix, kéo item vượt khỏi section.
-- Tự rút gọn tên/nội dung dài bằng dấu `...` và giữ nội dung đầy đủ trong tooltip.
-- Giữ cố định vị trí nút sửa/xóa trên desktop, giao diện tối và màn hình hẹp.
+- Tự chuyển **Hình thức Clone** từ `LINKED` sang `FULL` ở **bước cuối cùng** của luồng dán thông số.
+- Áp dụng cho cả trang **Tạo Computing** chuẩn (`computing_create.xhtml`) và trang **nâng cao** (`computing_create_plus.xhtml`).
+- Nhận đúng ô Clone dạng **PrimeFaces Inplace**: mở editor, chọn `FULL`, bấm **Save** và chờ Portal xác nhận.
+- Giới hạn phạm vi tìm kiếm theo đúng hàng chứa nhãn, không lấy nhầm `Resource Pool`, `Instance` hoặc select khác trong cùng panel.
+- Chấp nhận lỗi AJAX của `Cấu hình reservation` và `Disk size` **chỉ khi** giá trị thực tế đã đúng; nếu Portal giữ giá trị cũ thì vẫn dừng và báo lỗi.
+- Giữ nguyên Tên VM qua mọi lần PrimeFaces dựng lại form.
+- Cập nhật thứ tự hiển thị khi đang dán và tài liệu README.
+
+## Thứ tự thực hiện
+
+Trang chuẩn:
+
+```text
+Template (nếu cần) → CPU → RAM → Internet → Disk → Hình thức Clone: FULL
+```
+
+Trang nâng cao:
+
+```text
+Tên → Template → Cấu hình triển khai → CPU → RAM → Internet
+→ Cấu hình reservation → Disk pool → Disk → Cấu hình storage reservation
+→ Hình thức Clone: FULL
+```
 
 ## Xác nhận đóng gói
 
-- Manifest trong các gói là phiên bản **0.2.2.3**, không có `nativeMessaging`.
+- Manifest trong gói là phiên bản **0.2.2.4**, không có `nativeMessaging`.
 - Gói Edge Add-ons có `manifest.json` nằm ngay ở gốc ZIP và không chứa installer.
-- Bộ test 151/151 và production build đã đạt trước bước phát hành; theo yêu cầu không chạy lại bộ test riêng trong lần đóng gói này.
+- Bộ test 155/155 và production build đã đạt trước bước phát hành; theo yêu cầu không chạy lại bộ test trong lần đóng gói này.
 
 ## SHA-256
 
-- `ITSupportToolkit-Windows.zip`: `5FAA1573D403C9E3F90E9385510D8A05A9F3741D99962C14D7D08F425DCEA9CD`
-- `ITSupportToolkit-Windows.exe`: `A473EA7157635FC6E29ED7BE5A2D92A0D14463C0E87A24E52BB3E9B6FF3EB8FB`
-- `ITSupportToolkit-Edge-Store.zip`: `E90DD4691209B2BCA06C1C53D5C2866606D6382BC8C958C43AF5F78DA5CF73B2`
+- `ITSupportToolkit-Edge-Store.zip`: `527B9C024CB18AB0A5CB3497E772658EB449CA59E457CE71D917E90434B87344`
 
 ## Ghi chú
 
-- GitHub Release đính kèm hai gói Windows, gói Edge Add-ons và `SHA256SUMS.txt`.
-- EXE chưa được ký Authenticode nên Windows hoặc một số engine heuristic vẫn có thể cảnh báo.
+- GitHub Release đính kèm gói Edge Add-ons và `SHA256SUMS.txt`.
+- Extension không tự nhấn **Lưu**, **Tạo VM** hay **Deploy**.
