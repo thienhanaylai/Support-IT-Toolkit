@@ -1,6 +1,6 @@
 {
   "name": "it-support-toolkit-extension",
-  "version": "0.2.2",
+  "version": "0.2.2-1",
   "private": true,
   "type": "module",
   "scripts": {

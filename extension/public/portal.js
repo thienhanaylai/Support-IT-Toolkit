@@ -14,6 +14,7 @@
     vmName: '', vmNameBusy: false, vmNameText: '', vmNameKind: '',
     vmInfoBusy: false, vmInfoCopied: false, vmInfoText: '', vmInfoKind: '',
     vmComposerOpen: false, vmComposerLoading: false, vmComposerCopying: false,
+    vmComposerTemplateBusy: false,
     vmComposerVmText: '', vmComposerExtraText: '', vmComposerTagGroups: [],
     vmComposerTemplates: [], vmComposerSelectedTemplateId: '',
     vmComposerText: '', vmComposerKind: '', vmComposerTheme: 'light',
@@ -139,6 +140,7 @@
     state.vmComposerOpen = false
     state.vmComposerLoading = false
     state.vmComposerCopying = false
+    state.vmComposerTemplateBusy = false
     state.vmComposerText = ''
     state.vmComposerKind = ''
     scheduleRender()
@@ -149,6 +151,7 @@
     state.vmComposerOpen = true
     state.vmComposerLoading = true
     state.vmComposerCopying = false
+    state.vmComposerTemplateBusy = false
     state.vmComposerVmText = ''
     state.vmComposerExtraText = ''
     state.vmComposerTagGroups = []
@@ -234,6 +237,44 @@
     scheduleRender()
   }
 
+  async function saveCurrentTemplate() {
+    if (state.vmComposerTemplateBusy || state.vmComposerLoading) return
+    const content = state.vmComposerExtraText.trim()
+    if (!content) {
+      state.vmComposerText = 'Hãy nhập ghi chú hoặc nội dung bổ sung trước khi lưu.'
+      state.vmComposerKind = 'error'
+      scheduleRender()
+      return
+    }
+    const selected = state.vmComposerTemplates.find((item) =>
+      item.id === state.vmComposerSelectedTemplateId)
+    const name = window.prompt('Tên template tin nhắn:', selected?.name || '')
+    if (name === null) return
+    state.vmComposerTemplateBusy = true
+    state.vmComposerText = 'Đang lưu template...'
+    state.vmComposerKind = 'working'
+    scheduleRender()
+    try {
+      const response = await sendMessage({
+        type: 'toolkit:save-message-template',
+        templateId: selected?.id,
+        name,
+        content,
+      })
+      if (response?.error) throw new Error(response.error)
+      state.vmComposerTemplates = Array.isArray(response?.templates) ? response.templates : []
+      state.vmComposerSelectedTemplateId = response?.template?.id || ''
+      state.vmComposerText = selected ? 'Đã cập nhật template.' : 'Đã lưu template mới.'
+      state.vmComposerKind = 'success'
+    } catch (error) {
+      state.vmComposerText = error instanceof Error ? error.message : String(error)
+      state.vmComposerKind = 'error'
+    } finally {
+      state.vmComposerTemplateBusy = false
+      scheduleRender()
+    }
+  }
+
   async function copyVmComposer() {
     if (state.vmComposerCopying || state.vmComposerLoading) return
     const combined = [state.vmComposerVmText.trim(), state.vmComposerExtraText.trim()].filter(Boolean).join('\n\n')
@@ -297,7 +338,10 @@
       extraText.rows = 5
       extraText.placeholder = 'Ghi chú, template hoặc liên hệ...'
       extraText.setAttribute('aria-label', 'Nội dung bổ sung')
-      extraText.addEventListener('input', () => { state.vmComposerExtraText = extraText.value })
+      extraText.addEventListener('input', () => {
+        state.vmComposerExtraText = extraText.value
+        scheduleRender()
+      })
       extraLabel.append(extraText)
 
       const templates = element('div', 'it-toolkit-vm-composer-templates')
@@ -311,7 +355,10 @@
       const insertTemplate = element('button', 'it-toolkit-vm-composer-template-insert', 'Chèn')
       insertTemplate.type = 'button'
       insertTemplate.addEventListener('click', insertSelectedTemplate)
-      templateControls.append(templateSelect, insertTemplate)
+      const saveTemplate = element('button', 'it-toolkit-vm-composer-template-save', 'Lưu')
+      saveTemplate.type = 'button'
+      saveTemplate.addEventListener('click', saveCurrentTemplate)
+      templateControls.append(templateSelect, saveTemplate, insertTemplate)
       templates.append(templateControls)
 
       const tags = element('div', 'it-toolkit-vm-composer-tags')
@@ -356,10 +403,19 @@
         templateSelect.dataset.signature = signature
       }
       templateSelect.value = state.vmComposerSelectedTemplateId
-      templateSelect.disabled = state.vmComposerLoading
+      templateSelect.disabled = state.vmComposerLoading || state.vmComposerTemplateBusy
     }
     const insertTemplate = overlay.querySelector('.it-toolkit-vm-composer-template-insert')
-    if (insertTemplate) insertTemplate.disabled = !state.vmComposerSelectedTemplateId
+    const saveTemplate = overlay.querySelector('.it-toolkit-vm-composer-template-save')
+    if (insertTemplate) {
+      insertTemplate.disabled = !state.vmComposerSelectedTemplateId || state.vmComposerTemplateBusy
+    }
+    if (saveTemplate) {
+      saveTemplate.disabled = state.vmComposerLoading || state.vmComposerTemplateBusy ||
+        !state.vmComposerExtraText.trim()
+      const label = state.vmComposerTemplateBusy ? 'Đang lưu...' : 'Lưu'
+      if (saveTemplate.textContent !== label) saveTemplate.textContent = label
+    }
     const buttons = overlay.querySelector('.it-toolkit-vm-composer-tag-buttons')
     if (buttons) {
       const signature = state.vmComposerTagGroups.map((group) =>
@@ -386,7 +442,7 @@
     }
     const copy = overlay.querySelector('.it-toolkit-vm-composer-copy')
     if (copy) {
-      copy.disabled = state.vmComposerLoading || state.vmComposerCopying
+      copy.disabled = state.vmComposerLoading || state.vmComposerCopying || state.vmComposerTemplateBusy
       const label = state.vmComposerCopying ? 'Đang sao chép...' : 'Sao chép'
       if (copy.textContent !== label) copy.textContent = label
     }

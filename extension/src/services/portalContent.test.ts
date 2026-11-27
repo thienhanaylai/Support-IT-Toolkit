@@ -132,9 +132,13 @@ it('composes editable VM info, extra text, and a configured Element group before
     ],
   }]
   const templates = [{ id: 'notice', name: 'Thông báo', content: 'Template mẫu' }]
+  const savedTemplate = { id: 'saved-note', name: 'Ghi chú kiểm tra', content: 'Nội dung cần lưu' }
   const sendMessage = vi.fn(async (message: { type: string } & Record<string, unknown>) => {
     if (message.type === 'toolkit:get-tag-elements') return { groups, theme: 'dark' }
     if (message.type === 'toolkit:get-message-templates') return { templates }
+    if (message.type === 'toolkit:save-message-template') {
+      return { template: savedTemplate, templates: [...templates, savedTemplate] }
+    }
     return { info: { computingName: 'COMPUTING-A' }, text }
   })
   const writeText = vi.fn(async () => {})
@@ -163,6 +167,8 @@ it('composes editable VM info, extra text, and a configured Element group before
   vmText.value = `${text}\nTrạng thái: cần kiểm tra`
   vmText.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
   const extra = dialog.querySelector<HTMLTextAreaElement>('.it-toolkit-vm-composer-extra')!
+  const saveTemplate = dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-template-save')!
+  expect(saveTemplate.disabled).toBe(true)
   const templateSelect = dialog.querySelector<HTMLSelectElement>('.it-toolkit-vm-composer-template-select')!
   await vi.waitFor(() => expect(templateSelect.querySelectorAll('option')).toHaveLength(2))
   templateSelect.value = 'notice'
@@ -170,8 +176,27 @@ it('composes editable VM info, extra text, and a configured Element group before
   await vi.waitFor(() => expect(dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-template-insert')?.disabled).toBe(false))
   dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-template-insert')!.click()
   await vi.waitFor(() => expect(extra.value).toBe('Template mẫu'))
-  expect(dialog.querySelector('.it-toolkit-vm-composer-template-save')).toBeNull()
+  expect(saveTemplate.textContent).toBe('Lưu')
+  expect(saveTemplate.disabled).toBe(false)
+  expect(saveTemplate.nextElementSibling?.classList.contains('it-toolkit-vm-composer-template-insert')).toBe(true)
   expect(dialog.querySelector('.it-toolkit-vm-composer-template-delete')).toBeNull()
+
+  templateSelect.value = ''
+  templateSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
+  extra.value = 'Nội dung cần lưu'
+  extra.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+  vi.spyOn(dom.window, 'prompt').mockReturnValue('Ghi chú kiểm tra')
+  saveTemplate.click()
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({
+    type: 'toolkit:save-message-template',
+    templateId: undefined,
+    name: 'Ghi chú kiểm tra',
+    content: 'Nội dung cần lưu',
+  }))
+  await vi.waitFor(() => expect(templateSelect.value).toBe('saved-note'))
+  expect(templateSelect.querySelectorAll('option')).toHaveLength(3)
+  expect(dialog.querySelector('.it-toolkit-vm-composer-status')?.textContent)
+    .toBe('Đã lưu template mới.')
 
   const groupButton = dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-tag-buttons button')!
   groupButton.click()
