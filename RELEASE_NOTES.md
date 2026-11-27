@@ -1,36 +1,31 @@
-# IT Support Toolkit v0.2.2.2 — Full clone, Matrix Tag và bộ cài an toàn hơn
+# IT Support Toolkit v0.2.2.3 — Chuẩn hóa nút Lưu và danh sách template
 
-**Tải về:** `ITSupportToolkit-Windows.zip` là bộ cài Windows cho Chrome/Edge. Giải nén toàn bộ rồi chạy `Install.cmd`, hoặc dùng `ITSupportToolkit-Windows.exe` để cài từ một file.
+**Tải về:** dùng `ITSupportToolkit-Windows.exe` để cập nhật bằng một file, hoặc giải nén `ITSupportToolkit-Windows.zip` rồi chạy `Install.cmd`.
 
-Gói `ITSupportToolkit-Edge-Store.zip` được dựng riêng để cập nhật Microsoft Edge Add-ons và **không đính kèm GitHub Release**.
+Gói `ITSupportToolkit-Edge-Store.zip` dùng để cập nhật Microsoft Edge Add-ons và được đính kèm trong GitHub Release này.
 
-## Thay đổi từ v0.2.2.1
+## Thay đổi từ v0.2.2.2
 
-- Chọn **Hình thức clone = Full** trước khi điền Tên, Template, Cấu hình triển khai và tài nguyên trên trang Tạo Computing nâng cao.
-- Giữ lại Tên VM khi PrimeFaces AJAX thay toàn bộ form.
-- Đổi Tag Element sang liên kết Matrix chuẩn: `[username](https://matrix.to/#/@iduser:domain)`.
-- Hiển thị mỗi template tin nhắn trên một dòng, có nút chỉnh sửa và xóa; biểu mẫu chỉ mở khi thêm hoặc sửa.
-- Chọn template trong hộp Copy VM sẽ tự chèn; đồng bộ kích thước nút và giao diện Tag trong chế độ tối.
-- Viết lại EXE cài một file bằng Go thuần: chỉ chép extension production trực tiếp vào LocalAppData, không gọi PowerShell/CMD, không chạy script tạm, không dùng UI Automation/clipboard và không tải mã từ mạng.
-- Bổ sung kiểm tra cài mới, cập nhật và xóa asset cũ cho EXE trong môi trường cách ly.
+- Chuyển **Lưu danh sách Tag Element** và **Lưu template** sang góc phải.
+- Chuẩn hóa vị trí **Lưu cài đặt** và **Lưu Authenticator**; nút Hủy nằm trước, nút Lưu nằm ngoài cùng bên phải.
+- Giữ các nút lưu tùy chọn mật khẩu và lưu trên Portal ở phía phải.
+- Ngăn tên hoặc nội dung template dài, đặc biệt URL Matrix, kéo item vượt khỏi section.
+- Tự rút gọn tên/nội dung dài bằng dấu `...` và giữ nội dung đầy đủ trong tooltip.
+- Giữ cố định vị trí nút sửa/xóa trên desktop, giao diện tối và màn hình hẹp.
 
-## Kiểm tra
+## Xác nhận đóng gói
 
-- 151/151 bài test extension đạt.
-- TypeScript và production build đạt.
-- 6/6 kiểm tra bộ cài Windows ZIP đạt.
-- EXE cài mới/cập nhật trong môi trường cách ly đạt.
-- Manifest trong cả hai gói là phiên bản **0.2.2.2**, không có `nativeMessaging`.
-- Gói Edge Add-ons có 29 file và `manifest.json` nằm ngay ở gốc ZIP.
+- Manifest trong các gói là phiên bản **0.2.2.3**, không có `nativeMessaging`.
+- Gói Edge Add-ons có `manifest.json` nằm ngay ở gốc ZIP và không chứa installer.
+- Bộ test 151/151 và production build đã đạt trước bước phát hành; theo yêu cầu không chạy lại bộ test riêng trong lần đóng gói này.
 
 ## SHA-256
 
-- `ITSupportToolkit-Windows.zip`: `311CDA004835C8F5D1122C5F04429E097CD52B5D950FD659A66BCA407E71D1D7`
-- `ITSupportToolkit-Windows.exe`: `9DEDD0DAC8BB2BCD7FF346191E34FB0524890E36D4871B289D24EEF9009551DF`
-- `ITSupportToolkit-Edge-Store.zip`: `52C4697B844E9F92A2D50308E4B93FB3491F5992506DE8154EE019496865A793`
+- `ITSupportToolkit-Windows.zip`: `5FAA1573D403C9E3F90E9385510D8A05A9F3741D99962C14D7D08F425DCEA9CD`
+- `ITSupportToolkit-Windows.exe`: `A473EA7157635FC6E29ED7BE5A2D92A0D14463C0E87A24E52BB3E9B6FF3EB8FB`
+- `ITSupportToolkit-Edge-Store.zip`: `E90DD4691209B2BCA06C1C53D5C2866606D6382BC8C958C43AF5F78DA5CF73B2`
 
 ## Ghi chú
 
-- Chỉ đính kèm `ITSupportToolkit-Windows.zip`, `ITSupportToolkit-Windows.exe` và `SHA256SUMS.txt` vào GitHub Release.
-- Tải `ITSupportToolkit-Edge-Store.zip` lên Microsoft Partner Center để cập nhật Edge Add-ons; gói này không đính kèm GitHub Release.
+- GitHub Release đính kèm hai gói Windows, gói Edge Add-ons và `SHA256SUMS.txt`.
 - EXE chưa được ký Authenticode nên Windows hoặc một số engine heuristic vẫn có thể cảnh báo.

@@ -234,6 +234,10 @@ describe('Settings history', () => {
     expect(section.querySelector('.message-template-editor')).toBeNull()
     expect(section.querySelector('.message-template-row')?.textContent).toContain('Thông báo kiểm tra')
     expect(section.querySelector('.message-template-row')?.textContent).toContain('Nội dung mẫu')
+    expect(section.querySelector<HTMLElement>('.message-template-row-copy strong')?.title)
+      .toBe('Thông báo kiểm tra')
+    expect(section.querySelector<HTMLElement>('.message-template-row-copy small')?.title)
+      .toBe('Nội dung mẫu [Lê Ngọc Vương](https://matrix.to/#/@10.19530321:team.longvan.vn)')
 
     section.querySelector<HTMLButtonElement>('.message-template-row-edit')!.click()
     const editedContent = await vi.waitFor(() => {

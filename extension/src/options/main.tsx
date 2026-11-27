@@ -661,8 +661,10 @@ function App() {
                 key={template.id}
               >
                 <div className="message-template-row-copy">
-                  <strong>{template.name}</strong>
-                  <small>{template.content.replace(/\s+/g, " ")}</small>
+                  <strong title={template.name}>{template.name}</strong>
+                  <small title={template.content.replace(/\s+/g, " ")}>
+                    {template.content.replace(/\s+/g, " ")}
+                  </small>
                 </div>
                 <div className="message-template-row-actions">
                   <button

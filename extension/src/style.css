@@ -1609,6 +1609,9 @@ h1 span {
   outline-offset: 2px;
 }
 .options-section {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
   scroll-margin-top: 15px;
   padding: 24px;
   margin: 0 0 16px;
@@ -1810,11 +1813,15 @@ h1 span {
 .options-save .primary {
   width: auto;
   min-width: 145px;
+  margin-left: auto;
   padding: 0 17px;
   box-shadow: none;
+  order: 2;
 }
-.options-save .success {
+.options-save .success,
+.options-save .options-error {
   margin: 0;
+  order: 1;
 }
 .options-error {
   font-size: 11px;
@@ -1967,7 +1974,9 @@ h1 span {
 .tag-editor-actions .primary {
   width: auto;
   min-height: 36px;
+  margin-left: auto;
   padding: 0 14px;
+  order: 2;
 }
 .message-templates-options .tag-editor-actions > button {
   width: 150px;
@@ -1987,15 +1996,25 @@ h1 span {
 }
 .tag-editor-actions .success {
   margin: 0;
+  order: 1;
 }
 .message-template-list,
 .message-template-editors {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
   gap: 8px;
 }
 .message-template-row {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   gap: 12px;
   min-height: 52px;
   padding: 8px 10px 8px 13px;
@@ -2008,12 +2027,15 @@ h1 span {
   box-shadow: 0 0 0 2px #2196f31f;
 }
 .message-template-row-copy {
+  overflow: hidden;
   min-width: 0;
-  flex: 1;
+  max-width: 100%;
+  flex: 1 1 0%;
 }
 .message-template-row-copy strong,
 .message-template-row-copy small {
   display: block;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3369,6 +3391,7 @@ h1 span {
 }
 .auth-edit-actions {
   display: flex;
+  justify-content: flex-end;
   gap: 5px;
 }
 .auth-edit-actions button {
@@ -3389,12 +3412,12 @@ h1 span {
   border-color: #1565c0;
   background: #1565c0;
 }
-.auth-edit-actions button:last-child {
+.auth-edit-actions .auth-edit-cancel {
   border-color: #b8ccd8;
   background: #fff;
   color: #607d8b;
 }
-.auth-edit-actions button:last-child:hover:not(:disabled) {
+.auth-edit-actions .auth-edit-cancel:hover:not(:disabled) {
   border-color: #90a4ae;
   background: #eef3f5;
 }
@@ -4125,12 +4148,12 @@ html.auth-is-reordering * {
     background: #0b141a;
     color: #e7f0f6;
   }
-  .auth-edit-actions button:last-child {
+  .auth-edit-actions .auth-edit-cancel {
     border-color: #38556b;
     background: #172a37;
     color: #b4c8d4;
   }
-  .auth-edit-actions button:last-child:hover:not(:disabled) {
+  .auth-edit-actions .auth-edit-cancel:hover:not(:disabled) {
     border-color: #426a86;
     background: #1d4058;
     color: #e7f0f6;

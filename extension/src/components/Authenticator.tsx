@@ -594,12 +594,13 @@ export function Authenticator() {
                 onChange={(event) => setEditLabel(event.target.value)} />
             </label>
             <div className="auth-edit-actions">
-              <button type="submit" disabled={saving || !editLabel.trim()} title="Lưu thay đổi">
-                <Check size={14} /> Lưu
-              </button>
-              <button type="button" disabled={saving} title="Hủy chỉnh sửa"
+              <button type="button" className="auth-edit-cancel" disabled={saving} title="Hủy chỉnh sửa"
                 onClick={(event) => { event.stopPropagation(); cancelEditing() }}>
                 <X size={14} /> Hủy
+              </button>
+              <button type="submit" className="auth-edit-save"
+                disabled={saving || !editLabel.trim()} title="Lưu thay đổi">
+                <Check size={14} /> Lưu
               </button>
             </div>
           </form>}

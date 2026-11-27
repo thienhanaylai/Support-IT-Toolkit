@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/thienhanaylai/Support-IT-Toolkit/releases/tag/v0.2.2.2"><img src="https://img.shields.io/badge/version-0.2.2.2-1565c0" alt="Version 0.2.2.2"></a>
+  <a href="https://github.com/thienhanaylai/Support-IT-Toolkit/releases/tag/v0.2.2.3"><img src="https://img.shields.io/badge/version-0.2.2.3-1565c0" alt="Version 0.2.2.3"></a>
   <img src="https://img.shields.io/badge/Manifest-V3-00a86b" alt="Manifest V3">
   <img src="https://img.shields.io/badge/runtime-Browser--only-0b3a67" alt="Browser-only">
   <img src="https://img.shields.io/badge/tests-151%20passed-f2b705" alt="151 tests passed">
@@ -33,13 +33,13 @@ Extension chạy hoàn toàn trong trình duyệt, không cần Native Agent, ba
 
 Tải bản mới nhất tại:
 
-**[GitHub Releases — IT Support Toolkit v0.2.2.2](https://github.com/thienhanaylai/Support-IT-Toolkit/releases/tag/v0.2.2.2)**
+**[GitHub Releases — IT Support Toolkit v0.2.2.3](https://github.com/thienhanaylai/Support-IT-Toolkit/releases/tag/v0.2.2.3)**
 
 | Gói | Mục đích |
 |---|---|
 | `ITSupportToolkit-Windows.exe` | Cài/cập nhật bằng một file trên Windows. |
 | `ITSupportToolkit-Windows.zip` | Bộ cài có mã script đọc được, dùng cho Chrome hoặc Edge. |
-| `ITSupportToolkit-Edge-Store.zip` | Gói riêng để nộp Microsoft Edge Add-ons; không nằm trong GitHub Release. |
+| `ITSupportToolkit-Edge-Store.zip` | Gói riêng để nộp Microsoft Edge Add-ons. |
 
 > [!NOTE]
 > EXE chỉ chép extension production vào `%LOCALAPPDATA%\ITSupportToolkit\extension`. Nó không gọi PowerShell/CMD, không chạy script tạm, không dùng UI Automation và không tải mã thực thi từ Internet.
