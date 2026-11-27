@@ -75,6 +75,10 @@ function createPlusForm() {
   document.body.innerHTML = `<form id="frmMain">
     <div class="card"><div class="ui-g-12">
       <h5>Thông tin cơ bản</h5>
+      <div class="ui-g-12 ui-md-6"><label>Hình thức clone</label><select id="advanced_clone_input">
+        <option value="LINKED" selected>Linked</option>
+        <option value="FULL">Full</option>
+      </select></div>
       <div class="ui-g-12 ui-md-6"><label>Tên</label><input id="advanced_name" type="text"></div>
       <div class="ui-g-12 ui-md-6"><label>Template</label><select id="advanced_template_input">
         <option value="20.1012.7635" selected>Windows Server 2022 Standard (64-bit)</option>
@@ -361,13 +365,16 @@ describe('Create computing form', () => {
     const result = await pasteServiceConfigIntoDOM(config)
 
     expect(result).toEqual({ applied: [
-      'Cấu hình triển khai', 'CPU', 'RAM', 'Internet', 'Cấu hình reservation',
+      'Hình thức clone: Full', 'Tên', 'Cấu hình triển khai', 'CPU', 'RAM', 'Internet', 'Cấu hình reservation',
       'Disk Pool', 'Disk', 'Disk Reservation',
     ] })
     expect(order).toEqual([
-      'templateMappingAC', 'advanced_cpu', 'advanced_ram', 'advanced_bandwidth',
+      'advanced_clone', 'templateMappingAC', 'advanced_cpu', 'advanced_ram', 'advanced_bandwidth',
       'advanced_reservation', 'advanced_disk_pool', 'advanced_disk', 'advanced_disk_type',
     ])
+    expect((document.getElementById('advanced_clone_input') as HTMLSelectElement).value).toBe('FULL')
+    expect((document.getElementById('advanced_name') as HTMLInputElement).value)
+      .toBe('chuxuanha-20.2985.9322')
     expect(['advanced_cpu', 'advanced_ram', 'advanced_bandwidth', 'advanced_disk']
       .map((id) => (document.getElementById(`${id}_input`) as HTMLInputElement).value))
       .toEqual(['2', '4', '200', '50'])

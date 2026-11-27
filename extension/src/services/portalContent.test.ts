@@ -173,12 +173,10 @@ it('composes editable VM info, extra text, and a configured Element group before
   await vi.waitFor(() => expect(templateSelect.querySelectorAll('option')).toHaveLength(2))
   templateSelect.value = 'notice'
   templateSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
-  await vi.waitFor(() => expect(dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-template-insert')?.disabled).toBe(false))
-  dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-template-insert')!.click()
   await vi.waitFor(() => expect(extra.value).toBe('Template mẫu'))
+  expect(dialog.querySelector('.it-toolkit-vm-composer-template-insert')).toBeNull()
   expect(saveTemplate.textContent).toBe('Lưu')
   expect(saveTemplate.disabled).toBe(false)
-  expect(saveTemplate.nextElementSibling?.classList.contains('it-toolkit-vm-composer-template-insert')).toBe(true)
   expect(dialog.querySelector('.it-toolkit-vm-composer-template-delete')).toBeNull()
 
   templateSelect.value = ''
@@ -201,7 +199,7 @@ it('composes editable VM info, extra text, and a configured Element group before
   const groupButton = dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-tag-buttons button')!
   groupButton.click()
   await vi.waitFor(() => expect(extra.value)
-    .toContain('(Lê Ngọc Vương)[@10.19530321:team.longvan.vn]'))
+    .toContain('[Lê Ngọc Vương](https://matrix.to/#/@10.19530321:team.longvan.vn)'))
   expect(groupButton.classList.contains('is-added')).toBe(true)
   expect(groupButton.textContent).toBe('✓ Vmware')
   await vi.waitFor(() => expect(dialog.querySelector('.it-toolkit-vm-composer-status')?.textContent).toBe(''))
@@ -210,10 +208,10 @@ it('composes editable VM info, extra text, and a configured Element group before
   expect(groupButton.disabled).toBe(false)
   groupButton.click()
   await vi.waitFor(() => expect(extra.value)
-    .toBe('Template mẫu\n\n(Lê Ngọc Vương)[@10.19530321:team.longvan.vn]'))
+    .toBe('Template mẫu\n\n[Lê Ngọc Vương](https://matrix.to/#/@10.19530321:team.longvan.vn)'))
   dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-copy')!.click()
   await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(
-    `${text}\nTrạng thái: cần kiểm tra\n\nTemplate mẫu\n\n(Lê Ngọc Vương)[@10.19530321:team.longvan.vn]`,
+    `${text}\nTrạng thái: cần kiểm tra\n\nTemplate mẫu\n\n[Lê Ngọc Vương](https://matrix.to/#/@10.19530321:team.longvan.vn)`,
   ))
   await vi.waitFor(() => expect(dom.window.document.querySelector('.it-toolkit-vm-composer')).toBeNull())
   await vi.waitFor(() => expect(dom.window.document.querySelector('.it-toolkit-vm-info-copy-status')?.textContent)
@@ -334,7 +332,12 @@ it('adds advanced VM paste and password tools to the matching create cards', asy
       return { password: 'Generated-Password9!', options: {} }
     }
     if (message.type === 'toolkit:paste-vm-config') {
-      return { applied: ['CPU', 'RAM', 'Internet', 'Disk'] }
+      return {
+        applied: [
+          'Hình thức clone: Full', 'Tên', 'Cấu hình triển khai', 'CPU', 'RAM',
+          'Internet', 'Cấu hình reservation', 'Disk Pool', 'Disk', 'Disk Reservation',
+        ],
+      }
     }
     return {}
   })
@@ -371,11 +374,9 @@ it('adds advanced VM paste and password tools to the matching create cards', asy
   expect(plusHeader?.children[0].tagName).toBe('H5')
   expect(plusHeader?.children[1].classList.contains('it-toolkit-plus-tools')).toBe(true)
   pasteButton.click()
-  await vi.waitFor(() => expect(dom.window.document.querySelector<HTMLInputElement>('#advanced-name')?.value)
-    .toBe('chuxuanha-20.2985.9322'))
   await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ type: 'toolkit:paste-vm-config' }))
   await vi.waitFor(() => expect(dom.window.document.querySelector('.it-toolkit-plus-tools .it-toolkit-portal-status')?.textContent)
-    .toContain('CPU → RAM → Internet → Disk'))
+    .toContain('Hình thức clone: Full → Tên → Cấu hình triển khai'))
 
   const passwordButton = dom.window.document.querySelector<HTMLButtonElement>('.it-toolkit-password-button')!
   expect(passwordButton.textContent).toBe('Tạo mật khẩu')

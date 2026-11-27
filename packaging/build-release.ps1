@@ -57,13 +57,44 @@ try {
   New-Item -Path (Split-Path $OutputPath -Parent) -ItemType Directory -Force | Out-Null
   Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $OutputPath -Force
   $launcher = Join-Path $staging 'launcher'
-  New-Item -Path $launcher -ItemType Directory -Force | Out-Null
+  $launcherPayload = Join-Path $staging 'launcher-payload'
+  New-Item -Path $launcher, $launcherPayload -ItemType Directory -Force | Out-Null
   Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'launcher\main.go') -Destination $launcher
-  Copy-Item -LiteralPath $OutputPath -Destination (Join-Path $launcher 'payload.zip')
-  & $go build -trimpath -ldflags '-s -w' -o $installerOutput (Join-Path $launcher 'main.go')
+  Copy-Item -Path (Join-Path $staging 'extension\*') -Destination $launcherPayload -Recurse -Force
+  Compress-Archive -Path (Join-Path $launcherPayload '*') -DestinationPath (Join-Path $launcher 'payload.zip') -Force
+  & $go build -trimpath -buildvcs=false -o $installerOutput (Join-Path $launcher 'main.go')
   if ($LASTEXITCODE -ne 0) { throw 'One-file installer build failed' }
   & $installerOutput --verify
   if ($LASTEXITCODE -ne 0) { throw 'One-file installer verification failed' }
+  $savedLocalAppData = $env:LOCALAPPDATA
+  $nativeTestLocal = Join-Path $staging 'native-installer-test'
+  try {
+    $env:LOCALAPPDATA = $nativeTestLocal
+    & $installerOutput --install
+    if ($LASTEXITCODE -ne 0) { throw 'One-file installer test install failed' }
+    $nativeInstalled = Join-Path $nativeTestLocal 'ITSupportToolkit\extension'
+    $nativeManifestPath = Join-Path $nativeInstalled 'manifest.json'
+    if (!(Test-Path -LiteralPath $nativeManifestPath -PathType Leaf) -or
+        !(Test-Path -LiteralPath (Join-Path $nativeInstalled '.it-support-toolkit-installed') -PathType Leaf)) {
+      throw 'One-file installer did not create a valid extension installation.'
+    }
+    $nativeManifest = Get-Content -LiteralPath $nativeManifestPath -Raw | ConvertFrom-Json
+    if ($nativeManifest.version -ne $builtManifest.version) {
+      throw 'One-file installer manifest version does not match the release.'
+    }
+    if (Get-ChildItem -LiteralPath $nativeInstalled -File -Recurse |
+        Where-Object { $_.Extension -in @('.bat', '.cmd', '.com', '.exe', '.ps1', '.scr') }) {
+      throw 'One-file installer wrote an executable or script into the extension directory.'
+    }
+    Set-Content -LiteralPath (Join-Path $nativeInstalled 'stale-test-file.txt') -Value 'stale'
+    & $installerOutput --install
+    if ($LASTEXITCODE -ne 0 -or (Test-Path -LiteralPath (Join-Path $nativeInstalled 'stale-test-file.txt'))) {
+      throw 'One-file installer update did not remove stale extension files.'
+    }
+    Write-Host 'Native installer install/update test: PASS'
+  } finally {
+    $env:LOCALAPPDATA = $savedLocalAppData
+  }
   $hash = (Get-FileHash -LiteralPath $OutputPath -Algorithm SHA256).Hash
   $installerHash = (Get-FileHash -LiteralPath $installerOutput -Algorithm SHA256).Hash
   Write-Host "ZIP: $OutputPath"

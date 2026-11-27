@@ -7,6 +7,7 @@ import {
   KeyRound,
   MessageSquareText,
   Moon,
+  Pencil,
   Plus,
   Save,
   Search,
@@ -15,6 +16,7 @@ import {
   Tags,
   Trash2,
   UserPlus,
+  X,
 } from "lucide-react";
 import { Header } from "../components/Header";
 import { HistoryItem } from "../components/HistoryItem";
@@ -41,6 +43,7 @@ import {
 import {
   createTagElementGroup,
   createTagElementMember,
+  formatTagElement,
   loadTagElementGroups,
   parseTagElementText,
   saveTagElementGroups,
@@ -94,6 +97,7 @@ function App() {
   const [tagSaved, setTagSaved] = useState(false);
   const [tagError, setTagError] = useState("");
   const [messageTemplates, setMessageTemplates] = useState<MessageTemplate[]>([]);
+  const [messageTemplateDraft, setMessageTemplateDraft] = useState<MessageTemplate | null>(null);
   const [templatesSaved, setTemplatesSaved] = useState(false);
   const [templatesError, setTemplatesError] = useState("");
   const filtered = history.filter(item =>
@@ -307,29 +311,24 @@ function App() {
     }
   }
 
-  function updateMessageTemplate(templateId: string, change: Partial<Pick<MessageTemplate, "name" | "content">>) {
-    setMessageTemplates(templates =>
-      templates.map(template => (template.id === templateId ? { ...template, ...change } : template)),
-    );
+  function updateMessageTemplate(change: Partial<Pick<MessageTemplate, "name" | "content">>) {
+    setMessageTemplateDraft(template => (template ? { ...template, ...change } : template));
     setTemplatesSaved(false);
     setTemplatesError("");
   }
 
   function addTagGroupToTemplate(
-    template: MessageTemplate,
     group: TagElementGroup,
     button: HTMLButtonElement,
   ) {
+    const template = messageTemplateDraft;
+    if (!template) return;
     const tagText = group.members
-      .map(member => {
-        const name = member.name.trim();
-        const elementId = member.elementId.trim();
-        return name && elementId ? `(${name})[${elementId}]` : "";
-      })
+      .map(member => member.name.trim() && member.elementId.trim() ? formatTagElement(member) : "")
       .filter(Boolean)
       .join("\n");
     if (!tagText) return;
-    updateMessageTemplate(template.id, {
+    updateMessageTemplate({
       content: [template.content.trim(), tagText].filter(Boolean).join("\n\n"),
     });
     button.classList.remove("is-added");
@@ -339,14 +338,35 @@ function App() {
   }
 
   async function saveTemplates() {
+    if (!messageTemplateDraft) return;
     try {
-      const savedTemplates = await saveMessageTemplates(messageTemplates);
+      const next = messageTemplates.some(template => template.id === messageTemplateDraft.id)
+        ? messageTemplates.map(template =>
+            template.id === messageTemplateDraft.id ? messageTemplateDraft : template)
+        : [...messageTemplates, messageTemplateDraft];
+      const savedTemplates = await saveMessageTemplates(next);
       setMessageTemplates(savedTemplates);
+      setMessageTemplateDraft(null);
       setTemplatesSaved(true);
       setTemplatesError("");
     } catch (cause) {
       setTemplatesSaved(false);
       setTemplatesError(cause instanceof Error ? cause.message : "Không thể lưu template tin nhắn.");
+    }
+  }
+
+  async function removeMessageTemplate(template: MessageTemplate) {
+    if (!window.confirm(`Xóa template "${template.name}"?`)) return;
+    const next = messageTemplates.filter(item => item.id !== template.id);
+    try {
+      const savedTemplates = await saveMessageTemplates(next);
+      setMessageTemplates(savedTemplates);
+      if (messageTemplateDraft?.id === template.id) setMessageTemplateDraft(null);
+      setTemplatesSaved(true);
+      setTemplatesError("");
+    } catch (cause) {
+      setTemplatesSaved(false);
+      setTemplatesError(cause instanceof Error ? cause.message : "Không thể xóa template tin nhắn.");
     }
   }
 
@@ -489,14 +509,15 @@ function App() {
                 setTagSaved(false);
                 setTagError("");
               }}
-              placeholder={"Vmware\n(name)[@id:example.com]"}
+              placeholder={"Vmware\n[username](https://matrix.to/#/@iduser:domain)"}
             />
             <div>
               <button type="button" onClick={importTags}>
                 Nhận diện danh sách
               </button>
               <small>
-                Mỗi lĩnh vực nằm trên một dòng; các dòng tiếp theo dùng dạng <code>(Tên)[@id:example.com]</code>.
+                Mỗi lĩnh vực nằm trên một dòng; các dòng tiếp theo dùng dạng{" "}
+                <code>[username](https://matrix.to/#/@iduser:domain)</code>.
               </small>
             </div>
           </div>
@@ -633,73 +654,114 @@ function App() {
               <p>Quản lý nội dung dùng lại trong hộp Copy VM nâng cao trên Portal.</p>
             </div>
           </div>
-          <div className="message-template-editors">
-            {messageTemplates.map((template, index) => (
-              <article className="message-template-editor" key={template.id}>
-                <div className="message-template-heading">
-                  <label>
-                    <span>Tên template</span>
-                    <input
-                      value={template.name}
-                      aria-label={`Tên template ${index + 1}`}
-                      placeholder="Ví dụ: Thông báo kiểm tra"
-                      onChange={event => updateMessageTemplate(template.id, { name: event.target.value })}
-                    />
-                  </label>
+          <div className="message-template-list">
+            {messageTemplates.map(template => (
+              <article
+                className={`message-template-row${messageTemplateDraft?.id === template.id ? " is-editing" : ""}`}
+                key={template.id}
+              >
+                <div className="message-template-row-copy">
+                  <strong>{template.name}</strong>
+                  <small>{template.content.replace(/\s+/g, " ")}</small>
+                </div>
+                <div className="message-template-row-actions">
                   <button
                     type="button"
-                    className="tag-delete"
-                    aria-label={`Xóa template ${template.name || index + 1}`}
+                    className="message-template-row-edit"
+                    title="Chỉnh sửa template"
+                    aria-label={`Chỉnh sửa template ${template.name}`}
+                    disabled={Boolean(messageTemplateDraft)}
                     onClick={() => {
-                      setMessageTemplates(templates => templates.filter(item => item.id !== template.id));
+                      setMessageTemplateDraft({ ...template });
                       setTemplatesSaved(false);
                       setTemplatesError("");
                     }}
                   >
-                    <Trash2 size={15} /> Xóa
+                    <Pencil size={15} />
                   </button>
-                </div>
-                <label className="message-template-content">
-                  <span>Nội dung</span>
-                  <textarea
-                    value={template.content}
-                    aria-label={`Nội dung template ${index + 1}`}
-                    placeholder="Nhập nội dung sẽ chèn vào tin nhắn..."
-                    onChange={event => updateMessageTemplate(template.id, { content: event.target.value })}
-                  />
-                </label>
-                <div className="message-template-tags" aria-label={`Thêm Tag Element vào template ${template.name || index + 1}`}>
-                  {tagGroups.map(group => (
-                    <button
-                      type="button"
-                      key={group.id}
-                      disabled={!group.members.some(member => member.name.trim() && member.elementId.trim())}
-                      onClick={event => addTagGroupToTemplate(template, group, event.currentTarget)}
-                    >
-                      {group.name}
-                    </button>
-                  ))}
-                  {!tagGroups.length && <small>Chưa có nhóm Tag Element.</small>}
+                  <button
+                    type="button"
+                    className="message-template-row-delete"
+                    title="Xóa template"
+                    aria-label={`Xóa template ${template.name}`}
+                    disabled={Boolean(messageTemplateDraft)}
+                    onClick={() => void removeMessageTemplate(template)}
+                  >
+                    <Trash2 size={15} />
+                  </button>
                 </div>
               </article>
             ))}
-            {!messageTemplates.length && <p className="message-template-empty">Chưa có template tin nhắn.</p>}
+            {!messageTemplates.length && !messageTemplateDraft &&
+              <p className="message-template-empty">Chưa có template tin nhắn.</p>}
           </div>
+          {messageTemplateDraft && (
+            <article className="message-template-editor">
+              <div className="message-template-heading">
+                <label>
+                  <span>Tên template</span>
+                  <input
+                    autoFocus
+                    value={messageTemplateDraft.name}
+                    aria-label="Tên template đang chỉnh sửa"
+                    placeholder="Ví dụ: Thông báo kiểm tra"
+                    onChange={event => updateMessageTemplate({ name: event.target.value })}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="message-template-cancel"
+                  onClick={() => {
+                    setMessageTemplateDraft(null);
+                    setTemplatesError("");
+                  }}
+                >
+                  <X size={15} /> Hủy
+                </button>
+              </div>
+              <label className="message-template-content">
+                <span>Nội dung</span>
+                <textarea
+                  value={messageTemplateDraft.content}
+                  aria-label="Nội dung template đang chỉnh sửa"
+                  placeholder="Nhập nội dung sẽ chèn vào tin nhắn..."
+                  onChange={event => updateMessageTemplate({ content: event.target.value })}
+                />
+              </label>
+              <div className="message-template-tags"
+                aria-label={`Thêm Tag Element vào template ${messageTemplateDraft.name || "đang chỉnh sửa"}`}>
+                {tagGroups.map(group => (
+                  <button
+                    type="button"
+                    key={group.id}
+                    disabled={!group.members.some(member => member.name.trim() && member.elementId.trim())}
+                    onClick={event => addTagGroupToTemplate(group, event.currentTarget)}
+                  >
+                    {group.name}
+                  </button>
+                ))}
+                {!tagGroups.length && <small>Chưa có nhóm Tag Element.</small>}
+              </div>
+            </article>
+          )}
           <div className="tag-editor-actions">
             <button
               type="button"
               className="tag-add-group"
+              disabled={Boolean(messageTemplateDraft)}
               onClick={() => {
-                setMessageTemplates(templates => [...templates, createMessageTemplate()]);
+                setMessageTemplateDraft(createMessageTemplate());
                 setTemplatesSaved(false);
                 setTemplatesError("");
               }}
             >
               <Plus size={15} /> Thêm template
             </button>
-            <button type="button" className="primary" onClick={() => void saveTemplates()}>
-              <Save size={15} /> Lưu template
-            </button>
+            {messageTemplateDraft && (
+              <button type="button" className="primary" onClick={() => void saveTemplates()}>
+                <Save size={15} /> Lưu template
+              </button>
+            )}
             {templatesSaved && (
               <span className="success" role="status">
                 Đã lưu template tin nhắn.

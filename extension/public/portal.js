@@ -190,7 +190,7 @@
     return group.members.map((member) => {
       const name = typeof member?.name === 'string' ? member.name.trim() : ''
       const elementId = typeof member?.elementId === 'string' ? member.elementId.trim() : ''
-      return name && elementId ? `(${name})[${elementId}]` : ''
+      return name && elementId ? `[${name}](https://matrix.to/#/${elementId})` : ''
     }).filter(Boolean).join('\n')
   }
 
@@ -350,15 +350,13 @@
       templateSelect.setAttribute('aria-label', 'Chọn template tin nhắn')
       templateSelect.addEventListener('change', () => {
         state.vmComposerSelectedTemplateId = templateSelect.value
-        scheduleRender()
+        if (templateSelect.value) insertSelectedTemplate()
+        else scheduleRender()
       })
-      const insertTemplate = element('button', 'it-toolkit-vm-composer-template-insert', 'Chèn')
-      insertTemplate.type = 'button'
-      insertTemplate.addEventListener('click', insertSelectedTemplate)
       const saveTemplate = element('button', 'it-toolkit-vm-composer-template-save', 'Lưu')
       saveTemplate.type = 'button'
       saveTemplate.addEventListener('click', saveCurrentTemplate)
-      templateControls.append(templateSelect, saveTemplate, insertTemplate)
+      templateControls.append(templateSelect, saveTemplate)
       templates.append(templateControls)
 
       const tags = element('div', 'it-toolkit-vm-composer-tags')
@@ -405,11 +403,7 @@
       templateSelect.value = state.vmComposerSelectedTemplateId
       templateSelect.disabled = state.vmComposerLoading || state.vmComposerTemplateBusy
     }
-    const insertTemplate = overlay.querySelector('.it-toolkit-vm-composer-template-insert')
     const saveTemplate = overlay.querySelector('.it-toolkit-vm-composer-template-save')
-    if (insertTemplate) {
-      insertTemplate.disabled = !state.vmComposerSelectedTemplateId || state.vmComposerTemplateBusy
-    }
     if (saveTemplate) {
       saveTemplate.disabled = state.vmComposerLoading || state.vmComposerTemplateBusy ||
         !state.vmComposerExtraText.trim()
@@ -654,7 +648,7 @@
     if (state.busy) return
     state.busy = true
     const order = location.pathname === createPlusPath
-      ? 'Template → Cấu hình triển khai → CPU → RAM → Internet → Reservation → Disk'
+      ? 'Hình thức clone: Full → Tên → Template → Cấu hình triển khai → CPU → RAM → Internet → Reservation → Disk'
       : 'Template (nếu cần) → CPU → RAM → Internet → Disk'
     setStatus(`Đang điền ${order}. Vui lòng không thao tác trên form...`, 'working')
     try {
@@ -748,12 +742,7 @@
 
   async function pasteAdvancedVmInfo() {
     if (state.busy || state.vmNameBusy) return
-    setStatus('Đang điền tên VM và cấu hình đã sao chép...', 'working')
-    await pasteVmName()
-    if (state.vmNameKind === 'error') {
-      setStatus(state.vmNameText, 'error')
-      return
-    }
+    setStatus('Đang chọn Full clone rồi điền tên VM và cấu hình đã sao chép...', 'working')
     await pasteConfig()
   }
 

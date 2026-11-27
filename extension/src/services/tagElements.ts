@@ -30,7 +30,7 @@ function cleanElementId(value: string): string {
 }
 
 export function formatTagElement(member: Pick<TagElementMember, 'name' | 'elementId'>): string {
-  return `(${member.name.trim()})[${cleanElementId(member.elementId)}]`
+  return `[${member.name.trim()}](https://matrix.to/#/${cleanElementId(member.elementId)})`
 }
 
 export function parseTagElementText(value: string): TagElementGroup[] {
@@ -40,7 +40,8 @@ export function parseTagElementText(value: string): TagElementGroup[] {
   for (const [index, rawLine] of value.replace(/^\uFEFF/, '').split(/\r?\n/).entries()) {
     const line = rawLine.trim()
     if (!line) continue
-    const member = line.match(/^\(([^()[\]]+)\)\s*\[\s*(@[^\][\r\n]+)\s*\]$/)
+    const member = line.match(/^\[([^[\]\r\n]+)\]\(\s*https:\/\/matrix\.to\/#\/\s*(@[^)\s\r\n]+)\s*\)$/i) ??
+      line.match(/^\(([^()[\]]+)\)\s*\[\s*(@[^\][\r\n]+)\s*\]$/)
     if (member) {
       if (!current) throw new Error(`Dòng ${index + 1}: cần có tên lĩnh vực ở phía trên thành viên.`)
       const name = member[1].trim()
@@ -52,7 +53,7 @@ export function parseTagElementText(value: string): TagElementGroup[] {
       continue
     }
     if (/[\[\]()]/.test(line)) {
-      throw new Error(`Dòng ${index + 1}: thành viên phải có dạng (Tên)[@id:example.com].`)
+      throw new Error(`Dòng ${index + 1}: thành viên phải có dạng [Tên](https://matrix.to/#/@id:example.com).`)
     }
     current = { id: newId(), name: line, members: [] }
     groups.push(current)

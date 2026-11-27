@@ -477,6 +477,6 @@ it('shows Tag Element as a separate tab and copies a complete contact group', as
   expect(tagPanel.textContent).toContain('Lê Ngọc Vương')
   tagPanel.querySelector<HTMLButtonElement>('.tag-tab-group-copy')!.click()
   await vi.waitFor(() => expect(writeText)
-    .toHaveBeenCalledWith('(Lê Ngọc Vương)[@10.19530321:team.longvan.vn]'))
+    .toHaveBeenCalledWith('[Lê Ngọc Vương](https://matrix.to/#/@10.19530321:team.longvan.vn)'))
   await vi.waitFor(() => expect(tagPanel.textContent).toContain('Đã chép'))
 })

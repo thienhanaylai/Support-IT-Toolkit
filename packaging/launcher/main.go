@@ -1,5 +1,8 @@
-// Windows self-extracting launcher. build-release.ps1 copies this file next to
-// payload.zip before compiling; the ZIP is embedded in the resulting EXE.
+// Windows native installer for the Browser-only extension.
+//
+// The embedded ZIP contains only the production extension files. The installer
+// writes them directly to LocalAppData and deliberately does not invoke
+// PowerShell, cmd.exe, browser automation, clipboard APIs, or downloaded code.
 package main
 
 import (
@@ -7,96 +10,281 @@ import (
 	"bufio"
 	"bytes"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
-	"os/exec"
+	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
 //go:embed payload.zip
 var payload []byte
 
-func extract(root string) error {
+const markerName = ".it-support-toolkit-installed"
+
+type extensionPackage struct {
+	archive *zip.Reader
+	files   map[string]*zip.File
+	version string
+}
+
+func cleanArchivePath(name string) (string, error) {
+	name = strings.ReplaceAll(name, "\\", "/")
+	clean := path.Clean(name)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") ||
+		strings.HasPrefix(clean, "/") || strings.Contains(clean, ":") {
+		return "", fmt.Errorf("unsafe package path: %q", name)
+	}
+	return clean, nil
+}
+
+func openPackage() (*extensionPackage, error) {
 	archive, err := zip.NewReader(bytes.NewReader(payload), int64(len(payload)))
 	if err != nil {
-		return fmt.Errorf("invalid embedded package: %w", err)
+		return nil, fmt.Errorf("invalid embedded extension: %w", err)
 	}
+	result := &extensionPackage{archive: archive, files: make(map[string]*zip.File)}
 	for _, file := range archive.File {
-		name := filepath.FromSlash(file.Name)
-		clean := filepath.Clean(name)
-		if filepath.IsAbs(clean) || clean == "." || clean == ".." ||
-			strings.HasPrefix(clean, ".."+string(filepath.Separator)) ||
-			strings.Contains(clean, ":") {
-			return fmt.Errorf("unsafe package path: %q", file.Name)
+		name, err := cleanArchivePath(file.Name)
+		if err != nil {
+			return nil, err
 		}
-		target := filepath.Join(root, clean)
 		if file.FileInfo().IsDir() {
-			if err := os.MkdirAll(target, 0700); err != nil {
-				return err
-			}
 			continue
 		}
 		if !file.Mode().IsRegular() {
-			return fmt.Errorf("unsupported package entry: %q", file.Name)
+			return nil, fmt.Errorf("unsupported package entry: %q", file.Name)
 		}
-		if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
-			return err
+		switch strings.ToLower(path.Ext(name)) {
+		case ".bat", ".cmd", ".com", ".exe", ".ps1", ".scr":
+			return nil, fmt.Errorf("installer payload contains a forbidden executable or script: %s", name)
 		}
-		source, err := file.Open()
-		if err != nil {
-			return err
+		if _, exists := result.files[name]; exists {
+			return nil, fmt.Errorf("duplicate package entry: %s", name)
 		}
-		destination, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-		if err != nil {
-			source.Close()
-			return err
-		}
-		_, copyErr := io.Copy(destination, source)
-		closeErr := destination.Close()
-		sourceErr := source.Close()
-		if copyErr != nil {
-			return copyErr
-		}
-		if closeErr != nil {
-			return closeErr
-		}
-		if sourceErr != nil {
-			return sourceErr
+		result.files[name] = file
+	}
+	for _, required := range []string{"manifest.json", "welcome.html", "background.js"} {
+		if result.files[required] == nil {
+			return nil, fmt.Errorf("missing extension file: %s", required)
 		}
 	}
-	for _, required := range []string{"setup.ps1", "readme.txt", "extension/manifest.json"} {
-		if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(required))); err != nil || !info.Mode().IsRegular() {
-			return fmt.Errorf("missing package file: %s", required)
+	manifest, err := readArchiveFile(result.files["manifest.json"], 1024*1024)
+	if err != nil {
+		return nil, fmt.Errorf("read manifest: %w", err)
+	}
+	var metadata struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(manifest, &metadata); err != nil || metadata.Version == "" {
+		return nil, errors.New("embedded extension manifest is invalid")
+	}
+	result.version = metadata.Version
+	return result, nil
+}
+
+func readArchiveFile(file *zip.File, limit int64) ([]byte, error) {
+	if int64(file.UncompressedSize64) > limit {
+		return nil, errors.New("package entry exceeds its allowed size")
+	}
+	source, err := file.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer source.Close()
+	return io.ReadAll(io.LimitReader(source, limit+1))
+}
+
+func installDirectory() (string, error) {
+	localAppData := os.Getenv("LOCALAPPDATA")
+	if localAppData == "" {
+		return "", errors.New("LOCALAPPDATA is not available")
+	}
+	return filepath.Join(localAppData, "ITSupportToolkit", "extension"), nil
+}
+
+func ownedInstall(root string) (bool, error) {
+	info, err := os.Stat(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if !info.IsDir() {
+		return false, fmt.Errorf("installation path is not a directory: %s", root)
+	}
+	if _, err := os.Stat(filepath.Join(root, markerName)); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, fmt.Errorf("refusing to overwrite a directory not created by this installer: %s", root)
 		}
+		return false, err
+	}
+	return true, nil
+}
+
+func copyPackageFile(root, relative string, file *zip.File) error {
+	target := filepath.Join(root, filepath.FromSlash(relative))
+	inside, err := filepath.Rel(root, target)
+	if err != nil || inside == ".." || strings.HasPrefix(inside, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("unsafe destination path: %s", relative)
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
+		return err
+	}
+	source, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+	temporary := fmt.Sprintf("%s.itst-%d.tmp", target, os.Getpid())
+	destination, err := os.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(destination, source)
+	closeErr := destination.Close()
+	if copyErr != nil {
+		os.Remove(temporary)
+		return copyErr
+	}
+	if closeErr != nil {
+		os.Remove(temporary)
+		return closeErr
+	}
+	if err := os.RemoveAll(target); err != nil {
+		os.Remove(temporary)
+		return err
+	}
+	if err := os.Rename(temporary, target); err != nil {
+		os.Remove(temporary)
+		return err
 	}
 	return nil
 }
 
-func run() error {
-	root, err := os.MkdirTemp("", "ITSupportToolkit-install-")
+func removeStaleFiles(root string, current map[string]*zip.File) error {
+	var directories []string
+	err := filepath.WalkDir(root, func(filePath string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if filePath == root {
+			return nil
+		}
+		relative, err := filepath.Rel(root, filePath)
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			directories = append(directories, filePath)
+			return nil
+		}
+		if relative == markerName {
+			return nil
+		}
+		archiveName := filepath.ToSlash(relative)
+		if current[archiveName] == nil {
+			return os.Remove(filePath)
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(root)
-	if err := extract(root); err != nil {
+	sort.Slice(directories, func(i, j int) bool { return len(directories[i]) > len(directories[j]) })
+	for _, directory := range directories {
+		_ = os.Remove(directory) // Only removes directories that are now empty.
+	}
+	return nil
+}
+
+func installedVersion(root string) string {
+	content, err := os.ReadFile(filepath.Join(root, "manifest.json"))
+	if err != nil {
+		return ""
+	}
+	var metadata struct {
+		Version string `json:"version"`
+	}
+	if json.Unmarshal(content, &metadata) != nil {
+		return ""
+	}
+	return metadata.Version
+}
+
+func install(extension *extensionPackage) error {
+	root, err := installDirectory()
+	if err != nil {
 		return err
 	}
-	if len(os.Args) > 1 && os.Args[1] == "--verify" {
-		fmt.Println("Package verified: Browser-only extension and installer are present.")
-		return nil
+	previouslyInstalled, err := ownedInstall(root)
+	if err != nil {
+		return err
 	}
-	cmd := exec.Command("powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
-		"-File", filepath.Join(root, "setup.ps1"), "-ReuseExistingIds")
-	cmd.Dir = root
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("installation did not finish: %w", err)
+	previousVersion := ""
+	if previouslyInstalled {
+		previousVersion = installedVersion(root)
 	}
-	fmt.Println("\nInstaller finished. Reload the extension in Chrome/Edge if it was already open.")
+	if err := os.MkdirAll(root, 0700); err != nil {
+		return err
+	}
+	names := make([]string, 0, len(extension.files))
+	for name := range extension.files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if err := copyPackageFile(root, name, extension.files[name]); err != nil {
+			return fmt.Errorf("install %s: %w", name, err)
+		}
+	}
+	if err := removeStaleFiles(root, extension.files); err != nil {
+		return fmt.Errorf("remove stale extension files: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, markerName), []byte("IT Support Toolkit native installer"), 0600); err != nil {
+		return err
+	}
+
+	if previousVersion != "" {
+		fmt.Printf("Updated IT Support Toolkit: %s -> %s\n", previousVersion, extension.version)
+	} else {
+		fmt.Printf("Installed IT Support Toolkit %s\n", extension.version)
+	}
+	fmt.Printf("Extension folder: %s\n\n", root)
+	fmt.Println("Chrome: open chrome://extensions/ and enable Developer mode.")
+	fmt.Println("Edge:   open edge://extensions/ and enable Developer mode.")
+	if previouslyInstalled {
+		fmt.Println("Click Reload on the IT Support Toolkit card, then refresh open Portal tabs.")
+	} else {
+		fmt.Println("Click Load unpacked and select the extension folder shown above.")
+	}
+	fmt.Println("\nThis installer does not use PowerShell, download code, or require Administrator rights.")
 	return nil
+}
+
+func run() error {
+	extension, err := openPackage()
+	if err != nil {
+		return err
+	}
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--verify":
+			fmt.Printf("Verified Browser-only extension %s (%d files).\n", extension.version, len(extension.files))
+			return nil
+		case "--install":
+			return install(extension)
+		default:
+			return fmt.Errorf("unknown option: %s", os.Args[1])
+		}
+	}
+	return install(extension)
 }
 
 func main() {
@@ -109,10 +297,6 @@ func main() {
 		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
 	}
 	if err != nil {
-		var exit *exec.ExitError
-		if errors.As(err, &exit) {
-			os.Exit(exit.ExitCode())
-		}
 		os.Exit(1)
 	}
 }

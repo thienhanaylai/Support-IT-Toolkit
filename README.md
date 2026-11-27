@@ -64,7 +64,7 @@ Script tạo:
 - `release/ITSupportToolkit-Windows.zip`
 - `release/ITSupportToolkit-Windows.exe`
 
-Gói Windows chỉ chép extension vào `%LOCALAPPDATA%\ITSupportToolkit\extension` và hướng dẫn Load unpacked. Nó không cài chương trình mạng native, service hoặc Native Messaging Host. Go chỉ được dùng ở máy build để biên dịch launcher EXE tự giải nén.
+Gói Windows chỉ chép extension vào `%LOCALAPPDATA%\ITSupportToolkit\extension` và hướng dẫn Load unpacked. Nó không cài chương trình mạng native, service hoặc Native Messaging Host. Launcher EXE thuần Go chỉ nhúng file extension production, chép trực tiếp vào thư mục cài và không gọi PowerShell, chạy script tạm, dùng UI Automation hay tải mã từ mạng.
 
 ### Microsoft Edge Add-ons
 

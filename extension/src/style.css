@@ -1969,18 +1969,122 @@ h1 span {
   min-height: 36px;
   padding: 0 14px;
 }
+.message-templates-options .tag-editor-actions > button {
+  width: 150px;
+  height: 42px;
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 750;
+}
+.message-templates-options .tag-editor-actions > .primary {
+  width: 150px;
+  height: 42px;
+}
+.message-templates-options .tag-editor-actions > .primary svg:first-child {
+  margin-left: 0;
+}
 .tag-editor-actions .success {
   margin: 0;
 }
+.message-template-list,
 .message-template-editors {
   display: grid;
-  gap: 11px;
+  gap: 8px;
+}
+.message-template-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 10px 8px 13px;
+  border: 1px solid #d5e5f1;
+  border-radius: 8px;
+  background: #f8fbfd;
+}
+.message-template-row.is-editing {
+  border-color: #64b5f6;
+  box-shadow: 0 0 0 2px #2196f31f;
+}
+.message-template-row-copy {
+  min-width: 0;
+  flex: 1;
+}
+.message-template-row-copy strong,
+.message-template-row-copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.message-template-row-copy strong {
+  color: #263f4b;
+  font-size: 11px;
+}
+.message-template-row-copy small {
+  margin-top: 4px;
+  color: #71858d;
+  font-size: 10px;
+}
+.message-template-row-actions {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 5px;
+}
+.message-template-row-actions button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #90caf9;
+  border-radius: 6px;
+  place-items: center;
+  background: #eaf4fd;
+  color: #1565c0;
+}
+.message-template-row-actions button:hover:not(:disabled) {
+  border-color: #64b5f6;
+  background: #d8ecfc;
+}
+.message-template-row-actions .message-template-row-delete {
+  border-color: #efb4ad;
+  background: #fff1ef;
+  color: #b63d35;
+}
+.message-template-row-actions .message-template-row-delete:hover:not(:disabled) {
+  border-color: #e58d83;
+  background: #ffe2de;
+}
+.message-template-row-actions button:disabled,
+.message-templates-options .tag-editor-actions > button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .message-template-editor {
+  margin-top: 11px;
   padding: 13px;
   border: 1px solid #dfe9e7;
   border-radius: 9px;
   background: #fff;
+}
+.message-template-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 74px;
+  height: 36px;
+  border: 1px solid #b8ccd8;
+  border-radius: 6px;
+  background: #fff;
+  color: #607d8b;
+  font-size: 10px;
+  font-weight: 750;
+}
+.message-template-cancel:hover {
+  border-color: #90a4ae;
+  background: #eef3f5;
 }
 .message-template-heading {
   display: flex;
@@ -4519,6 +4623,49 @@ h1 span,
 :root[data-theme="dark"] .message-template-editor {
   border-color: #304957;
   background: #14232d;
+}
+:root[data-theme="dark"] .message-template-row {
+  border-color: #304957;
+  background: #14232d;
+}
+:root[data-theme="dark"] .message-template-row.is-editing {
+  border-color: #42a5f5;
+  box-shadow: 0 0 0 2px #2196f326;
+}
+:root[data-theme="dark"] .message-template-row-copy strong {
+  color: #e7f0f6;
+}
+:root[data-theme="dark"] .message-template-row-copy small {
+  color: #adc3c4;
+}
+:root[data-theme="dark"] .message-template-row-actions button {
+  border-color: #426a86;
+  background: #172a37;
+  color: #90caf9;
+}
+:root[data-theme="dark"] .message-template-row-actions button:hover:not(:disabled) {
+  border-color: #64b5f6;
+  background: #1d4058;
+  color: #bbdefb;
+}
+:root[data-theme="dark"] .message-template-row-actions .message-template-row-delete {
+  border-color: #75433e;
+  background: #472b2b;
+  color: #ffb2aa;
+}
+:root[data-theme="dark"] .message-template-row-actions .message-template-row-delete:hover:not(:disabled) {
+  border-color: #9a554d;
+  background: #5a302f;
+}
+:root[data-theme="dark"] .message-template-cancel {
+  border-color: #38556b;
+  background: #172a37;
+  color: #b4c8d4;
+}
+:root[data-theme="dark"] .message-template-cancel:hover {
+  border-color: #426a86;
+  background: #1d4058;
+  color: #e7f0f6;
 }
 :root[data-theme="dark"] .message-template-heading label > span,
 :root[data-theme="dark"] .message-template-content > span {

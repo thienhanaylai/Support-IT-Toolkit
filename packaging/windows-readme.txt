@@ -21,7 +21,9 @@ Cách cài từ ZIP:
 5. Tải lại extension, sau đó thử IP Public, HTTP Ping hoặc DNS over HTTPS.
 
 ITSupportToolkit-Windows.exe là lựa chọn một file, không cần giải nén;
-lần cài mới vẫn cần chọn trình duyệt và Load unpacked.
+EXE chép trực tiếp extension vào thư mục cài, không gọi PowerShell, không chạy
+script tạm, không dùng UI Automation và không tải mã từ mạng. Lần cài mới vẫn
+cần tự mở trang quản lý extension và chọn Load unpacked.
 Khi cập nhật trên cùng máy, EXE hoặc Install.cmd từ ZIP mới cập nhật extension.
 Không gỡ hoặc Load unpacked
 lại. Mở chrome://extensions/ hoặc edge://extensions/, bấm Reload/Tải lại

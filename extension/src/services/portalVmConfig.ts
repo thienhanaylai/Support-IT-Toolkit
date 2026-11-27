@@ -187,6 +187,7 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
   })
   const error = (message: string): PasteResult => result({ error: message })
   const advancedCreate = location.pathname.endsWith('/computing_create_plus.xhtml')
+  let preserveAdvancedName = false
   const numbers = [config.cpu, config.ramGB, config.internetMbps, config.diskGB]
   if (numbers.some((value) => !Number.isSafeInteger(value) || value <= 0) ||
       !/^(?:[A-Z0-9]+_)*STORAGE$/.test(config.diskType) || config.diskType.length > 80) {
@@ -438,6 +439,102 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
   function reservationSelect(): HTMLSelectElement | null {
     return advancedCreate ? choiceField('Cấu hình reservation')?.select ?? null : null
   }
+  function cloneField(): Element | null {
+    if (!advancedCreate) return null
+    const form = document.getElementById('frmMain')
+    const label = [...(form?.querySelectorAll('label') ?? [])]
+      .find((node) => normalizedLabel(node.textContent) === normalizedLabel('Hình thức clone'))
+    return label?.closest('.ui-g-12, [class*="p-col"]') ?? label?.parentElement ?? null
+  }
+  function fullCloneSelection(): {
+    selected: boolean
+    source: string
+    apply: () => void
+  } | null {
+    const field = cloneField()
+    if (!field) return null
+    const full = (value: string | null | undefined) => normalizedChoice(value ?? '') === 'full'
+    const select = field.querySelector<HTMLSelectElement>('select:not([disabled])')
+    if (select) {
+      const option = [...select.options].find((item) => full(item.textContent) || full(item.value))
+      if (!option) return null
+      const widget = widgetFor(select)
+      if (!widget?.selectValue || !widget.triggerChange) throw new Error('Ô Hình thức clone chưa sẵn sàng.')
+      return {
+        selected: select.value === option.value,
+        source: select.id.endsWith('_input') ? select.id.slice(0, -'_input'.length) : select.id,
+        apply: () => {
+          widget.selectValue!(option.value)
+          widget.triggerChange!()
+        },
+      }
+    }
+
+    const radios = [...field.querySelectorAll<HTMLInputElement>('input[type="radio"]:not([disabled])')]
+    const radio = radios.find((item) => {
+      const label = item.id
+        ? [...field.querySelectorAll<HTMLLabelElement>('label')].find((node) => node.htmlFor === item.id)
+        : null
+      return full(item.value) || full(label?.textContent)
+    })
+    if (radio) {
+      const label = radio.id
+        ? [...field.querySelectorAll<HTMLLabelElement>('label')].find((node) => node.htmlFor === radio.id)
+        : null
+      const group = radio.closest<HTMLElement>('.ui-selectonebutton[id], .ui-selectoneradio[id], [role="radiogroup"][id]')
+      const source = group?.id || radio.name || radio.id.replace(/[:_]\d+$/, '')
+      return {
+        selected: radio.checked,
+        source,
+        apply: () => (label ?? radio).click(),
+      }
+    }
+
+    const button = [...field.querySelectorAll<HTMLElement>('button, [role="radio"], .ui-button')]
+      .find((item) => full(item.textContent) || full(item.getAttribute('aria-label')))
+    if (!button) return null
+    const group = button.closest<HTMLElement>('[id]')
+    const selected = button.getAttribute('aria-checked') === 'true' ||
+      button.getAttribute('aria-pressed') === 'true' ||
+      button.classList.contains('ui-state-active') ||
+      button.classList.contains('p-highlight')
+    return {
+      selected,
+      source: group?.id || button.id,
+      apply: () => button.click(),
+    }
+  }
+  async function chooseFullClone(): Promise<void> {
+    const control = fullCloneSelection()
+    if (!control) throw new Error('Không tìm thấy lựa chọn Full trong ô Hình thức clone.')
+    if (!control.selected) {
+      if (!control.source) throw new Error('Không xác định được ô Hình thức clone.')
+      await waitForUpdate(control.source, control.apply)
+    }
+    if (!fullCloneSelection()?.selected) throw new Error('Portal chưa giữ Hình thức clone Full vừa chọn.')
+  }
+  function fillAdvancedName(): void {
+    const form = document.getElementById('frmMain')
+    const label = [...(form?.querySelectorAll('label') ?? [])]
+      .find((node) => normalizedLabel(node.textContent) === normalizedLabel('Tên'))
+    const field = label?.closest('.ui-g-12, [class*="p-col"]') ?? label?.parentElement ?? null
+    const input = field?.querySelector<HTMLInputElement>('input[type="text"]:not([disabled]):not([readonly])')
+    const owner = config.ownerName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[đĐ]/g, 'd').toLocaleLowerCase('vi-VN').replace(/[^a-z0-9]+/g, '').slice(0, 80)
+    const code = config.serviceCode.replace(/\s+/g, '').slice(0, 200)
+    const vmName = owner && code ? `${owner}-${code}` : ''
+    if (!vmName) throw new Error('Chưa có tên VM. Hãy sao chép lại thông số ở trang Dịch vụ.')
+    if (!input) throw new Error('Không tìm thấy ô Tên của computing.')
+    const prototype = input.ownerDocument.defaultView?.HTMLInputElement?.prototype
+    const setter = prototype && Object.getOwnPropertyDescriptor(prototype, 'value')?.set
+    if (setter) setter.call(input, vmName)
+    else input.value = vmName
+    input.setAttribute('value', vmName)
+    const EventClass = input.ownerDocument.defaultView?.Event ?? Event
+    input.dispatchEvent(new EventClass('input', { bubbles: true }))
+    if (input.value !== vmName) throw new Error('Ô Tên không nhận tên VM.')
+    preserveAdvancedName = true
+  }
   function groupedServiceOption(select: HTMLSelectElement): HTMLOptionElement | null {
     const expected = normalizedServiceType(config.serviceTypeId || config.serviceType)
     if (!expected) return null
@@ -483,8 +580,18 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
       const onComplete = (_event: unknown, _xhr: unknown, settings: unknown) => {
         if (!matches(settings)) return
         cleanup()
-        if (updated || !requireUpdate) resolve()
-        else reject(new Error(`Portal không xác nhận cập nhật ${source}.`))
+        if (!updated && requireUpdate) {
+          reject(new Error(`Portal không xác nhận cập nhật ${source}.`))
+          return
+        }
+        try {
+          // PrimeFaces may replace frmMain after any later AJAX call. Keep the Name entered
+          // immediately after clone mode while still preserving the required operation order.
+          if (advancedCreate && preserveAdvancedName) fillAdvancedName()
+          resolve()
+        } catch (cause) {
+          reject(cause)
+        }
       }
       const timer = setTimeout(() => {
         cleanup()
@@ -629,6 +736,14 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
   }
 
   try {
+    // Clone mode is the first advanced choice because changing it can rerender every field below.
+    // Reacquire the Name and all later controls only after Portal confirms Full clone.
+    if (advancedCreate) {
+      await chooseFullClone()
+      applied.push('Hình thức clone: Full')
+      fillAdvancedName()
+      applied.push('Tên')
+    }
     // Apply Template first: changing OS rerenders the form, so resources must be filled afterwards.
     if (config.os || config.osId) {
       const template = choiceField('Template')
