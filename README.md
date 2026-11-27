@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo-toolkit.png" alt="IT Support Toolkit" width="220">
+  <img src="logov2.png" alt="IT Support Toolkit" width="220">
 </p>
 
 <h1 align="center">IT Support Toolkit</h1>
