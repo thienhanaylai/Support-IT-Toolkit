@@ -37,12 +37,12 @@ Tải bản mới nhất tại:
 
 | Gói | Mục đích |
 |---|---|
+| `ITSupportToolkit-Windows.exe` | Cài/cập nhật bằng một file trên Windows (bản 0.2.2.4). |
+| `ITSupportToolkit-Windows.zip` | Bộ cài có mã script đọc được (bản 0.2.2.4). |
 | `ITSupportToolkit-Edge-Store.zip` | Gói riêng để nộp/cập nhật Microsoft Edge Add-ons (bản 0.2.2.4). |
-| `ITSupportToolkit-Windows.exe` | Cài/cập nhật bằng một file trên Windows (bản 0.2.2.3). |
-| `ITSupportToolkit-Windows.zip` | Bộ cài có mã script đọc được (bản 0.2.2.3). |
 
 > [!NOTE]
-> Bản **0.2.2.4** chỉ đóng gói gói Edge Add-ons. Bộ cài Windows vẫn dùng bản **0.2.2.3** cho đến lần đóng gói tiếp theo.
+> Bản **0.2.2.4** phát hành đồng thời bộ cài Windows và gói Edge Add-ons. Gói Edge Add-ons đã sẵn sàng để nộp lên Partner Center.
 
 > [!NOTE]
 > EXE chỉ chép extension production vào `%LOCALAPPDATA%\ITSupportToolkit\extension`. Nó không gọi PowerShell/CMD, không chạy script tạm, không dùng UI Automation và không tải mã thực thi từ Internet.
