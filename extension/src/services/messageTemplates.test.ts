@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import {
-  deleteMessageTemplate, loadMessageTemplates, messageTemplatesStorageKey, saveMessageTemplate,
+  deleteMessageTemplate, loadMessageTemplates, messageTemplatesStorageKey, saveMessageTemplate, saveMessageTemplates,
 } from './messageTemplates'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -32,4 +32,5 @@ it('rejects empty template names or content', async () => {
   vi.stubGlobal('chrome', { storage: { local: { get: vi.fn(async () => ({})), set: vi.fn() } } })
   await expect(saveMessageTemplate('', 'Nội dung')).rejects.toThrow('Tên template')
   await expect(saveMessageTemplate('Tên', '')).rejects.toThrow('Nội dung template')
+  await expect(saveMessageTemplates([{ id: 'one', name: '', content: 'Nội dung' }])).rejects.toThrow('Tên template')
 })

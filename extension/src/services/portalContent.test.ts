@@ -9,7 +9,10 @@ const config = {
   cpu: 2, ramGB: 4, internetMbps: 200, diskGB: 50, diskType: 'NVME_STORAGE',
   os: 'Windows Server 2022 Standard (64-bit)', osId: '118498',
   siteProvider: 'HCM', siteProviderId: '106066',
+  serviceType: 'Smart Cloud Server', serviceTypeId: 'SMART_CLOUD_SERVER',
 }
+type RuntimeListener = (message: Record<string, unknown>) => void
+const runtimeListeners = new WeakMap<JSDOM, RuntimeListener[]>()
 
 async function execute(
   url: string,
@@ -19,7 +22,18 @@ async function execute(
   waitForTool = true,
 ) {
   const dom = new JSDOM(`<!doctype html><body>${body}</body>`, { url, runScripts: 'outside-only' })
-  Object.defineProperty(dom.window, 'chrome', { value: { runtime: { sendMessage } } })
+  const listeners: RuntimeListener[] = []
+  runtimeListeners.set(dom, listeners)
+  Object.defineProperty(dom.window, 'chrome', { value: { runtime: {
+    sendMessage,
+    onMessage: {
+      addListener: (listener: RuntimeListener) => listeners.push(listener),
+      removeListener: (listener: RuntimeListener) => {
+        const index = listeners.indexOf(listener)
+        if (index >= 0) listeners.splice(index, 1)
+      },
+    },
+  } } })
   Object.defineProperty(dom.window.navigator, 'clipboard', { value: { writeText }, configurable: true })
   dom.window.eval(script)
   if (waitForTool) {
@@ -86,6 +100,30 @@ it('places quick and advanced VM copy buttons in the Information heading', async
   dom.window.close()
 })
 
+it('hides and restores every injected Portal tool from the global visibility message', async () => {
+  const sendMessage = vi.fn(async (message: { type: string }) =>
+    message.type === 'toolkit:get-portal-tools-enabled' ? { enabled: true } : { config })
+  const dom = await execute(
+    'https://portal.longvan.vn/cloud-service-manager/manager/cloud-service-detail.xhtml?id=1',
+    `<div class="ui-panel">
+      <div class="ui-panel-titlebar"><div class="ui-panel-actions"></div></div>
+      <table><tbody id="frm-info-service:componentInfoService:resourceBare_data"></tbody></table>
+    </div>`,
+    sendMessage,
+  )
+  const listener = runtimeListeners.get(dom)![0]
+  expect(dom.window.document.documentElement.classList.contains('it-toolkit-portal-disabled')).toBe(false)
+
+  listener({ type: 'toolkit:portal-tools-enabled', enabled: false })
+  expect(dom.window.document.documentElement.classList.contains('it-toolkit-portal-disabled')).toBe(true)
+  expect(dom.window.document.querySelector('.it-toolkit-portal-button')).not.toBeNull()
+
+  listener({ type: 'toolkit:portal-tools-enabled', enabled: true })
+  expect(dom.window.document.documentElement.classList.contains('it-toolkit-portal-disabled')).toBe(false)
+  dom.window.dispatchEvent(new dom.window.Event('pagehide'))
+  dom.window.close()
+})
+
 it('composes editable VM info, extra text, and a configured Element group before one copy', async () => {
   const text = '[Link VM](https://portal.longvan.vn/vm)\n\nTên computing: COMPUTING-A\nVMID: 663312104'
   const groups = [{
@@ -97,10 +135,6 @@ it('composes editable VM info, extra text, and a configured Element group before
   const sendMessage = vi.fn(async (message: { type: string } & Record<string, unknown>) => {
     if (message.type === 'toolkit:get-tag-elements') return { groups, theme: 'dark' }
     if (message.type === 'toolkit:get-message-templates') return { templates }
-    if (message.type === 'toolkit:save-message-template') {
-      const template = { id: 'notice', name: String(message.name), content: String(message.content) }
-      return { template, templates: [template] }
-    }
     return { info: { computingName: 'COMPUTING-A' }, text }
   })
   const writeText = vi.fn(async () => {})
@@ -136,20 +170,16 @@ it('composes editable VM info, extra text, and a configured Element group before
   await vi.waitFor(() => expect(dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-template-insert')?.disabled).toBe(false))
   dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-template-insert')!.click()
   await vi.waitFor(() => expect(extra.value).toBe('Template mẫu'))
-  const prompt = vi.spyOn(dom.window, 'prompt').mockReturnValue('Thông báo cập nhật')
-  dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-template-save')!.click()
-  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({
-    type: 'toolkit:save-message-template',
-    templateId: 'notice',
-    name: 'Thông báo cập nhật',
-    content: 'Template mẫu',
-  }))
-  prompt.mockRestore()
+  expect(dialog.querySelector('.it-toolkit-vm-composer-template-save')).toBeNull()
+  expect(dialog.querySelector('.it-toolkit-vm-composer-template-delete')).toBeNull()
 
   const groupButton = dialog.querySelector<HTMLButtonElement>('.it-toolkit-vm-composer-tag-buttons button')!
   groupButton.click()
   await vi.waitFor(() => expect(extra.value)
     .toContain('(Lê Ngọc Vương)[@10.19530321:team.longvan.vn]'))
+  expect(groupButton.classList.contains('is-added')).toBe(true)
+  expect(groupButton.textContent).toBe('✓ Vmware')
+  await vi.waitFor(() => expect(dialog.querySelector('.it-toolkit-vm-composer-status')?.textContent).toBe(''))
   extra.value = 'Template mẫu'
   extra.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
   expect(groupButton.disabled).toBe(false)
@@ -269,6 +299,70 @@ it('places Paste configuration inside Resources and reports the required order',
   dom.window.close()
 })
 
+it('adds advanced VM paste and password tools to the matching create cards', async () => {
+  const sendMessage = vi.fn(async (message: { type: string }) => {
+    if (message.type === 'toolkit:get-vm-config') {
+      return { config, vmName: 'chuxuanha-20.2985.9322' }
+    }
+    if (message.type === 'toolkit:get-password-options') return { options: {} }
+    if (message.type === 'toolkit:generate-password') {
+      return { password: 'Generated-Password9!', options: {} }
+    }
+    if (message.type === 'toolkit:paste-vm-config') {
+      return { applied: ['CPU', 'RAM', 'Internet', 'Disk'] }
+    }
+    return {}
+  })
+  const dom = await execute(
+    'https://portal.longvan.vn/computing-manager/manager/computing/computing_create_plus.xhtml?wsId=20.1087&orgId=LONGVAN',
+    `<form id="frmMain">
+      <div class="card basic-card"><div class="ui-g"><div class="ui-g-12">
+        <h5>Thông tin cơ bản</h5>
+        <div class="ui-g-12 ui-md-6"><label>Tên</label><input id="advanced-name" type="text"></div>
+        <div class="ui-g-12 ui-md-6"><label>Template</label><select><option>Windows Server 2022</option></select></div>
+      </div></div></div>
+      <div class="card login-card"><div class="ui-g"><div class="ui-g-12">
+        <h5>Thông tin đăng nhập</h5>
+        <div class="ui-g">
+          <div class="ui-g-12 ui-md-6"><label>Username</label><input type="text"></div>
+          <div class="ui-g-12 ui-md-6 password-column"><label for="advanced-password">Password</label>
+            <input id="advanced-password" type="password">
+          </div>
+        </div>
+      </div></div></div>
+    </form>`,
+    sendMessage,
+  )
+
+  const pasteButton = await vi.waitFor(() => {
+    const found = dom.window.document.querySelector<HTMLButtonElement>('.it-toolkit-plus-tools .it-toolkit-portal-button')
+    expect(found).not.toBeNull()
+    return found!
+  })
+  expect(pasteButton.textContent).toBe('Dán thông tin VM')
+  expect(pasteButton.closest('.basic-card')).not.toBeNull()
+  const plusHeader = pasteButton.closest('.it-toolkit-plus-header')
+  expect(plusHeader?.querySelector('h5')?.textContent).toBe('Thông tin cơ bản')
+  expect(plusHeader?.children[0].tagName).toBe('H5')
+  expect(plusHeader?.children[1].classList.contains('it-toolkit-plus-tools')).toBe(true)
+  pasteButton.click()
+  await vi.waitFor(() => expect(dom.window.document.querySelector<HTMLInputElement>('#advanced-name')?.value)
+    .toBe('chuxuanha-20.2985.9322'))
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ type: 'toolkit:paste-vm-config' }))
+  await vi.waitFor(() => expect(dom.window.document.querySelector('.it-toolkit-plus-tools .it-toolkit-portal-status')?.textContent)
+    .toContain('CPU → RAM → Internet → Disk'))
+
+  const passwordButton = dom.window.document.querySelector<HTMLButtonElement>('.it-toolkit-password-button')!
+  expect(passwordButton.textContent).toBe('Tạo mật khẩu')
+  expect(passwordButton.closest('.login-card')).not.toBeNull()
+  passwordButton.click()
+  await vi.waitFor(() => expect(dom.window.document.querySelector<HTMLInputElement>('#advanced-password')?.value)
+    .toBe('Generated-Password9!'))
+  expect(dom.window.document.querySelectorAll('.it-toolkit-password-button')).toHaveLength(1)
+  dom.window.dispatchEvent(new dom.window.Event('pagehide'))
+  dom.window.close()
+})
+
 it('fills the computing name from the owner name and service code', async () => {
   const sendMessage = vi.fn(async (message: { type: string }) =>
     message.type === 'toolkit:get-vm-config'
@@ -294,6 +388,51 @@ it('fills the computing name from the owner name and service code', async () => 
   expect(dom.window.document.querySelector('.it-toolkit-vm-name-status')?.textContent)
     .toContain('Đã điền: chuxuanha-20.2985.9322')
   dom.window.dispatchEvent(new dom.window.Event('pagehide'))
+  dom.window.close()
+})
+
+it('receives copied VM data in real time and refreshes again before pasting the name', async () => {
+  let current = {
+    config,
+    vmName: 'old-owner-20.0000.0000',
+  }
+  const sendMessage = vi.fn(async (message: { type: string }) =>
+    message.type === 'toolkit:get-vm-config' ? current : {})
+  const dom = await execute(
+    'https://portal.longvan.vn/computing-manager/manager/computing/computing_create.xhtml?id=1',
+    `<form id="frmMain">
+      <div class="ui-g-12 ui-md-12 name-field"><label>Tên</label><input id="computing-name" type="text"></div>
+      <fieldset><legend>Tài nguyên</legend><div class="ui-fieldset-content"></div></fieldset>
+    </form>`,
+    sendMessage,
+  )
+  await vi.waitFor(() => expect(dom.window.document.querySelector('.it-toolkit-config-summary')?.textContent)
+    .toContain('old-owner-20.0000.0000'))
+
+  const updatedConfig = { ...config, cpu: 8, ramGB: 16 }
+  runtimeListeners.get(dom)![0]({
+    type: 'toolkit:vm-config-updated',
+    config: updatedConfig,
+    vmName: 'new-owner-20.1111.1111',
+  })
+  await vi.waitFor(() => expect(dom.window.document.querySelector('.it-toolkit-config-summary')?.textContent)
+    .toContain('8 Core · 16 GB RAM'))
+  expect(dom.window.document.querySelector('.it-toolkit-config-summary')?.textContent)
+    .toContain('new-owner-20.1111.1111')
+  expect(dom.window.document.querySelector('.it-toolkit-portal-status')?.textContent)
+    .toContain('Đã nhận cấu hình mới')
+
+  current = {
+    config: { ...updatedConfig, cpu: 12 },
+    vmName: 'latest-owner-20.2222.2222',
+  }
+  dom.window.document.querySelector<HTMLButtonElement>('.it-toolkit-vm-name-button')!.click()
+  await vi.waitFor(() => expect(dom.window.document.querySelector<HTMLInputElement>('#computing-name')?.value)
+    .toBe('latest-owner-20.2222.2222'))
+  expect(sendMessage).toHaveBeenLastCalledWith({ type: 'toolkit:get-vm-config' })
+
+  dom.window.dispatchEvent(new dom.window.Event('pagehide'))
+  expect(runtimeListeners.get(dom)).toHaveLength(0)
   dom.window.close()
 })
 

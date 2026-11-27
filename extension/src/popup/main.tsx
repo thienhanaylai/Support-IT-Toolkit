@@ -56,6 +56,8 @@ function App() {
   const [configFailed, setConfigFailed] = useState(false)
   const [copyingCurrentVM, setCopyingCurrentVM] = useState(false)
   const [copiedCurrentVM, setCopiedCurrentVM] = useState(false)
+  const [portalToolsEnabled, setPortalToolsEnabled] = useState(true)
+  const [portalToggleBusy, setPortalToggleBusy] = useState(false)
   const resultRef = useRef<HTMLDivElement>(null)
   const progressRef = useRef<HTMLPreElement>(null)
   const busy = starting || job?.status === 'running'
@@ -73,7 +75,10 @@ function App() {
     const changed = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
       if (!mounted) return
       if (area === 'local' && changes.settings) {
-        void getSettings().then((value) => applyTheme(value.theme))
+        void getSettings().then((value) => {
+          applyTheme(value.theme)
+          setPortalToolsEnabled(value.portalToolsEnabled)
+        })
       }
       if (area === 'session' && changes[jobKey]) {
         const next = changes[jobKey].newValue as CheckJob | undefined
@@ -95,6 +100,7 @@ function App() {
       ])
       if (!mounted) return
       applyTheme(settings.theme)
+      setPortalToolsEnabled(settings.portalToolsEnabled)
       const draft = stored[draftKey] as PopupDraft | undefined
       if (draft) {
         setInput(draft.input)
@@ -253,6 +259,23 @@ function App() {
     }
   }
 
+  async function togglePortalTools() {
+    if (portalToggleBusy) return
+    setPortalToggleBusy(true)
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'toolkit:set-portal-tools-enabled',
+        enabled: !portalToolsEnabled,
+      }) as { enabled?: boolean; error?: string }
+      if (response.error) throw new Error(response.error)
+      setPortalToolsEnabled(response.enabled !== false)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Không thể thay đổi hiển thị công cụ Portal.')
+    } finally {
+      setPortalToggleBusy(false)
+    }
+  }
+
   function toolOutput(groupTools: Tool[]) {
     if (!tool || !groupTools.includes(tool)) return null
     return <div className="tool-group-output" ref={resultRef}>
@@ -278,7 +301,26 @@ function App() {
 
   return <main className="popup">
     <header className="popup-header">
-      <div className="popup-brand"><img src="/icons/icon-32.png" width="24" height="24" alt="" /><strong>LongVanSupport Toolkit</strong></div>
+      <div className="popup-brand">
+        <img src="/icons/icon-32.png" width="24" height="24" alt="" />
+        <strong>LongVanSupport Toolkit</strong>
+        <button type="button"
+          className={`portal-tools-toggle ${portalToolsEnabled ? 'is-enabled' : 'is-disabled'}`}
+          role="switch"
+          aria-checked={portalToolsEnabled}
+          aria-label="Hiển thị công cụ trên Portal"
+          title={portalToolsEnabled ? 'Ẩn toàn bộ công cụ được chèn trên Portal' : 'Hiện lại công cụ trên Portal'}
+          disabled={portalToggleBusy}
+          onClick={() => void togglePortalTools()}>
+          <span className="portal-tools-toggle-label">Portal</span>
+          <span className="portal-tools-toggle-state">
+            {portalToolsEnabled ? 'Enable' : 'Disable'}
+          </span>
+          <span className="portal-tools-toggle-track" aria-hidden="true">
+            <span className="portal-tools-toggle-thumb" />
+          </span>
+        </button>
+      </div>
       <a className="popup-settings" href="options.html" target="_blank" rel="noreferrer"><Settings2 size={16} /> Cài đặt</a>
     </header>
     <nav className="popup-tabs" role="tablist" aria-label="Chức năng">
@@ -355,7 +397,7 @@ function App() {
         <div className="vm-transfer-title">CẤU HÌNH VM <span>PORTAL</span></div>
         <p>Lấy OS, CORE, RAM, Internet và STORAGE để dán VM; Site Provider chỉ dùng đối chiếu Khu vực. Không lấy IP hoặc Backup.</p>
         {vmConfig && <p>
-          Đã lưu tạm: {vmConfig.cpu} Core · {vmConfig.ramGB} GB RAM · {vmConfig.internetMbps} Mb/s · {vmConfig.diskGB} GB {vmConfig.diskType.replace('_STORAGE', '')} · OS: {vmConfig.os || vmConfig.osId || 'Không có'} · Site Provider: {vmConfig.siteProvider || vmConfig.siteProviderId || 'Không có'}{buildVmName(vmConfig.ownerName, vmConfig.serviceCode) ? ` · Tên VM: ${buildVmName(vmConfig.ownerName, vmConfig.serviceCode)}` : ''}.
+          Đã lưu tạm: {vmConfig.cpu} Core · {vmConfig.ramGB} GB RAM · {vmConfig.internetMbps} Mb/s · {vmConfig.diskGB} GB {vmConfig.diskType.replace('_STORAGE', '')} · OS: {vmConfig.os || vmConfig.osId || 'Không có'} · Loại dịch vụ: {vmConfig.serviceType || vmConfig.serviceTypeId || 'Không có'} · Site Provider: {vmConfig.siteProvider || vmConfig.siteProviderId || 'Không có'}{buildVmName(vmConfig.ownerName, vmConfig.serviceCode) ? ` · Tên VM: ${buildVmName(vmConfig.ownerName, vmConfig.serviceCode)}` : ''}.
         </p>}
         <button type="button" disabled={configBusy || busy} onClick={() => void copyPortalConfig()}><ClipboardCopy size={15} /> {configBusy ? 'Đang sao chép...' : 'Sao chép thông số'}</button>
         {configMessage && <p className={`vm-transfer-message${configFailed ? ' vm-transfer-error' : ''}`} role={configFailed ? 'alert' : 'status'}>{configMessage}</p>}

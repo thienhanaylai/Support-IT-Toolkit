@@ -8,10 +8,12 @@ import {
 
 const serviceUrl = 'https://portal.longvan.vn/cloud-service-manager/manager/cloud-service-detail.xhtml?id=123'
 const createUrl = 'https://portal.longvan.vn/computing-manager/manager/computing/computing_create.xhtml?id=456'
+const createPlusUrl = 'https://portal.longvan.vn/computing-manager/manager/computing/computing_create_plus.xhtml?id=456'
 const config: PortalVmConfig = {
   cpu: 2, ramGB: 4, internetMbps: 200, diskGB: 50, diskType: 'NVME_STORAGE',
   os: 'Windows Server 2022 Standard (64-bit)', osId: '118498',
   siteProvider: 'HCM', siteProviderId: '106066',
+  serviceType: 'Smart Cloud Server', serviceTypeId: 'SMART_CLOUD_SERVER',
   ownerName: 'Chu Xuân Hà', serviceCode: '20.2985.9322',
 }
 
@@ -20,6 +22,13 @@ const serviceMeta = `
     <div class="ui-g-12 ui-md-4">Mã:</div>
     <div class="ui-g-12 ui-md-8">20.2985.9322</div>
   </div>
+  <span id="frm-info-service:componentInfoService:serviceTypePanel">
+    <span class="ui-inplace-display"><span>Smart Cloud Server</span></span>
+    <span class="ui-inplace-content"><select>
+      <option value="ELASTIC_CLOUD">Elastic Cloud</option>
+      <option value="SMART_CLOUD_SERVER">Smart Cloud Server</option>
+    </select></span>
+  </span>
   <div id="frm-info-service:componentInfoService:panelContact">
     <div class="ui-g">
       <span class="ui-panel-title">Sở hữu</span>
@@ -61,12 +70,80 @@ function createForm() {
   </fieldset><button type="submit" id="create-vm">Tạo VM</button></form>`
 }
 
-afterEach(() => { document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.restoreAllMocks() })
+function createPlusForm() {
+  window.history.replaceState({}, '', '/computing-manager/manager/computing/computing_create_plus.xhtml')
+  document.body.innerHTML = `<form id="frmMain">
+    <div class="card"><div class="ui-g-12">
+      <h5>Thông tin cơ bản</h5>
+      <div class="ui-g-12 ui-md-6"><label>Tên</label><input id="advanced_name" type="text"></div>
+      <div class="ui-g-12 ui-md-6"><label>Template</label><select id="advanced_template_input">
+        <option value="20.1012.7635" selected>Windows Server 2022 Standard (64-bit)</option>
+      </select></div>
+      <div class="ui-g-12 ui-md-9"><label>Cấu hình triển khai</label>
+        <span class="ui-autocomplete">
+          <input id="templateMappingAC_input" role="combobox" aria-controls="templateMappingAC_panel">
+          <input id="templateMappingAC_hinput" type="hidden">
+          <button id="templateMappingAC_button" class="ui-autocomplete-dropdown" type="button">Mở</button>
+        </span>
+        <span id="templateMappingAC_panel"><table><tbody>
+          <tr data-item-value="big-memory"><td>BIG_MEM_DEDICATED</td><td>P18-XD</td><td>other</td></tr>
+          <tr data-item-value="first-smart"><td>SMART_CLOUD_SERVER</td><td>P25-SC</td><td>first</td></tr>
+          <tr data-item-value="second-smart"><td>SMART_CLOUD_SERVER</td><td>P1-SC</td><td>second</td></tr>
+        </tbody></table></span>
+      </div>
+    </div></div>
+    <div class="card"><div class="ui-g-12">
+      <h5>Thông tin cấu hình tài nguyên CPU, RAM, NETWORK</h5>
+      <div class="ui-g-12 ui-md-4"><label>CPU</label><span class="ui-inputnumber">
+        <input id="advanced_cpu_input" inputmode="numeric" value="1">
+        <input id="advanced_cpu_hinput" type="hidden" value="1">
+      </span></div>
+      <div class="ui-g-12 ui-md-4"><label>RAM</label><span class="ui-inputnumber">
+        <input id="advanced_ram_input" inputmode="numeric" value="2">
+        <input id="advanced_ram_hinput" type="hidden" value="2">
+      </span></div>
+      <table><thead><tr><th>index</th><th>vLan</th><th>Subnet</th><th>IP</th><th aria-label="Bandwidth">Bandwidth</th></tr></thead>
+        <tbody><tr><td>0</td><td></td><td></td><td></td><td><span class="ui-inputnumber">
+          <input id="advanced_bandwidth_input" inputmode="numeric" value="100">
+          <input id="advanced_bandwidth_hinput" type="hidden" value="100">
+        </span></td></tr></tbody>
+      </table>
+      <div class="ui-g-12 ui-md-12"><label>Cấu hình reservation</label>
+        <select id="advanced_reservation_input">
+          <option value="">- Chọn -</option>
+          <optgroup label="Smart Cloud Server"><option value="smart-reservation">VMWARE SMARTCLOUD</option></optgroup>
+          <optgroup label="Elastic Cloud"><option value="elastic-reservation">ELASTIC CLOUD</option></optgroup>
+        </select>
+      </div>
+    </div></div>
+    <div class="card"><div class="ui-g-12">
+      <h5>Thông tin cấu hình tài nguyên DISK</h5>
+      <select id="advanced_disk_pool_input"><option value="" selected>- Chọn -</option><option value="pool">VSAN</option></select>
+      <span class="ui-inputnumber">
+        <input id="advanced_disk_input" inputmode="numeric" value="30">
+        <input id="advanced_disk_hinput" type="hidden" value="30">
+      </span>
+      <select id="advanced_disk_type_input">
+        <option value="">- Cấu hình storage reservation -</option>
+        <optgroup label="SAFE_STORAGE"><option value="safe">IOPS: 4000 ops/s</option></optgroup>
+        <optgroup label="NVME_STORAGE"><option value="nvme">IOPS: 40000 ops/s</option></optgroup>
+      </select>
+    </div></div>
+  </form>`
+}
+
+afterEach(() => {
+  document.body.innerHTML = ''
+  window.history.replaceState({}, '', '/')
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
 
 describe('Service configuration', () => {
-  it('accepts only the two Portal paths, not lookalike domains', () => {
+  it('accepts only the supported Portal paths, not lookalike domains', () => {
     expect(isPortalServiceUrl(serviceUrl)).toBe(true)
     expect(isPortalCreateUrl(createUrl)).toBe(true)
+    expect(isPortalCreateUrl(createPlusUrl)).toBe(true)
     expect(isPortalServiceUrl(createUrl)).toBe(false)
     expect(isPortalCreateUrl('https://portal.longvan.vn.evil.test/computing-manager/manager/computing/computing_create.xhtml')).toBe(false)
     expect(isPortalCreateUrl('http://portal.longvan.vn/computing-manager/manager/computing/computing_create.xhtml')).toBe(false)
@@ -123,6 +200,7 @@ describe('Service configuration', () => {
       cpu: 8, ramGB: 8, internetMbps: 700, diskGB: 300, diskType: 'NVME_PRO_STORAGE',
       os: 'Ubuntu 22.04 (64-bit)', osId: '100101', siteProvider: 'HN', siteProviderId: '106068',
       ownerName: 'Chu Xuân Hà', serviceCode: '20.2985.9322',
+      serviceType: 'Smart Cloud Server', serviceTypeId: 'SMART_CLOUD_SERVER',
     })
   })
 
@@ -185,6 +263,15 @@ describe('Create computing form', () => {
           },
           triggerChange: () => change(select.id.slice(0, -'_input'.length)),
         }
+      }
+      for (const row of document.querySelectorAll<HTMLElement>('#templateMappingAC_panel tbody tr')) {
+        row.addEventListener('click', () => {
+          const input = document.getElementById('templateMappingAC_input') as HTMLInputElement
+          const hidden = document.getElementById('templateMappingAC_hinput') as HTMLInputElement
+          input.value = row.textContent?.replace(/\s+/g, ' ').trim() ?? ''
+          hidden.value = row.dataset.itemValue ?? ''
+          change('templateMappingAC')
+        })
       }
     }
     function emit(event: string, source: string) {
@@ -267,6 +354,30 @@ describe('Create computing form', () => {
       .toEqual(['8', '8', '700', '300'])
   })
 
+  it('fills the advanced form in order and picks the first deployment matching the service type', async () => {
+    createPlusForm()
+    const order = mockPrimeFaces()
+
+    const result = await pasteServiceConfigIntoDOM(config)
+
+    expect(result).toEqual({ applied: [
+      'Cấu hình triển khai', 'CPU', 'RAM', 'Internet', 'Cấu hình reservation',
+      'Disk Pool', 'Disk', 'Disk Reservation',
+    ] })
+    expect(order).toEqual([
+      'templateMappingAC', 'advanced_cpu', 'advanced_ram', 'advanced_bandwidth',
+      'advanced_reservation', 'advanced_disk_pool', 'advanced_disk', 'advanced_disk_type',
+    ])
+    expect(['advanced_cpu', 'advanced_ram', 'advanced_bandwidth', 'advanced_disk']
+      .map((id) => (document.getElementById(`${id}_input`) as HTMLInputElement).value))
+      .toEqual(['2', '4', '200', '50'])
+    expect((document.getElementById('advanced_disk_type_input') as HTMLSelectElement).value).toBe('nvme')
+    expect((document.getElementById('templateMappingAC_hinput') as HTMLInputElement).value).toBe('first-smart')
+    expect((document.getElementById('advanced_reservation_input') as HTMLSelectElement).value)
+      .toBe('smart-reservation')
+    expect((document.getElementById('advanced_disk_pool_input') as HTMLSelectElement).value).toBe('pool')
+  })
+
   it('skips OS and Site comparison when the copied service has neither value', async () => {
     createForm()
     const order = mockPrimeFaces()
@@ -330,11 +441,21 @@ describe('Create computing form', () => {
     expect((document.getElementById('template_input') as HTMLSelectElement).value).toBe('other-os')
   })
 
-  it('treats 64bit, 64-bit and 64 bit as the same Template architecture', async () => {
+  it('matches Template names despite architecture spelling, accents, punctuation, and word order', async () => {
     for (const [current, copied] of [
       ['Ubuntu 24.04 (64bit)', 'Ubuntu 24.04 (64 bit)'],
       ['Ubuntu 24.04 (64 bit)', 'Ubuntu 24.04 (64-bit)'],
       ['Ubuntu 24.04 (64-BIT)', 'Ubuntu 24.04 (64bits)'],
+      ['Ubuntu 24.04 aaPanel (64-bit)', 'Ubuntu 24.04 (64-bit) - aaPanel'],
+      ['Hệ điều hành Đám mây (64-bit)', 'He dieu hanh dam may 64 bit'],
+      ['Win Srv 2022 Std AMD64', 'Windows Server 2022 Standard (64-bit)'],
+      ['Alma Linux 9.5 x64', 'AlmaLinux OS 9.5 (64 bit)'],
+      ['Cent OS Linux 7', 'CentOS 7.0'],
+      ['Ubuntu Server 22.04 LTS x86_64', 'Ubuntu 22.04 (64-bit)'],
+      ['PF Sense 2.7 AMD64', 'pfSense 2.7 (64-bit)'],
+      ['Microsoft Windows Server 2022 Std Evaluation x64', 'Windows Server 2022 Standard (64-bit)'],
+      ['Debian GNU/Linux 12 (64)', 'Debian 12 x64'],
+      ['Ubuntu 24.04.1 LTS AMD64', 'Ubuntu 24.04 (64-bit)'],
     ]) {
       createForm()
       const template = document.getElementById('template_input') as HTMLSelectElement
@@ -347,6 +468,49 @@ describe('Create computing form', () => {
       expect(result.applied).toEqual(['CPU', 'RAM', 'Internet', 'Disk'])
       expect(order).toEqual(['cpu', 'ram', 'internet', 'disk_type', 'disk'])
       expect((document.getElementById('template_input') as HTMLSelectElement).value).toBe('same-os')
+    }
+  })
+
+  it('selects the best equivalent OS option while rejecting another product variant', async () => {
+    createForm()
+    const template = document.getElementById('template_input') as HTMLSelectElement
+    template.innerHTML = [
+      '<option value="current" selected>Ubuntu 22.04 (64-bit)</option>',
+      '<option value="docker">Ubuntu 24.04 Docker x64</option>',
+      '<option value="aapanel">Ubuntu Server 24.04 aaPanel AMD64</option>',
+    ].join('')
+    const order = mockPrimeFaces()
+
+    const result = await pasteServiceConfigIntoDOM({
+      ...config,
+      os: 'Ubuntu 24.04 (64-bit) - aa Panel',
+      osId: 'different-service-attribute-id',
+    })
+
+    expect(result.mismatches).toBeUndefined()
+    expect(result.applied).toEqual(['Template', 'CPU', 'RAM', 'Internet', 'Disk'])
+    expect(order[0]).toBe('template')
+    expect((document.getElementById('template_input') as HTMLSelectElement).value).toBe('aapanel')
+  })
+
+  it('does not confuse different OS versions, architectures, or application variants', async () => {
+    for (const [available, copied] of [
+      ['Ubuntu 22.04 (64-bit)', 'Ubuntu 24.04 (64-bit)'],
+      ['Ubuntu 24.04 (32-bit)', 'Ubuntu 24.04 (64-bit)'],
+      ['Ubuntu 24.04 Docker (64-bit)', 'Ubuntu 24.04 aaPanel (64-bit)'],
+      ['Windows Server 2022 Datacenter x64', 'Windows Server 2022 Standard (64-bit)'],
+      ['Ubuntu 22.04 aaPanel 7 x64', 'Ubuntu 24.04 aaPanel 7 (64-bit)'],
+    ]) {
+      createForm()
+      const template = document.getElementById('template_input') as HTMLSelectElement
+      template.innerHTML = `<option value="wrong" selected>${available}</option>`
+      mockPrimeFaces()
+
+      const result = await pasteServiceConfigIntoDOM({ ...config, os: copied, osId: 'not-present' })
+
+      expect(result.mismatches, `${available} <> ${copied}: ${JSON.stringify(result)}`).toBeDefined()
+      expect(result.mismatches?.[0]).toContain('Template không khớp')
+      expect((document.getElementById('template_input') as HTMLSelectElement).value).toBe('wrong')
     }
   })
 

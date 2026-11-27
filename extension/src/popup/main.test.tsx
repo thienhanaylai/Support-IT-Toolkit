@@ -15,6 +15,48 @@ async function showTools() {
   await vi.waitFor(() => expect(document.querySelector('.main-content')).not.toBeNull())
 }
 
+it('toggles all injected Portal tools from the popup header', async () => {
+  document.body.innerHTML = '<div id="root"></div>'
+  const sendMessage = vi.fn(async (message: { type: string; enabled?: boolean }) => {
+    if (message.type === 'toolkit:get-job') return {}
+    if (message.type === 'toolkit:set-portal-tools-enabled') return { enabled: message.enabled }
+    return {}
+  })
+  vi.stubGlobal('chrome', {
+    runtime: { sendMessage },
+    tabs: { query: vi.fn(async () => []) },
+    storage: {
+      session: { get: vi.fn(async () => ({})), set: vi.fn(async () => {}), remove: vi.fn(async () => {}) },
+      local: { get: vi.fn(async () => ({
+        history: [],
+        settings: { timeoutMs: 3000, saveHistory: true, theme: 'dark', portalToolsEnabled: true },
+      })) },
+      onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
+    },
+  })
+  await import('./main')
+  const toggle = await vi.waitFor(() => {
+    const button = document.querySelector<HTMLButtonElement>('.portal-tools-toggle')
+    expect(button).not.toBeNull()
+    return button!
+  })
+  expect(toggle.textContent).toContain('Portal')
+  expect(toggle.textContent).toContain('Enable')
+  expect(toggle.getAttribute('role')).toBe('switch')
+  expect(toggle.getAttribute('aria-checked')).toBe('true')
+  expect(toggle.querySelector('.portal-tools-toggle-track')).not.toBeNull()
+
+  toggle.click()
+
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({
+    type: 'toolkit:set-portal-tools-enabled',
+    enabled: false,
+  }))
+  await vi.waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('false'))
+  expect(toggle.classList.contains('is-disabled')).toBe(true)
+  expect(toggle.textContent).toContain('Disable')
+})
+
 it('restores the form and live progress after the popup is reopened, then shows the completed result', async () => {
   document.body.innerHTML = '<div id="root"></div>'
   const scrollIntoView = vi.fn()
@@ -160,6 +202,7 @@ it('offers copy only on the Service tab and includes OS and Site Provider for re
     cpu: 2, ramGB: 4, internetMbps: 200, diskGB: 50, diskType: 'NVME_STORAGE',
     os: 'Windows Server 2022 Standard (64-bit)', osId: '118498',
     siteProvider: 'HCM', siteProviderId: '106066',
+    serviceType: 'Smart Cloud Server', serviceTypeId: 'SMART_CLOUD_SERVER',
     ownerName: 'Chu Xuân Hà', serviceCode: '20.2985.9322',
   }
   const set = vi.fn(async () => {})
@@ -192,6 +235,7 @@ it('does not show the popup transfer section on the Create computing tab', async
     cpu: 2, ramGB: 4, internetMbps: 200, diskGB: 50, diskType: 'NVME_STORAGE',
     os: 'Windows Server 2022 Standard (64-bit)', osId: '118498',
     siteProvider: 'HCM', siteProviderId: '106066',
+    serviceType: 'Smart Cloud Server', serviceTypeId: 'SMART_CLOUD_SERVER',
     ownerName: 'Chu Xuân Hà', serviceCode: '20.2985.9322',
   }
   const executeScript = vi.fn(async () => [{ result: { applied: ['CPU', 'RAM', 'Internet', 'Disk'] } }])

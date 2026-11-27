@@ -146,6 +146,56 @@ describe('context menu popup', () => {
     })
   })
 
+  it('persists and broadcasts the Portal tool visibility preference', async () => {
+    type Listener = (
+      message: { type?: string; enabled?: unknown },
+      sender: { tab?: { id?: number; url?: string } },
+      respond: (value: unknown) => void,
+    ) => boolean | void
+    const listeners: Listener[] = []
+    const set = vi.fn(async () => {})
+    const query = vi.fn(async () => [{ id: 31 }, { id: 32 }])
+    const sendMessage = vi.fn(async () => {})
+    vi.stubGlobal('chrome', {
+      runtime: {
+        onInstalled: { addListener: vi.fn() },
+        onMessage: { addListener: (listener: Listener) => listeners.push(listener) },
+      },
+      contextMenus: { create: vi.fn(), onClicked: { addListener: vi.fn() } },
+      sidePanel: { setPanelBehavior: vi.fn(async () => {}) },
+      storage: {
+        local: {
+          get: vi.fn(async () => ({
+            settings: { timeoutMs: 3200, saveHistory: true, theme: 'dark', portalToolsEnabled: true },
+          })),
+          set,
+        },
+      },
+      tabs: { query, sendMessage },
+    })
+    await import('./index')
+    const respond = vi.fn()
+
+    expect(listeners.at(-1)!({ type: 'toolkit:set-portal-tools-enabled', enabled: false }, {}, respond)).toBe(true)
+
+    await vi.waitFor(() => expect(respond).toHaveBeenCalledWith({ enabled: false }))
+    expect(set).toHaveBeenCalledWith({ settings: {
+      timeoutMs: 3200,
+      saveHistory: true,
+      theme: 'dark',
+      portalToolsEnabled: false,
+    } })
+    expect(query).toHaveBeenCalledWith({ url: ['https://portal.longvan.vn/*'] })
+    expect(sendMessage).toHaveBeenCalledWith(31, {
+      type: 'toolkit:portal-tools-enabled',
+      enabled: false,
+    })
+    expect(sendMessage).toHaveBeenCalledWith(32, {
+      type: 'toolkit:portal-tools-enabled',
+      enabled: false,
+    })
+  })
+
   it('opens the QR region picker on the active tab', async () => {
     type Listener = (
       message: { type?: string },
@@ -192,11 +242,14 @@ describe('context menu popup', () => {
       cpu: 2, ramGB: 4, internetMbps: 200, diskGB: 50, diskType: 'NVME_STORAGE',
       os: 'Windows Server 2022 Standard (64-bit)', osId: '118498',
       siteProvider: 'HCM', siteProviderId: '106066',
+      serviceType: 'Smart Cloud Server', serviceTypeId: 'SMART_CLOUD_SERVER',
       ownerName: 'Chu Xuân Hà', serviceCode: '20.2985.9322',
     }
     const executeScript = vi.fn(async (options: { world?: string }) =>
       options.world === 'MAIN' ? [{ result: { applied: ['CPU', 'RAM', 'Internet', 'Disk'] } }] : [{ result: config }])
     const set = vi.fn(async () => {})
+    const sendTabMessage = vi.fn(async () => {})
+    const queryTabs = vi.fn(async () => [{ id: 10 }, { id: 11 }])
     vi.stubGlobal('chrome', {
       runtime: {
         onInstalled: { addListener: vi.fn() },
@@ -209,6 +262,7 @@ describe('context menu popup', () => {
         local: { get: vi.fn(async () => ({})) },
       },
       scripting: { executeScript },
+      tabs: { query: queryTabs, sendMessage: sendTabMessage },
     })
     await import('./index')
     const portalListener = listeners.at(-1)!
@@ -224,6 +278,20 @@ describe('context menu popup', () => {
     }))
     expect(set).toHaveBeenCalledWith({ portalVmConfig: config })
     expect(executeScript).toHaveBeenCalledWith(expect.objectContaining({ target: { tabId: 9 } }))
+    expect(queryTabs).toHaveBeenCalledWith({ url: [
+      'https://portal.longvan.vn/computing-manager/manager/computing/computing_create.xhtml*',
+      'https://portal.longvan.vn/computing-manager/manager/computing/computing_create_plus.xhtml*',
+    ] })
+    expect(sendTabMessage).toHaveBeenCalledWith(10, {
+      type: 'toolkit:vm-config-updated',
+      config,
+      vmName: 'chuxuanha-20.2985.9322',
+    })
+    expect(sendTabMessage).toHaveBeenCalledWith(11, {
+      type: 'toolkit:vm-config-updated',
+      config,
+      vmName: 'chuxuanha-20.2985.9322',
+    })
 
     const fetched = vi.fn()
     expect(portalListener({ type: 'toolkit:get-vm-config' }, {}, fetched)).toBe(true)
@@ -239,6 +307,15 @@ describe('context menu popup', () => {
     )).toBe(true)
     await vi.waitFor(() => expect(pasted).toHaveBeenCalledWith({ applied: ['CPU', 'RAM', 'Internet', 'Disk'] }))
     expect(executeScript).toHaveBeenCalledWith(expect.objectContaining({ target: { tabId: 10 }, world: 'MAIN', args: [config] }))
+
+    const pastedAdvanced = vi.fn()
+    expect(portalListener(
+      { type: 'toolkit:paste-vm-config' },
+      { tab: { id: 11, url: 'https://portal.longvan.vn/computing-manager/manager/computing/computing_create_plus.xhtml?wsId=1' } },
+      pastedAdvanced,
+    )).toBe(true)
+    await vi.waitFor(() => expect(pastedAdvanced).toHaveBeenCalledWith({ applied: ['CPU', 'RAM', 'Internet', 'Disk'] }))
+    expect(executeScript).toHaveBeenCalledWith(expect.objectContaining({ target: { tabId: 11 }, world: 'MAIN', args: [config] }))
   })
 
   it('generates a Portal password from saved options and keeps it in session history', async () => {

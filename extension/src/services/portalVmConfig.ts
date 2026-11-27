@@ -8,6 +8,8 @@ export type PortalVmConfig = {
   osId: string
   siteProvider: string
   siteProviderId: string
+  serviceType: string
+  serviceTypeId: string
   ownerName: string
   serviceCode: string
 }
@@ -32,6 +34,7 @@ export function buildVmName(ownerName: string, serviceCode: string): string {
 const portalOrigin = 'https://portal.longvan.vn'
 const servicePath = '/cloud-service-manager/manager/cloud-service-detail.xhtml'
 const createPath = '/computing-manager/manager/computing/computing_create.xhtml'
+const createPlusPath = '/computing-manager/manager/computing/computing_create_plus.xhtml'
 
 function isPortalPath(value: string, pathname: string): boolean {
   try {
@@ -43,7 +46,9 @@ function isPortalPath(value: string, pathname: string): boolean {
 }
 
 export function isPortalServiceUrl(value: string): boolean { return isPortalPath(value, servicePath) }
-export function isPortalCreateUrl(value: string): boolean { return isPortalPath(value, createPath) }
+export function isPortalCreateUrl(value: string): boolean {
+  return isPortalPath(value, createPath) || isPortalPath(value, createPlusPath)
+}
 
 function portalAccessError(cause: unknown): Error {
   const message = cause instanceof Error ? cause.message : String(cause)
@@ -66,6 +71,8 @@ export function isPortalVmConfig(value: unknown): value is PortalVmConfig {
     typeof data.osId === 'string' && data.osId.length <= 300 &&
     typeof data.siteProvider === 'string' && data.siteProvider.length <= 300 &&
     typeof data.siteProviderId === 'string' && data.siteProviderId.length <= 300 &&
+    typeof data.serviceType === 'string' && data.serviceType.length <= 300 &&
+    typeof data.serviceTypeId === 'string' && data.serviceTypeId.length <= 300 &&
     typeof data.ownerName === 'string' && data.ownerName.length <= 300 &&
     typeof data.serviceCode === 'string' && data.serviceCode.length <= 300
 }
@@ -124,6 +131,14 @@ export function extractServiceConfigFromDOM(): PortalVmConfig | null {
     return ''
   }
   const serviceInfo = document.getElementById('frm-info-service:componentInfoService:resourceService')
+  const serviceTypePanel = document.getElementById('frm-info-service:componentInfoService:serviceTypePanel')
+  const serviceType = (serviceTypePanel?.querySelector('.ui-inplace-display')?.textContent ?? '')
+    .replace(/\s+/g, ' ').trim().slice(0, 300)
+  const normalizedServiceType = serviceType.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, 'd').replace(/[^a-z0-9]+/gi, '').toLowerCase()
+  const serviceTypeOption = [...(serviceTypePanel?.querySelectorAll<HTMLOptionElement>('option') ?? [])]
+    .find((option) => (option.textContent ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[đĐ]/g, 'd').replace(/[^a-z0-9]+/gi, '').toLowerCase() === normalizedServiceType)
   const ownerPanel = document.getElementById('frm-info-service:componentInfoService:panelContact')
   const ownerTitle = [...(ownerPanel?.querySelectorAll('.ui-panel-title') ?? [])].find((node) =>
     (node.textContent ?? '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN') === 'sở hữu')
@@ -138,6 +153,7 @@ export function extractServiceConfigFromDOM(): PortalVmConfig | null {
     cpu, ramGB, internetMbps, diskGB, diskType: diskCodes[0].slice(1),
     os: os?.name ?? '', osId: os?.value ?? '',
     siteProvider: provider?.name ?? '', siteProviderId: provider?.value ?? '',
+    serviceType, serviceTypeId: serviceTypeOption?.value.slice(0, 300) ?? '',
     ownerName, serviceCode,
   }
 }
@@ -152,7 +168,7 @@ export async function copyServiceConfig(tabId: number, url: string): Promise<Por
   }
   const config = injection?.result
   if (!isPortalVmConfig(config)) {
-    throw new Error('Không đọc đủ CORE, RAM, Internet và một STORAGE từ Nhóm thuộc tính. Hãy kiểm tra trang đã tải xong.')
+    throw new Error('Không đọc đủ Loại dịch vụ, CORE, RAM, Internet và một STORAGE. Hãy kiểm tra trang Dịch vụ đã tải xong.')
   }
   await chrome.storage.session.set({ [portalVmConfigKey]: config })
   return config
@@ -170,6 +186,7 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
     applied, ...(mismatches.length ? { mismatches } : {}), ...extra,
   })
   const error = (message: string): PasteResult => result({ error: message })
+  const advancedCreate = location.pathname.endsWith('/computing_create_plus.xhtml')
   const numbers = [config.cpu, config.ramGB, config.internetMbps, config.diskGB]
   if (numbers.some((value) => !Number.isSafeInteger(value) || value <= 0) ||
       !/^(?:[A-Z0-9]+_)*STORAGE$/.test(config.diskType) || config.diskType.length > 80) {
@@ -177,8 +194,12 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
   }
   function resourceSection(): Element | undefined {
     const form = document.getElementById('frmMain')
-    return [...(form?.querySelectorAll('fieldset') ?? [])]
+    const regular = [...(form?.querySelectorAll('fieldset') ?? [])]
       .find((field) => field.querySelector('legend')?.textContent?.trim() === 'Tài nguyên')
+    if (regular) return regular
+    return [...(form?.querySelectorAll('.card') ?? [])].find((card) =>
+      (card.querySelector('h5')?.textContent ?? '').replace(/\s+/g, ' ').trim()
+        .toLocaleLowerCase('vi-VN').includes('tài nguyên cpu, ram, network'))
   }
   if (!resourceSection()) return error('Không thấy phần Tài nguyên của trang Tạo computing.')
   const pf = (window as typeof window & { PrimeFaces?: {
@@ -225,21 +246,130 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
   function normalizedChoice(value: string): string {
     return value.normalize('NFKC').replace(/[‐‑–—]/g, '-').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN')
   }
-  function normalizedOsName(value: string): string {
-    // The Portal and service page may spell the same architecture as 64bit, 64-bit or 64 bit.
-    return normalizedChoice(value).replace(/(\d+)\s*-?\s*bits?\b/g, '$1bit')
+  function osFingerprint(value: string): {
+    family: string
+    versions: string[]
+    architecture: string
+    descriptors: string[]
+  } {
+    let folded = normalizedChoice(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[đĐ]/g, 'd')
+    folded = folded
+      .replace(/\b(?:x86[\s_-]*64|amd64|x64|64\s*-?\s*bits?)\b/g, ' 64bit ')
+      .replace(/\b(?:i[3-6]86|x86|32\s*-?\s*bits?)\b/g, ' 32bit ')
+      .replace(/\baa[\s_-]*panel\b/g, ' aapanel ')
+      .replace(/\balma[\s_-]*linux\b/g, ' almalinux ')
+      .replace(/\bcent[\s_-]*os\b/g, ' centos ')
+      .replace(/\boracle[\s_-]*linux\b/g, ' oraclelinux ')
+      .replace(/\bopen[\s_-]*suse\b/g, ' opensuse ')
+      .replace(/\bred[\s_-]*hat\b/g, ' redhat ')
+      .replace(/\bpf[\s_-]*sense\b/g, ' pfsense ')
+      .replace(/\bdirect[\s_-]*admin\b/g, ' directadmin ')
+      .replace(/\bopen[\s_-]*claw\b/g, ' openclaw ')
+      .replace(/\bwire[\s_-]*guard\b/g, ' wireguard ')
+      .replace(/\bvm[\s_-]*ware\b/g, ' vmware ')
+      .replace(/\brhel\b/g, ' redhat enterprise ')
+      .replace(/\b(?:win)\b/g, ' windows ')
+      .replace(/\b(?:srv)\b/g, ' server ')
+      .replace(/\b(?:std)\b/g, ' standard ')
+      .replace(/\b(?:pro|prof)\b/g, ' professional ')
+      .replace(/\b(?:ent)\b/g, ' enterprise ')
+      .replace(/\br[\s_-]+(\d+)\b/g, ' r$1 ')
+      .replace(/\(\s*(64|32)\s*\)/g, ' $1bit ')
+    const rawTokens: string[] = folded.match(/\d+bit|[a-z]+\d+|\d+(?:\.\d+)*|[a-z]+/g) ?? []
+    const architecture = rawTokens.includes('64bit') ? '64bit' :
+      rawTokens.includes('32bit') ? '32bit' : ''
+    const versions = rawTokens.filter((token) => /^\d+(?:\.\d+)*$/.test(token))
+      .map((token) => {
+        const parts = token.split('.').map((part) => String(Number(part)))
+        while (parts.length > 1 && parts.at(-1) === '0') parts.pop()
+        return parts.join('.')
+      })
+    const familyAliases: Record<string, string> = {
+      windows: 'windows', ubuntu: 'ubuntu', debian: 'debian', centos: 'centos',
+      rocky: 'rocky', almalinux: 'almalinux', fedora: 'fedora', redhat: 'redhat',
+      oraclelinux: 'oraclelinux', freebsd: 'freebsd', pfsense: 'pfsense',
+      opensuse: 'opensuse', suse: 'suse', archlinux: 'archlinux', arch: 'archlinux',
+      kali: 'kali', mikrotik: 'mikrotik', vyos: 'vyos',
+    }
+    const familyToken = rawTokens.find((token) => familyAliases[token])
+    const family = familyToken ? familyAliases[familyToken] : rawTokens.find((token) =>
+      /^[a-z]+$/.test(token) && !['os', 'linux', 'server'].includes(token)) ?? ''
+    const ignored = new Set([
+      ...Object.keys(familyAliases), '64bit', '32bit', 'os', 'linux', 'server',
+      'operating', 'system', 'edition', 'release', 'version', 'lts', 'template', 'image',
+      'microsoft', 'gnu', 'based', 'evaluation', 'eval', 'gen1', 'gen2',
+    ])
+    const descriptors = rawTokens.filter((token) =>
+      !ignored.has(token) && !/^\d+(?:\.\d+)*$/.test(token))
+      .map((token) => ({
+        srv: 'server', desktop: 'desktop', workstation: 'desktop',
+      })[token] ?? token)
+      .sort()
+    return { family, versions, architecture, descriptors }
+  }
+  function osSimilarity(left: string, right: string): number {
+    const a = osFingerprint(left)
+    const b = osFingerprint(right)
+    if (!a.family || !b.family || a.family !== b.family) return 0
+    if (a.architecture && b.architecture && a.architecture !== b.architecture) return 0
+
+    let versionScore = 0.15
+    if (a.versions.length && b.versions.length) {
+      const version = a.versions[0]
+      const other = b.versions[0]
+      const exact = version === other
+      const compatible = exact || version.startsWith(`${other}.`) || other.startsWith(`${version}.`)
+      if (!compatible) return 0
+      versionScore = exact ? 0.3 : 0.22
+    }
+
+    const aDescriptors = new Set(a.descriptors)
+    const bDescriptors = new Set(b.descriptors)
+    const critical = new Set([
+      'aapanel', 'docker', 'proxy', 'nginx', 'openclaw', 'directadmin', 'plesk',
+      'vpn', 'wireguard', 'firewall', 'memos', 'redis', 'mongo', 'seo',
+    ])
+    const aCritical = [...aDescriptors].filter((token) => critical.has(token)).sort().join('|')
+    const bCritical = [...bDescriptors].filter((token) => critical.has(token)).sort().join('|')
+    if (aCritical !== bCritical) return 0
+    const editions = new Set(['standard', 'professional', 'datacenter', 'enterprise', 'desktop'])
+    const aEditions = [...aDescriptors].filter((token) => editions.has(token))
+    const bEditions = [...bDescriptors].filter((token) => editions.has(token))
+    if (aEditions.length && bEditions.length &&
+        !aEditions.some((edition) => bEditions.includes(edition))) return 0
+    const descriptorUnion = new Set([...aDescriptors, ...bDescriptors])
+    const descriptorCommon = [...aDescriptors].filter((token) => bDescriptors.has(token)).length
+    const onlyOptionalEditionDiff = descriptorUnion.size > 0 && [...descriptorUnion]
+      .every((token) => editions.has(token)) && (!aDescriptors.size || !bDescriptors.size)
+    const descriptorScore = descriptorUnion.size
+      ? onlyOptionalEditionDiff ? 0.14 : 0.25 * descriptorCommon / descriptorUnion.size
+      : 0.25
+    const architectureScore = a.architecture && b.architecture ? 0.1 : 0.06
+    return 0.35 + versionScore + architectureScore + descriptorScore
+  }
+  function osNamesMatch(left: string, right: string): boolean {
+    return osSimilarity(left, right) >= 0.82
+  }
+  function normalizedServiceType(value: string): string {
+    return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd')
+      .toLocaleLowerCase('vi-VN').replace(/[^a-z0-9]+/g, '')
   }
   function osMatchesCurrent(): boolean {
     const current = currentChoice('Template')
     if (!current) return false
-    return (!!config.os && normalizedOsName(current.name) === normalizedOsName(config.os)) ||
+    return (!!config.os && osNamesMatch(current.name, config.os)) ||
       (!config.os && !!config.osId && !!current.id && current.id === config.osId)
   }
   function osOption(select: HTMLSelectElement): HTMLOptionElement | null {
     if (config.os) {
-      const expected = normalizedOsName(config.os)
-      return [...select.options].find((option) =>
-        normalizedOsName(option.textContent ?? '') === expected) ?? null
+      const ranked = [...select.options].map((option, index) => ({
+        option,
+        index,
+        score: osSimilarity(option.textContent ?? '', config.os),
+      })).filter((item) => item.score >= 0.82)
+        .sort((left, right) => right.score - left.score || left.index - right.index)
+      return ranked[0]?.option ?? null
     }
     if (config.osId) return [...select.options].find((option) => option.value === config.osId) ?? null
     return null
@@ -263,8 +393,24 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
       mismatches.push(`${label} không khớp: cần "${expected}", hiện tại "${actual}".`)
     }
   }
-  compareChoice('Khu vực', config.siteProvider, config.siteProviderId)
+  if (!advancedCreate) compareChoice('Khu vực', config.siteProvider, config.siteProviderId)
   function container(label: string): Element | null {
+    if (advancedCreate && label === 'Internet') {
+      const table = [...(resourceSection()?.querySelectorAll('table') ?? [])].find((item) =>
+        [...item.querySelectorAll('th')].some((header) =>
+          normalizedLabel(header.getAttribute('aria-label') || header.textContent) === 'bandwidth'))
+      if (!table) return null
+      const headers = [...table.querySelectorAll('thead th')]
+      const index = headers.findIndex((header) =>
+        normalizedLabel(header.getAttribute('aria-label') || header.textContent) === 'bandwidth')
+      return index >= 0 ? table.querySelector(`tbody tr td:nth-child(${index + 1})`) : null
+    }
+    if (advancedCreate && label === 'Disk') {
+      const form = document.getElementById('frmMain')
+      return [...(form?.querySelectorAll('.card') ?? [])].find((card) =>
+        (card.querySelector('h5')?.textContent ?? '').replace(/\s+/g, ' ').trim()
+          .toLocaleLowerCase('vi-VN').includes('tài nguyên disk')) ?? null
+    }
     const field = [...(resourceSection()?.querySelectorAll('label') ?? [])]
       .find((node) => normalizedLabel(node.textContent) === normalizedLabel(label))
     return field?.closest('.ui-g-12') ?? field?.parentElement ?? null
@@ -278,7 +424,26 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
     return Object.values(pf!.widgets).find((widget) => widget.input?.[0] === input)
   }
   function diskSelect(): HTMLSelectElement | null {
-    return container('Disk')?.querySelector<HTMLSelectElement>('select[id$="_input"]') ?? null
+    const selects = [...(container('Disk')?.querySelectorAll<HTMLSelectElement>('select[id$="_input"]') ?? [])]
+    if (!advancedCreate) return selects[0] ?? null
+    return selects.find((select) => [...select.querySelectorAll('optgroup')].some((group) =>
+      /STORAGE$/i.test(group.label.trim()))) ?? null
+  }
+  function diskPoolSelect(): HTMLSelectElement | null {
+    if (!advancedCreate) return null
+    const selects = [...(container('Disk')?.querySelectorAll<HTMLSelectElement>('select[id$="_input"]') ?? [])]
+    return selects.find((select) => ![...select.querySelectorAll('optgroup')].some((group) =>
+      /STORAGE$/i.test(group.label.trim()))) ?? null
+  }
+  function reservationSelect(): HTMLSelectElement | null {
+    return advancedCreate ? choiceField('Cấu hình reservation')?.select ?? null : null
+  }
+  function groupedServiceOption(select: HTMLSelectElement): HTMLOptionElement | null {
+    const expected = normalizedServiceType(config.serviceTypeId || config.serviceType)
+    if (!expected) return null
+    return [...select.options].find((option) =>
+      option.parentElement instanceof HTMLOptGroupElement &&
+      normalizedServiceType(option.parentElement.label) === expected) ?? null
   }
   function storageSignature(value: string): string {
     return value.toUpperCase().replace(/_STORAGE$/, '').replace(/(?:^|_)PRO(?:_|$)/g, '_')
@@ -288,10 +453,16 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
     const exact = [...select.options].find((option) => option.value === config.diskType)
     if (exact) return exact
     const signature = storageSignature(config.diskType)
+    if (advancedCreate) {
+      const grouped = [...select.options].filter((option) =>
+        option.parentElement instanceof HTMLOptGroupElement &&
+        storageSignature(option.parentElement.label) === signature)
+      return grouped.length === 1 ? grouped[0] : null
+    }
     const compatible = [...select.options].filter((option) => storageSignature(option.value) === signature)
     return compatible.length === 1 ? compatible[0] : null
   }
-  function waitForUpdate(source: string, change: () => void): Promise<void> {
+  function waitForUpdate(source: string, change: () => void, requireUpdate = true): Promise<void> {
     return new Promise((resolve, reject) => {
       const events = jq!(document)
       let updated = false
@@ -312,7 +483,7 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
       const onComplete = (_event: unknown, _xhr: unknown, settings: unknown) => {
         if (!matches(settings)) return
         cleanup()
-        if (updated) resolve()
+        if (updated || !requireUpdate) resolve()
         else reject(new Error(`Portal không xác nhận cập nhật ${source}.`))
       }
       const timer = setTimeout(() => {
@@ -324,6 +495,102 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
       events.on('pfAjaxComplete', onComplete)
       try { change() } catch (cause) { cleanup(); reject(cause) }
     })
+  }
+
+  function deploymentControl(): {
+    input: HTMLInputElement
+    button: HTMLButtonElement
+    panel: HTMLElement
+  } | null {
+    const form = document.getElementById('frmMain')
+    const label = [...(form?.querySelectorAll('label') ?? [])]
+      .find((node) => normalizedLabel(node.textContent) === normalizedLabel('Cấu hình triển khai'))
+    const field = label?.closest('.ui-g-12, [class*="p-col"]') ?? label?.parentElement
+    const input = field?.querySelector<HTMLInputElement>('input[role="combobox"], .ui-autocomplete-input')
+    const button = field?.querySelector<HTMLButtonElement>('.ui-autocomplete-dropdown, button[id$="_button"]')
+    const panelId = input?.getAttribute('aria-controls')
+    const panel = panelId ? document.getElementById(panelId) : null
+    return input && button && panel ? { input, button, panel } : null
+  }
+  function deploymentItems(panel: HTMLElement): HTMLElement[] {
+    const rows = [...panel.querySelectorAll<HTMLElement>('tbody tr')].filter((row) => row.querySelector('td'))
+    if (rows.length) return rows
+    return [...panel.querySelectorAll<HTMLElement>('.ui-autocomplete-item, [data-item-value]')]
+      .filter((item, index, all) => !all.some((parent, parentIndex) =>
+        parentIndex !== index && parent.contains(item)))
+  }
+  function deploymentServiceText(item: HTMLElement): string {
+    const cell = item.querySelector('td')
+    if (cell) return cell.textContent ?? ''
+    const label = item.dataset.serviceType || item.dataset.itemLabel || item.textContent || ''
+    return label.split(/\s+(?:_|[|])\s+/)[0]
+  }
+  function firstMatchingDeployment(panel: HTMLElement): HTMLElement | null {
+    const expected = normalizedServiceType(config.serviceTypeId || config.serviceType)
+    if (!expected) return null
+    return deploymentItems(panel).find((item) =>
+      normalizedServiceType(deploymentServiceText(item)) === expected) ?? null
+  }
+  async function chooseDeployment(): Promise<void> {
+    if (!config.serviceType && !config.serviceTypeId) {
+      throw new Error('Cấu hình đã sao chép chưa có Loại dịch vụ. Hãy sao chép lại tại trang Dịch vụ.')
+    }
+    const control = deploymentControl()
+    if (!control) throw new Error('Không tìm thấy ô Cấu hình triển khai.')
+    control.button.click()
+    let desired = firstMatchingDeployment(control.panel)
+    if (!desired) {
+      desired = await new Promise<HTMLElement>((resolve, reject) => {
+        let settleTimer = 0
+        const cleanup = () => {
+          clearTimeout(timeout)
+          clearTimeout(settleTimer)
+          observer.disconnect()
+        }
+        const inspect = () => {
+          const current = deploymentControl()?.panel
+          const match = current && firstMatchingDeployment(current)
+          if (match) {
+            cleanup()
+            resolve(match)
+            return
+          }
+          const items = current ? deploymentItems(current) : []
+          if (items.length) {
+            cleanup()
+            const available = items.map((item) => deploymentServiceText(item).trim())
+              .filter(Boolean).slice(0, 8).join(', ')
+            reject(new Error(`Không tìm thấy Cấu hình triển khai cho loại dịch vụ "${config.serviceType || config.serviceTypeId}"${available ? ` (đang có: ${available})` : ''}.`))
+          }
+        }
+        const observer = new MutationObserver(() => {
+          clearTimeout(settleTimer)
+          settleTimer = window.setTimeout(inspect, 100)
+        })
+        const timeout = window.setTimeout(() => {
+          cleanup()
+          reject(new Error(`Hết thời gian chờ Cấu hình triển khai cho loại dịch vụ "${config.serviceType || config.serviceTypeId}".`))
+        }, 15000)
+        observer.observe(document.body, { childList: true, subtree: true })
+      })
+    }
+    await waitForUpdate('templateMappingAC', () => desired!.click())
+  }
+
+  async function selectOption(
+    select: HTMLSelectElement,
+    option: HTMLOptionElement,
+    label: string,
+    requireUpdate = true,
+  ): Promise<void> {
+    if (select.value === option.value) return
+    const widget = widgetFor(select)
+    if (!widget?.selectValue || !widget.triggerChange) throw new Error(`Ô ${label} chưa sẵn sàng.`)
+    const source = select.id.endsWith('_input') ? select.id.slice(0, -'_input'.length) : select.id
+    await waitForUpdate(source, () => {
+      widget.selectValue!(option.value)
+      widget.triggerChange!()
+    }, requireUpdate)
   }
 
   async function setNumber(label: string, value: number): Promise<void> {
@@ -352,7 +619,7 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
           throw new Error(`Ô ${label} không nhận giá trị ${value}.`)
         }
         jq!(input).trigger('change')
-      })
+      }, !(advancedCreate && label === 'Disk'))
       await Promise.resolve()
       const current = numberInput(label)
       const currentWidget = current && widgetFor(current)
@@ -387,22 +654,31 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
         }
       }
     }
-    // Template changes can replace the entire resource form and its available disk types.
-    // Validate only after Portal has finished applying the desired OS.
+    // On the advanced page, deployment configuration must be selected before resources.
+    // Pick the first row whose service type matches the copied service.
+    if (advancedCreate) {
+      await chooseDeployment()
+      applied.push('Cấu hình triển khai')
+    }
+    // Template and deployment changes can replace the entire resource form.
+    // Validate only after Portal has finished applying both choices.
     const missing = ['CPU', 'RAM', 'Internet', 'Disk'].filter((label) => !numberInput(label))
     if (missing.length) throw new Error(`Không tìm thấy ô ${missing.join(', ')} trong phần Tài nguyên.`)
     const disk = container('Disk')
-    const initialDiskSelect = diskSelect()
-    if (!disk || !initialDiskSelect) throw new Error('Không tìm thấy ô chọn loại Disk.')
-    const initialDiskOption = diskOption(initialDiskSelect)
-    if (!initialDiskOption) {
-      const available = [...initialDiskSelect.options]
-        .map((option) => option.textContent?.trim() || option.value).filter(Boolean).join(', ')
-      throw new Error(`Loại Disk ${config.diskType} không tương thích với trang Tạo computing${available ? ` (đang có: ${available})` : ''}.`)
-    }
+    if (!disk) throw new Error('Không tìm thấy phần cấu hình Disk.')
     const diskInputs = [...disk.querySelectorAll<HTMLInputElement>('input:not([type="hidden"])')]
       .filter((input) => input.id.endsWith('_input') && (input.closest('.ui-inputnumber') || input.inputMode === 'numeric'))
     if (diskInputs.length !== 1) throw new Error('Không xác định duy nhất ô dung lượng Disk.')
+    if (!advancedCreate) {
+      const initialDiskSelect = diskSelect()
+      if (!initialDiskSelect) throw new Error('Không tìm thấy ô chọn loại Disk.')
+      const initialDiskOption = diskOption(initialDiskSelect)
+      if (!initialDiskOption) {
+        const available = [...initialDiskSelect.options]
+          .map((option) => option.textContent?.trim() || option.value).filter(Boolean).join(', ')
+        throw new Error(`Loại Disk ${config.diskType} không tương thích với trang Tạo computing${available ? ` (đang có: ${available})` : ''}.`)
+      }
+    }
 
     await setNumber('CPU', config.cpu)
     applied.push('CPU')
@@ -410,6 +686,47 @@ export async function pasteServiceConfigIntoDOM(config: PortalVmConfig): Promise
     applied.push('RAM')
     await setNumber('Internet', config.internetMbps)
     applied.push('Internet')
+
+    if (advancedCreate) {
+      const reservation = reservationSelect()
+      if (!reservation) throw new Error('Không tìm thấy ô Cấu hình reservation.')
+      const desiredReservation = groupedServiceOption(reservation)
+      if (!desiredReservation) {
+        throw new Error(`Không tìm thấy Cấu hình reservation cho loại dịch vụ "${config.serviceType || config.serviceTypeId}".`)
+      }
+      await selectOption(reservation, desiredReservation, 'Cấu hình reservation')
+      if (reservationSelect()?.value !== desiredReservation.value) {
+        throw new Error('Portal chưa giữ Cấu hình reservation vừa chọn.')
+      }
+      applied.push('Cấu hình reservation')
+
+      const pool = diskPoolSelect()
+      const desiredPool = pool && [...pool.options].find((option) =>
+        !!option.value.trim() && !/\bchọn\b/i.test(option.textContent ?? ''))
+      if (!pool || !desiredPool) throw new Error('Không tìm thấy lựa chọn Disk pool.')
+      await selectOption(pool, desiredPool, 'Disk pool')
+      if (diskPoolSelect()?.value !== desiredPool.value) throw new Error('Portal chưa giữ Disk pool vừa chọn.')
+      applied.push('Disk Pool')
+
+      await setNumber('Disk', config.diskGB)
+      applied.push('Disk')
+
+      const storageReservation = diskSelect()
+      if (!storageReservation) throw new Error('Không tìm thấy ô Cấu hình storage reservation.')
+      const desiredStorage = diskOption(storageReservation)
+      if (!desiredStorage) {
+        const available = [...storageReservation.querySelectorAll('optgroup')]
+          .map((group) => group.label.trim()).filter(Boolean).join(', ')
+        throw new Error(`Loại Disk ${config.diskType} không tương thích với trang Tạo computing nâng cao${available ? ` (đang có: ${available})` : ''}.`)
+      }
+      await selectOption(storageReservation, desiredStorage, 'Cấu hình storage reservation', false)
+      if (diskSelect()?.value !== desiredStorage.value) {
+        throw new Error('Portal chưa giữ Cấu hình storage reservation vừa chọn.')
+      }
+      applied.push('Disk Reservation')
+      return result()
+    }
+
     const currentSelect = diskSelect()
     if (!currentSelect) throw new Error('Không còn ô chọn loại Disk.')
     const desiredOption = diskOption(currentSelect)

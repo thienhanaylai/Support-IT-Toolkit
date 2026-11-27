@@ -1,17 +1,23 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CheckRecord } from '../services/storage'
-import { tagElementsStorageKey } from '../services/tagElements'
+import { tagElementsStorageKey, type TagElementGroup } from '../services/tagElements'
+import { messageTemplatesStorageKey } from '../services/messageTemplates'
 
 const records: CheckRecord[] = [
   { id: 'one', at: '2026-11-24T12:00:00Z', tool: 'Ping', target: 'example.com', source: 'Local Agent', status: 'ok', result: { message: 'pong' } },
   { id: 'two', at: '2026-11-23T12:00:00Z', tool: 'TCP Port', target: 'test.net:443', source: 'Local Agent', status: 'warn', result: { message: 'timeout' } },
 ]
 
-async function openSettings(initialHistory = records) {
+async function openSettings(initialHistory = records, initialTagGroups: TagElementGroup[] = []) {
   document.body.innerHTML = '<div id="root"></div>'
   let onChanged: ((changes: Record<string, chrome.storage.StorageChange>, area: string) => void) | undefined
-  const get = vi.fn(async (key: string) => key === 'history' ? { history: initialHistory } : { settings: { timeoutMs: 3200, saveHistory: true } })
+  const get = vi.fn(async (key: string) => {
+    if (key === 'history') return { history: initialHistory }
+    if (key === tagElementsStorageKey) return { [tagElementsStorageKey]: initialTagGroups }
+    if (key === messageTemplatesStorageKey) return { [messageTemplatesStorageKey]: [] }
+    return { settings: { timeoutMs: 3200, saveHistory: true } }
+  })
   const set = vi.fn(async () => {})
   const remove = vi.fn(async () => {})
   let portalAllowed = false
@@ -183,5 +189,42 @@ describe('Settings history', () => {
     await selectTab('Lịch sử')
     expect(document.querySelector('#preferences')?.hasAttribute('hidden')).toBe(true)
     expect(document.querySelector('#history')?.hasAttribute('hidden')).toBe(false)
+  })
+
+  it('creates, edits, and saves message templates from Settings', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'template-one' })
+    const tagGroups: TagElementGroup[] = [{
+      id: 'vmware',
+      name: 'Vmware',
+      members: [{ id: 'vuong', name: 'Lê Ngọc Vương', elementId: '@10.19530321:team.longvan.vn' }],
+    }]
+    const { set } = await openSettings(records, tagGroups)
+    const tab = await selectTab('Template tin nhắn')
+    const section = document.querySelector('#message-templates')!
+    expect(tab.getAttribute('aria-selected')).toBe('true')
+    expect(section.hasAttribute('hidden')).toBe(false)
+    section.querySelector<HTMLButtonElement>('.tag-add-group')!.click()
+    await vi.waitFor(() => expect(section.querySelector('[aria-label="Tên template 1"]')).not.toBeNull())
+    const name = section.querySelector<HTMLInputElement>('[aria-label="Tên template 1"]')!
+    const content = section.querySelector<HTMLTextAreaElement>('[aria-label="Nội dung template 1"]')!
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(name, 'Thông báo kiểm tra')
+    name.dispatchEvent(new Event('input', { bubbles: true }))
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(content, 'Nội dung mẫu')
+    content.dispatchEvent(new Event('input', { bubbles: true }))
+    const tagButton = section.querySelector<HTMLButtonElement>('.message-template-tags button')!
+    expect(tagButton.textContent).toBe('Vmware')
+    tagButton.click()
+    await vi.waitFor(() => expect(content.value)
+      .toBe('Nội dung mẫu\n\n(Lê Ngọc Vương)[@10.19530321:team.longvan.vn]'))
+    expect(tagButton.classList.contains('is-added')).toBe(true)
+    section.querySelector<HTMLButtonElement>('.tag-editor-actions .primary')!.click()
+    await vi.waitFor(() => expect(set).toHaveBeenCalledWith({
+      [messageTemplatesStorageKey]: [{
+        id: 'template-one',
+        name: 'Thông báo kiểm tra',
+        content: 'Nội dung mẫu\n\n(Lê Ngọc Vương)[@10.19530321:team.longvan.vn]',
+      }],
+    }))
+    await vi.waitFor(() => expect(section.textContent).toContain('Đã lưu template tin nhắn'))
   })
 })

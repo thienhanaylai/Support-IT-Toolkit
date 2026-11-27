@@ -46,7 +46,7 @@ a {
   background: #fff;
 }
 .popup-header {
-  height: 50px;
+  height: 40px;
   padding: 0 24px;
   border-bottom: 1px solid #e7ecef;
   background: #fff;
@@ -72,6 +72,72 @@ a {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.portal-tools-toggle {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  min-height: 34px;
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: transparent;
+  color: #fff;
+  font: 750 10px/1 "Segoe UI", sans-serif;
+  cursor: pointer;
+  transition: background .15s, opacity .15s;
+}
+.portal-tools-toggle:hover:not(:disabled) {
+  background: #ffffff20;
+}
+.portal-tools-toggle-state {
+  min-width: 38px;
+  color: #d9e4e9;
+  font-size: 9px;
+  text-align: right;
+}
+.portal-tools-toggle.is-enabled .portal-tools-toggle-state {
+  color: #b9f6ca;
+}
+.portal-tools-toggle-track {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  flex: none;
+  border: 1px solid #ffffff80;
+  border-radius: 999px;
+  background: #64748b;
+  box-shadow: inset 0 1px 2px #10242d66;
+  transition: background .18s, border-color .18s;
+}
+.portal-tools-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px #10242d80;
+  transition: transform .18s ease;
+}
+.portal-tools-toggle.is-enabled .portal-tools-toggle-track {
+  border-color: #4ade80;
+  background: #16a34a;
+}
+.portal-tools-toggle.is-enabled .portal-tools-toggle-thumb {
+  transform: translateX(18px);
+}
+.portal-tools-toggle:disabled {
+  opacity: .6;
+  cursor: wait;
+}
+.portal-tools-toggle:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
 }
 .popup-settings {
   display: inline-flex;
@@ -1489,7 +1555,7 @@ h1 span {
   border: 0;
 }
 .options-page .main-content {
-  padding: 34px 36px 48px;
+  padding: 0px 0px;
 }
 .options-page .intro {
   font-size: 13px;
@@ -1780,7 +1846,9 @@ h1 span {
   border-radius: 7px;
   background: #fff;
   color: #273b45;
-  font: 11px/1.55 Consolas, monospace;
+  font:
+    11px/1.55 Consolas,
+    monospace;
 }
 .tag-import textarea:focus-visible,
 .tag-elements-options input:focus-visible {
@@ -1903,6 +1971,120 @@ h1 span {
 }
 .tag-editor-actions .success {
   margin: 0;
+}
+.message-template-editors {
+  display: grid;
+  gap: 11px;
+}
+.message-template-editor {
+  padding: 13px;
+  border: 1px solid #dfe9e7;
+  border-radius: 9px;
+  background: #fff;
+}
+.message-template-heading {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.message-template-heading label {
+  flex: 1;
+}
+.message-template-heading label > span,
+.message-template-content > span {
+  display: block;
+  margin-bottom: 7px;
+  color: #354d54;
+  font-size: 11px;
+  font-weight: 750;
+}
+.message-template-editor input,
+.message-template-editor textarea {
+  width: 100%;
+  border: 1px solid #d9e5e3;
+  border-radius: 6px;
+  background: #fff;
+  color: #273b45;
+  font-size: 11px;
+}
+.message-template-editor input {
+  height: 36px;
+  padding: 0 10px;
+}
+.message-template-content {
+  display: block;
+  margin-top: 11px;
+}
+.message-template-editor textarea {
+  display: block;
+  min-height: 110px;
+  resize: vertical;
+  padding: 10px;
+  line-height: 1.5;
+}
+.message-template-tags {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 9px;
+}
+.message-template-tags button {
+  min-height: 31px;
+  padding: 0 12px;
+  border: 1px solid #90caf9;
+  border-radius: 99px;
+  background: #eaf4fd;
+  color: #1565c0;
+  font-size: 10px;
+  font-weight: 750;
+}
+.message-template-tags button:hover:not(:disabled) {
+  border-color: #64b5f6;
+  background: #d8ecfc;
+  color: #0d47a1;
+}
+.message-template-tags button.is-added {
+  border-color: #1976d2;
+  background: #1976d2;
+  color: #fff;
+  animation: message-template-tag-pulse 0.7s ease-out;
+}
+.message-template-tags button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.message-template-tags small {
+  color: #71858d;
+  font-size: 10px;
+}
+@keyframes message-template-tag-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 #2196f366;
+  }
+  35% {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 6px #2196f326;
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 #2196f300;
+  }
+}
+.message-template-editor input:focus-visible,
+.message-template-editor textarea:focus-visible {
+  border-color: #2196f3;
+  outline: 2px solid #2196f326;
+}
+.message-template-empty {
+  margin: 0;
+  padding: 18px;
+  border: 1px dashed #cbdce8;
+  border-radius: 9px;
+  background: #f5f9fd;
+  color: #71858d;
+  font-size: 11px;
+  text-align: center;
 }
 .options-auth-export {
   display: flex;
@@ -2192,7 +2374,8 @@ h1 span {
     line-height: 1.4;
   }
   .tag-import > div,
-  .tag-group-editor-heading {
+  .tag-group-editor-heading,
+  .message-template-heading {
     align-items: stretch;
     flex-direction: column;
   }
@@ -2438,7 +2621,7 @@ h1 span {
 /* Tag Element tab */
 .tag-tab-content {
   min-height: 570px;
-  padding: 16px 18px 22px;
+  padding: 12px 18px 22px;
 }
 .tag-tab-heading {
   display: flex;
@@ -2497,7 +2680,9 @@ h1 span {
   border-radius: 9px;
   background: #fbfdfc;
   box-shadow: 0 2px 7px #17263308;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 .tag-tab-card.is-copied {
   border-color: #19b784;
@@ -2769,6 +2954,7 @@ h1 span {
   font-size: 10px;
   overflow-wrap: anywhere;
 }
+.auth-edit,
 .auth-delete {
   display: grid;
   place-items: center;
@@ -2778,6 +2964,10 @@ h1 span {
   border-radius: 5px;
   background: transparent;
   color: #9aafb3;
+}
+.auth-edit:hover {
+  background: #e3f2fd;
+  color: #1565c0;
 }
 .auth-delete:hover {
   background: #fff0ee;
@@ -2833,7 +3023,7 @@ h1 span {
   height: 100%;
   border-radius: 5px;
   background: #18b985;
-  transition: width 0.25s linear;
+  transition: width 0.5s linear;
 }
 .auth-timer > small {
   position: absolute;
@@ -2993,7 +3183,14 @@ h1 span {
   min-width: 0;
   flex: 0 1 185px;
 }
+.auth-card-actions {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 2px;
+}
 .auth-drag-handle,
+.auth-edit,
 .auth-delete {
   display: grid;
   flex: none;
@@ -3003,6 +3200,7 @@ h1 span {
   background: transparent;
   color: #8ca1a6;
 }
+.auth-edit,
 .auth-delete {
   width: 30px;
   height: 34px;
@@ -3023,9 +3221,85 @@ h1 span {
   color: #087457;
 }
 .auth-drag-handle:focus-visible,
+.auth-edit:focus-visible,
 .auth-delete:focus-visible {
   outline: 2px solid #00a97a;
   outline-offset: 1px;
+}
+.auth-edit-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) auto;
+  align-items: end;
+  gap: 8px;
+  margin: 9px 0 2px 41px;
+  padding: 10px;
+  border: 1px solid #b9d5e8;
+  border-radius: 7px;
+  background: #eef7fd;
+  cursor: default;
+}
+.auth-edit-form label {
+  min-width: 0;
+}
+.auth-edit-form label > span {
+  display: block;
+  margin-bottom: 5px;
+  color: #536b76;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .25px;
+}
+.auth-edit-form input {
+  width: 100%;
+  height: 31px;
+  border: 1px solid #b8ccd8;
+  border-radius: 5px;
+  padding: 0 8px;
+  background: #fff;
+  color: #203641;
+  font-size: 10px;
+}
+.auth-edit-form input:focus {
+  outline: 2px solid #1976d233;
+  border-color: #1976d2;
+}
+.auth-edit-actions {
+  display: flex;
+  gap: 5px;
+}
+.auth-edit-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 31px;
+  border: 1px solid #1976d2;
+  border-radius: 5px;
+  padding: 0 8px;
+  background: #1976d2;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+}
+.auth-edit-actions button:hover:not(:disabled) {
+  border-color: #1565c0;
+  background: #1565c0;
+}
+.auth-edit-actions button:last-child {
+  border-color: #b8ccd8;
+  background: #fff;
+  color: #607d8b;
+}
+.auth-edit-actions button:last-child:hover:not(:disabled) {
+  border-color: #90a4ae;
+  background: #eef3f5;
+}
+.auth-edit-actions button:disabled,
+.auth-edit:disabled,
+.auth-delete:disabled,
+.auth-drag-handle:disabled {
+  opacity: .5;
+  cursor: not-allowed;
 }
 .auth-code-value {
   flex: 1 1 190px;
@@ -3682,6 +3956,13 @@ html.auth-is-reordering * {
   .auth-delete {
     color: #9fb2b6;
   }
+  .auth-edit {
+    color: #9fb2b6;
+  }
+  .auth-edit:hover {
+    background: #173a55;
+    color: #90caf9;
+  }
   .auth-delete:hover {
     background: #472b2b;
     color: #ffb2aa;
@@ -3727,6 +4008,28 @@ html.auth-is-reordering * {
   }
   .auth-code-value {
     color: #47bdeb;
+  }
+  .auth-edit-form {
+    border-color: #38556b;
+    background: #14232d;
+  }
+  .auth-edit-form label > span {
+    color: #adc3c4;
+  }
+  .auth-edit-form input {
+    border-color: #38556b;
+    background: #0b141a;
+    color: #e7f0f6;
+  }
+  .auth-edit-actions button:last-child {
+    border-color: #38556b;
+    background: #172a37;
+    color: #b4c8d4;
+  }
+  .auth-edit-actions button:last-child:hover:not(:disabled) {
+    border-color: #426a86;
+    background: #1d4058;
+    color: #e7f0f6;
   }
   .auth-copy {
     background: #1d4036;
@@ -3931,7 +4234,6 @@ h1 span,
 
 :root[data-theme="dark"] .header,
 :root[data-theme="dark"] .popup-header {
-  border-top-color: #ffb300;
   background: #1565c0 !important;
 }
 :root[data-theme="dark"] .eyebrow,
@@ -4003,6 +4305,253 @@ h1 span,
 }
 :root[data-theme="dark"] .auth-timer > span {
   background: #42a5f5;
+}
+
+/* Password generator and remaining interactive states */
+.password-generator {
+  border-color: #d5e5f1;
+  background: #f5f9fd;
+}
+.password-heading > .tool-icon {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+.password-options-toggle,
+.password-history-toggle {
+  color: #1565c0;
+}
+.password-options-toggle:hover,
+.password-history-toggle:hover {
+  background: #e3f2fd;
+  color: #0d47a1;
+}
+.password-options-toggle[aria-expanded="true"],
+.password-history-toggle[aria-expanded="true"] {
+  border-color: #90caf9;
+  background: #d8ecfc;
+  color: #0d47a1;
+}
+.password-options {
+  border-color: #d5e5f1;
+}
+.password-options input[type="checkbox"] {
+  accent-color: #1976d2;
+}
+.password-length input:focus,
+.password-special-count input:focus,
+.password-extra > input:focus {
+  border-color: #2196f3;
+  outline: 3px solid #2196f326;
+}
+.password-save-options,
+.password-result button,
+.password-recent button {
+  border-color: #90caf9;
+  background: #eaf4fd;
+  color: #1565c0;
+}
+.password-save-options:hover,
+.password-result button:hover,
+.password-recent button:hover {
+  border-color: #64b5f6;
+  background: #d8ecfc;
+  color: #0d47a1;
+}
+.password-generate {
+  border-color: #1976d2;
+  background: #1976d2;
+  box-shadow: 0 3px 9px #1976d238;
+}
+.password-generate:hover {
+  border-color: #1565c0;
+  background: #1565c0;
+  box-shadow: 0 4px 11px #1565c052;
+}
+.password-generate:focus-visible,
+.password-options-toggle:focus-visible,
+.password-history-toggle:focus-visible,
+.password-save-options:focus-visible,
+.password-result button:focus-visible,
+.password-recent button:focus-visible {
+  outline: 2px solid #ffb300;
+  outline-offset: 2px;
+}
+.password-result {
+  border-color: #d5e5f1;
+  background: #fff;
+}
+.password-recent {
+  border-color: #d5e5f1;
+}
+.password-recent > div {
+  background: #eef7fe;
+}
+.copy-button:hover:not(:disabled),
+.toolbar button:hover:not(:disabled),
+.mx-key-open:hover:not(:disabled),
+.mx-key-actions button:hover:not(:disabled),
+.options-history-tools > button:hover:not(:disabled),
+.options-auth-export > button:hover:not(:disabled) {
+  border-color: #64b5f6;
+  background: #d8ecfc;
+  color: #0d47a1;
+}
+.copy-current-vm {
+  border-color: #1976d2;
+  background: #1976d2;
+  color: #fff;
+}
+.copy-current-vm:hover:not(:disabled) {
+  border-color: #1565c0;
+  background: #1565c0;
+}
+.recent:hover,
+.recent-active,
+.tag-tab-group-copy:hover:not(:disabled),
+.tag-tab-members button:hover {
+  border-color: #64b5f6;
+  background: #eef7fe;
+}
+.auth-drag-handle:hover {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+:root[data-theme] button:focus-visible,
+:root[data-theme] a:focus-visible {
+  outline-color: #ffb300;
+}
+
+:root[data-theme="dark"] .password-generator {
+  border-color: #304957;
+  background: #121f28;
+}
+:root[data-theme="dark"] .password-heading > .tool-icon {
+  background: #173a55;
+  color: #90caf9;
+}
+:root[data-theme="dark"] .password-heading strong,
+:root[data-theme="dark"] .password-checks label,
+:root[data-theme="dark"] .password-extra span,
+:root[data-theme="dark"] .password-length,
+:root[data-theme="dark"] .password-special-count {
+  color: #e7f0f6;
+}
+:root[data-theme="dark"] .password-options {
+  border-color: #304957;
+}
+:root[data-theme="dark"] .password-options-toggle,
+:root[data-theme="dark"] .password-history-toggle {
+  color: #90caf9;
+}
+:root[data-theme="dark"] .password-options-toggle:hover,
+:root[data-theme="dark"] .password-history-toggle:hover,
+:root[data-theme="dark"] .password-options-toggle[aria-expanded="true"],
+:root[data-theme="dark"] .password-history-toggle[aria-expanded="true"] {
+  border-color: #426a86;
+  background: #173a55;
+  color: #bbdefb;
+}
+:root[data-theme="dark"] .password-length input,
+:root[data-theme="dark"] .password-special-count input,
+:root[data-theme="dark"] .password-extra > input,
+:root[data-theme="dark"] .password-result {
+  border-color: #38556b;
+  background: #0b141a;
+  color: #e7f0f6;
+}
+:root[data-theme="dark"] .password-save-options,
+:root[data-theme="dark"] .password-result button,
+:root[data-theme="dark"] .password-recent button {
+  border-color: #426a86;
+  background: #172a37;
+  color: #90caf9;
+}
+:root[data-theme="dark"] .password-save-options:hover,
+:root[data-theme="dark"] .password-result button:hover,
+:root[data-theme="dark"] .password-recent button:hover {
+  border-color: #64b5f6;
+  background: #1d4058;
+  color: #bbdefb;
+}
+:root[data-theme="dark"] .password-generate {
+  border-color: #1976d2;
+  background: #1976d2;
+  box-shadow: 0 3px 9px #0006;
+}
+:root[data-theme="dark"] .password-generate:hover {
+  border-color: #42a5f5;
+  background: #1565c0;
+  box-shadow: 0 4px 12px #0008;
+}
+:root[data-theme="dark"] .password-recent {
+  border-color: #304957;
+}
+:root[data-theme="dark"] .password-recent > div {
+  background: #14232d;
+}
+:root[data-theme="dark"] .copy-button,
+:root[data-theme="dark"] .toolbar button {
+  border-color: #426a86;
+  background: #172a37;
+  color: #90caf9;
+}
+:root[data-theme="dark"] .copy-button:hover:not(:disabled),
+:root[data-theme="dark"] .toolbar button:hover:not(:disabled),
+:root[data-theme="dark"] .mx-key-open:hover:not(:disabled),
+:root[data-theme="dark"] .mx-key-actions button:hover:not(:disabled),
+:root[data-theme="dark"] .options-history-tools > button:hover:not(:disabled),
+:root[data-theme="dark"] .options-auth-export > button:hover:not(:disabled) {
+  border-color: #64b5f6;
+  background: #1d4058;
+  color: #bbdefb;
+}
+:root[data-theme="dark"] .recent:hover,
+:root[data-theme="dark"] .recent-active,
+:root[data-theme="dark"] .tag-tab-group-copy:hover:not(:disabled),
+:root[data-theme="dark"] .tag-tab-members button:hover {
+  border-color: #42a5f5;
+  background: #162f42;
+}
+:root[data-theme="dark"] .auth-drag-handle:hover {
+  background: #173a55;
+  color: #90caf9;
+}
+:root[data-theme="dark"] .message-template-editor {
+  border-color: #304957;
+  background: #14232d;
+}
+:root[data-theme="dark"] .message-template-heading label > span,
+:root[data-theme="dark"] .message-template-content > span {
+  color: #e7f0f6;
+}
+:root[data-theme="dark"] .message-template-editor input,
+:root[data-theme="dark"] .message-template-editor textarea {
+  border-color: #38556b;
+  background: #0b141a;
+  color: #e7f0f6;
+}
+:root[data-theme="dark"] .message-template-tags button {
+  border-color: #426a86;
+  background: #172a37;
+  color: #90caf9;
+}
+:root[data-theme="dark"] .message-template-tags button:hover:not(:disabled) {
+  border-color: #64b5f6;
+  background: #1d4058;
+  color: #bbdefb;
+}
+:root[data-theme="dark"] .message-template-tags button.is-added {
+  border-color: #1976d2;
+  background: #1976d2;
+  color: #fff;
+}
+:root[data-theme="dark"] .message-template-tags small {
+  color: #adc3c4;
+}
+:root[data-theme="dark"] .message-template-empty {
+  border-color: #38556b;
+  background: #14232d;
+  color: #adc3c4;
 }
 :root[data-theme="dark"],
 :root[data-theme="dark"] body,

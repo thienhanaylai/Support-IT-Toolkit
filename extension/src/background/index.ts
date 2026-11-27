@@ -25,6 +25,41 @@ registerJobs()
 
 const portalScriptId = 'longvan-portal-tools'
 const portalMatches = [portalOriginPattern]
+const portalCreateMatches = [
+  'https://portal.longvan.vn/computing-manager/manager/computing/computing_create.xhtml*',
+  'https://portal.longvan.vn/computing-manager/manager/computing/computing_create_plus.xhtml*',
+]
+
+async function broadcastPortalVmConfig(config: unknown, vmName: string): Promise<void> {
+  if (!chrome.tabs?.query || !chrome.tabs?.sendMessage) return
+  try {
+    const tabs = await chrome.tabs.query({ url: portalCreateMatches })
+    await Promise.allSettled(tabs.flatMap((tab) => tab.id === undefined ? [] : [
+      chrome.tabs.sendMessage(tab.id, {
+        type: 'toolkit:vm-config-updated',
+        config,
+        vmName,
+      }),
+    ]))
+  } catch {
+    // Copying must still succeed when no create tab is open or a tab is being reloaded.
+  }
+}
+
+async function broadcastPortalToolsEnabled(enabled: boolean): Promise<void> {
+  if (!chrome.tabs?.query || !chrome.tabs?.sendMessage) return
+  try {
+    const tabs = await chrome.tabs.query({ url: portalMatches })
+    await Promise.allSettled(tabs.flatMap((tab) => tab.id === undefined ? [] : [
+      chrome.tabs.sendMessage(tab.id, {
+        type: 'toolkit:portal-tools-enabled',
+        enabled,
+      }),
+    ]))
+  } catch {
+    // Tabs can close or reload while the visibility preference is being broadcast.
+  }
+}
 
 async function syncPortalContentScript(): Promise<void> {
   if (!chrome.permissions?.contains || !chrome.scripting?.getRegisteredContentScripts) return
@@ -170,9 +205,26 @@ chrome.runtime.onMessage.addListener((message: {
   templateId?: unknown
   name?: unknown
   content?: unknown
+  enabled?: unknown
 }, sender, respond) => {
   const tabId = sender.tab?.id
   const url = sender.tab?.url
+  if (message?.type === 'toolkit:get-portal-tools-enabled') {
+    void getSettings().then(
+      (settings) => respond({ enabled: settings.portalToolsEnabled }),
+      (error) => respond({ error: error instanceof Error ? error.message : String(error) }),
+    )
+    return true
+  }
+  if (message?.type === 'toolkit:set-portal-tools-enabled') {
+    const enabled = message.enabled !== false
+    void getSettings().then(async (settings) => {
+      await chrome.storage.local.set({ settings: { ...settings, portalToolsEnabled: enabled } })
+      await broadcastPortalToolsEnabled(enabled)
+      respond({ enabled })
+    }, (error) => respond({ error: error instanceof Error ? error.message : String(error) }))
+    return true
+  }
   if (message?.type === 'toolkit:start-auth-qr-region') {
     void startAuthenticatorQRPicker().then(
       () => respond({ started: true }),
@@ -274,8 +326,11 @@ chrome.runtime.onMessage.addListener((message: {
   }
   if (message?.type === 'toolkit:copy-vm-config') {
     if (tabId === undefined || !url) { respond({ error: 'Không xác định được tab Dịch vụ.' }); return false }
-    void copyServiceConfig(tabId, url).then((config) =>
-      respond({ config, vmName: buildVmName(config.ownerName, config.serviceCode) }),
+    void copyServiceConfig(tabId, url).then(async (config) => {
+      const vmName = buildVmName(config.ownerName, config.serviceCode)
+      await broadcastPortalVmConfig(config, vmName)
+      respond({ config, vmName })
+    },
       (error) => respond({ error: error instanceof Error ? error.message : String(error) }))
     return true
   }

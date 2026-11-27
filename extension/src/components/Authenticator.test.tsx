@@ -129,6 +129,30 @@ it('adds an otpauth account, renders its current code and copies it when clicked
   expect(releasePointerCapture).toHaveBeenCalledWith(1)
   expect(document.documentElement.classList.contains('auth-is-reordering')).toBe(false)
   expect(document.querySelector('.auth-drag-preview')).toBeNull()
+  const editableCard = cards[0]
+  const editButton = editableCard.querySelector<HTMLButtonElement>('.auth-edit')!
+  const deleteButton = editableCard.querySelector<HTMLButtonElement>('.auth-delete')!
+  expect(editButton.nextElementSibling).toBe(deleteButton)
+  expect(editButton.getAttribute('aria-label')).toContain('LONGVAN-PT')
+  editButton.click()
+  const editForm = await vi.waitFor(() => {
+    const form = editableCard.querySelector<HTMLFormElement>('.auth-edit-form')
+    expect(form).not.toBeNull()
+    return form!
+  })
+  const [issuerInput, labelInput] = [...editForm.querySelectorAll<HTMLInputElement>('input')]
+  expect(issuerInput.value).toBe('LONGVAN-PT')
+  expect(labelInput.value).toBe('0917580860')
+  const inputSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+  inputSetter.call(issuerInput, 'LONGVAN-CLOUD')
+  issuerInput.dispatchEvent(new Event('input', { bubbles: true }))
+  inputSetter.call(labelInput, 'customer@example.com')
+  labelInput.dispatchEvent(new Event('input', { bubbles: true }))
+  editForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  await vi.waitFor(() => expect(editableCard.textContent).toContain('LONGVAN-CLOUD'))
+  expect(editableCard.textContent).toContain('customer@example.com')
+  expect(editableCard.querySelector('.auth-edit-form')).toBeNull()
+  expect(document.body.textContent).toContain('Đã cập nhật thông tin Authenticator')
   document.querySelector<HTMLElement>('.auth-card')!.click()
   await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/^\d{6}$/)))
   expect(JSON.stringify(storage)).not.toContain('JBSWY3DPEHPK3PXP')

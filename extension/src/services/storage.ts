@@ -8,8 +8,18 @@ export type CheckRecord = {
   result: Record<string, unknown>
 }
 export type Theme = 'light' | 'dark'
-export type Settings = { timeoutMs: number; saveHistory: boolean; theme: Theme }
-export const defaultSettings: Settings = { timeoutMs: 3000, saveHistory: true, theme: 'light' }
+export type Settings = {
+  timeoutMs: number
+  saveHistory: boolean
+  theme: Theme
+  portalToolsEnabled: boolean
+}
+export const defaultSettings: Settings = {
+  timeoutMs: 3000,
+  saveHistory: true,
+  theme: 'light',
+  portalToolsEnabled: true,
+}
 
 export function applyTheme(theme: Theme): void {
   document.documentElement.dataset.theme = theme
@@ -37,6 +47,7 @@ export async function getSettings(): Promise<Settings> {
     timeoutMs: saved?.timeoutMs ?? defaultSettings.timeoutMs,
     saveHistory: saved?.saveHistory ?? defaultSettings.saveHistory,
     theme: saved?.theme === 'dark' ? 'dark' : 'light',
+    portalToolsEnabled: saved?.portalToolsEnabled !== false,
   }
 }
 

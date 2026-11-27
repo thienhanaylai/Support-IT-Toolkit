@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CircleAlert, CircleCheck, GripVertical, Plus, ScanLine, Trash2, Upload } from 'lucide-react'
+import {
+  Check, CircleAlert, CircleCheck, GripVertical, Pencil, Plus, ScanLine, Trash2, Upload, X,
+} from 'lucide-react'
 import jsQR from 'jsqr'
 import {
   authenticatorRemainingSeconds, generateAuthenticatorCode, loadAuthenticatorEntries,
@@ -51,6 +53,9 @@ export function Authenticator() {
   const [uri, setUri] = useState('')
   const [openingRegionPicker, setOpeningRegionPicker] = useState(false)
   const [copiedId, setCopiedId] = useState('')
+  const [editingId, setEditingId] = useState('')
+  const [editIssuer, setEditIssuer] = useState('')
+  const [editLabel, setEditLabel] = useState('')
   const [draggedId, setDraggedId] = useState('')
   const [dropTarget, setDropTarget] = useState<{ id: string; position: 'before' | 'after' } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -242,6 +247,48 @@ export function Authenticator() {
     }
   }
 
+  function startEditing(entry: AuthenticatorEntry) {
+    setEditingId(entry.id)
+    setEditIssuer(entry.issuer)
+    setEditLabel(displayAccount(entry))
+    setError('')
+  }
+
+  function cancelEditing() {
+    setEditingId('')
+    setEditIssuer('')
+    setEditLabel('')
+  }
+
+  async function saveEntryName(event: React.FormEvent, entry: AuthenticatorEntry) {
+    event.preventDefault()
+    event.stopPropagation()
+    const issuer = editIssuer.trim()
+    const label = editLabel.trim()
+    if (!label) {
+      setError('Thông tin tài khoản không được để trống.')
+      return
+    }
+    if (entries.some((saved) => saved.id !== entry.id && saved.secret === entry.secret &&
+      saved.issuer === issuer && saved.label === label)) {
+      setError('Tên và thông tin Authenticator này đã tồn tại.')
+      return
+    }
+    try {
+      setSaving(true)
+      const next = entries.map((item) => item.id === entry.id ? { ...item, issuer, label } : item)
+      await saveAuthenticatorEntries(next)
+      setEntries(next)
+      cancelEditing()
+      setNotice('Đã cập nhật thông tin Authenticator.')
+      setError('')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function moveEntry(entry: AuthenticatorEntry, direction: -1 | 1) {
     if (saving) return
     const index = entries.findIndex((item) => item.id === entry.id)
@@ -381,7 +428,7 @@ export function Authenticator() {
   }
 
   function startPointerDrag(event: React.PointerEvent<HTMLButtonElement>, entry: AuthenticatorEntry) {
-    if (saving || event.button !== 0) return
+    if (saving || editingId || event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
     clearDragState()
@@ -503,11 +550,14 @@ export function Authenticator() {
         const remaining = authenticatorRemainingSeconds(entry, now)
         const percent = Math.max(0, Math.min(100, remaining / entry.period * 100))
         const dropPosition = dropTarget?.id === entry.id ? dropTarget.position : ''
-        return <article className={`auth-card${copiedId === entry.id ? ' is-copied' : ''}${draggedId === entry.id ? ' is-dragging' : ''}${dropPosition ? ` is-drop-${dropPosition}` : ''}`} key={entry.id}
-          data-entry-id={entry.id} title="Bấm vào thẻ để sao chép mã" onClick={() => void copyCode(entry)}>
+        const isEditing = editingId === entry.id
+        return <article className={`auth-card${copiedId === entry.id ? ' is-copied' : ''}${draggedId === entry.id ? ' is-dragging' : ''}${dropPosition ? ` is-drop-${dropPosition}` : ''}${isEditing ? ' is-editing' : ''}`} key={entry.id}
+          data-entry-id={entry.id} title={isEditing ? 'Đang chỉnh sửa thông tin' : 'Bấm vào thẻ để sao chép mã'}
+          onClick={() => { if (!isEditing) void copyCode(entry) }}>
           <div className="auth-card-title">
             <button type="button" className="auth-drag-handle" title="Giữ và kéo thẻ để thay đổi thứ tự"
               aria-label={`Kéo để sắp xếp ${displayIssuer(entry)}`}
+              disabled={saving || !!editingId}
               onClick={(event) => event.stopPropagation()}
               onPointerDown={(event) => startPointerDrag(event, entry)}
               onKeyDown={(event) => {
@@ -518,9 +568,41 @@ export function Authenticator() {
               }}><GripVertical size={23} /></button>
             <div className="auth-card-identity"><strong>{displayIssuer(entry)}</strong><small>{displayAccount(entry)}</small></div>
             <span className="auth-code-value">{code}</span>
-            <button type="button" className="auth-delete" title="Xóa Authenticator" aria-label={`Xóa ${displayIssuer(entry)}`}
-              disabled={saving} onClick={(event) => { event.stopPropagation(); void removeEntry(entry) }}><Trash2 size={15} /></button>
+            <div className="auth-card-actions">
+              <button type="button" className="auth-edit" title="Chỉnh sửa tên và thông tin"
+                aria-label={`Chỉnh sửa ${displayIssuer(entry)}`} disabled={saving}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  if (isEditing) cancelEditing()
+                  else startEditing(entry)
+                }}><Pencil size={15} /></button>
+              <button type="button" className="auth-delete" title="Xóa Authenticator" aria-label={`Xóa ${displayIssuer(entry)}`}
+                disabled={saving} onClick={(event) => { event.stopPropagation(); void removeEntry(entry) }}><Trash2 size={15} /></button>
+            </div>
           </div>
+          {isEditing && <form className="auth-edit-form"
+            onClick={(event) => event.stopPropagation()}
+            onSubmit={(event) => void saveEntryName(event, entry)}>
+            <label>
+              <span>Tên hiển thị</span>
+              <input autoFocus value={editIssuer} maxLength={200} placeholder="Ví dụ: LONGVAN-PT"
+                onChange={(event) => setEditIssuer(event.target.value)} />
+            </label>
+            <label>
+              <span>Tài khoản / nhãn</span>
+              <input value={editLabel} maxLength={300} required placeholder="Ví dụ: 0917580860"
+                onChange={(event) => setEditLabel(event.target.value)} />
+            </label>
+            <div className="auth-edit-actions">
+              <button type="submit" disabled={saving || !editLabel.trim()} title="Lưu thay đổi">
+                <Check size={14} /> Lưu
+              </button>
+              <button type="button" disabled={saving} title="Hủy chỉnh sửa"
+                onClick={(event) => { event.stopPropagation(); cancelEditing() }}>
+                <X size={14} /> Hủy
+              </button>
+            </div>
+          </form>}
           <div className="auth-timer" aria-label="Thời gian còn lại của mã"><span style={{ width: `${percent}%` }} /></div>
         </article>
       })}</div> : <p className="auth-empty">Chưa có mã Authenticator. Hãy quét QR hoặc import ảnh QR/file TXT để thêm.</p>}

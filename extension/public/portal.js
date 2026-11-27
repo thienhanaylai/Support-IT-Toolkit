@@ -1,6 +1,7 @@
 (() => {
   const servicePath = '/cloud-service-manager/manager/cloud-service-detail.xhtml'
   const createPath = '/computing-manager/manager/computing/computing_create.xhtml'
+  const createPlusPath = '/computing-manager/manager/computing/computing_create_plus.xhtml'
   const detailPath = '/computing-manager/manager/computing/computing_detail.xhtml'
   if (location.origin !== 'https://portal.longvan.vn') return
 
@@ -14,7 +15,7 @@
     vmInfoBusy: false, vmInfoCopied: false, vmInfoText: '', vmInfoKind: '',
     vmComposerOpen: false, vmComposerLoading: false, vmComposerCopying: false,
     vmComposerVmText: '', vmComposerExtraText: '', vmComposerTagGroups: [],
-    vmComposerTemplates: [], vmComposerSelectedTemplateId: '', vmComposerTemplateBusy: false,
+    vmComposerTemplates: [], vmComposerSelectedTemplateId: '',
     vmComposerText: '', vmComposerKind: '', vmComposerTheme: 'light',
     otpBusy: false, otpLoaded: false, otpCodes: [], otpSelectedId: '',
     otpMenuOpen: false, otpText: '', otpKind: '',
@@ -27,6 +28,7 @@
   let stopped = false
   let vmInfoToastTimer = 0
   let otpRefreshTimer = 0
+  let runtimeMessageHandler = null
   const otpMenuId = 'it-toolkit-otp-menu-popover'
 
   function element(tag, className, text) {
@@ -39,7 +41,7 @@
   function configText(config) {
     const describe = (name, id) => name && id && name !== id ? `${name} (${id})` : name || id || 'Không có'
     const vmName = state.vmName ? ` · Tên VM: ${state.vmName}` : ''
-    return `${config.cpu} Core · ${config.ramGB} GB RAM · ${config.internetMbps} Mb/s · ${config.diskGB} GB ${config.diskType.replace('_STORAGE', '')} · OS: ${describe(config.os, config.osId)} · Site Provider: ${describe(config.siteProvider, config.siteProviderId)}${vmName}`
+    return `${config.cpu} Core · ${config.ramGB} GB RAM · ${config.internetMbps} Mb/s · ${config.diskGB} GB ${config.diskType.replace('_STORAGE', '')} · OS: ${describe(config.os, config.osId)} · Loại dịch vụ: ${describe(config.serviceType, config.serviceTypeId)} · Site Provider: ${describe(config.siteProvider, config.siteProviderId)}${vmName}`
   }
 
   function setStatus(text, kind = '') {
@@ -119,6 +121,20 @@
     }
   }
 
+  function setPortalToolsEnabled(enabled) {
+    document.documentElement.classList.toggle('it-toolkit-portal-disabled', !enabled)
+    if (!enabled) {
+      state.passwordOptionsExpanded = false
+      state.vmComposerOpen = false
+      state.otpMenuOpen = false
+      document.querySelector('.it-toolkit-vm-composer-overlay')?.remove()
+      document.getElementById('it-toolkit-password-options-popover')?.setAttribute('hidden', '')
+      const otpMenu = document.getElementById(otpMenuId)
+      if (otpMenu) otpMenu.hidden = true
+    }
+    scheduleRender()
+  }
+
   function closeVmComposer() {
     state.vmComposerOpen = false
     state.vmComposerLoading = false
@@ -138,7 +154,6 @@
     state.vmComposerTagGroups = []
     state.vmComposerTemplates = []
     state.vmComposerSelectedTemplateId = ''
-    state.vmComposerTemplateBusy = false
     state.vmComposerText = 'Đang tải thông tin VM, template và Tag Element...'
     state.vmComposerKind = 'working'
     scheduleRender()
@@ -182,12 +197,26 @@
       state.vmComposerText = `Lĩnh vực ${group?.name || ''} chưa có thành viên.`
       state.vmComposerKind = 'error'
       scheduleRender()
-      return
+      return false
     }
     state.vmComposerExtraText = [state.vmComposerExtraText.trim(), text].filter(Boolean).join('\n\n')
-    state.vmComposerText = `Đã thêm liên hệ ${group.name}.`
-    state.vmComposerKind = 'success'
+    state.vmComposerText = ''
+    state.vmComposerKind = ''
     scheduleRender()
+    return true
+  }
+
+  function flashAddedButton(button, label) {
+    if (button.dataset.addedTimer) window.clearTimeout(Number(button.dataset.addedTimer))
+    button.classList.remove('is-added')
+    void button.offsetWidth
+    button.classList.add('is-added')
+    button.textContent = `✓ ${label}`
+    button.dataset.addedTimer = String(window.setTimeout(() => {
+      button.classList.remove('is-added')
+      button.textContent = label
+      delete button.dataset.addedTimer
+    }, 700))
   }
 
   function insertSelectedTemplate() {
@@ -203,76 +232,6 @@
     state.vmComposerText = `Đã chèn template ${template.name}.`
     state.vmComposerKind = 'success'
     scheduleRender()
-  }
-
-  async function saveCurrentTemplate() {
-    if (state.vmComposerTemplateBusy) return
-    const content = state.vmComposerExtraText.trim()
-    if (!content) {
-      state.vmComposerText = 'Hãy nhập nội dung bổ sung trước khi lưu template.'
-      state.vmComposerKind = 'error'
-      scheduleRender()
-      return
-    }
-    const selected = state.vmComposerTemplates.find((item) => item.id === state.vmComposerSelectedTemplateId)
-    const name = window.prompt('Tên template tin nhắn:', selected?.name || '')
-    if (name === null) return
-    state.vmComposerTemplateBusy = true
-    state.vmComposerText = 'Đang lưu template...'
-    state.vmComposerKind = 'working'
-    scheduleRender()
-    try {
-      const response = await sendMessage({
-        type: 'toolkit:save-message-template',
-        templateId: selected?.id,
-        name,
-        content,
-      })
-      if (response?.error) throw new Error(response.error)
-      state.vmComposerTemplates = Array.isArray(response?.templates) ? response.templates : []
-      state.vmComposerSelectedTemplateId = response?.template?.id || ''
-      state.vmComposerText = selected ? 'Đã cập nhật template.' : 'Đã lưu template mới.'
-      state.vmComposerKind = 'success'
-    } catch (error) {
-      state.vmComposerText = error instanceof Error ? error.message : String(error)
-      state.vmComposerKind = 'error'
-    } finally {
-      state.vmComposerTemplateBusy = false
-      scheduleRender()
-    }
-  }
-
-  async function deleteSelectedTemplate() {
-    if (state.vmComposerTemplateBusy) return
-    const selected = state.vmComposerTemplates.find((item) => item.id === state.vmComposerSelectedTemplateId)
-    if (!selected) {
-      state.vmComposerText = 'Hãy chọn template cần xóa.'
-      state.vmComposerKind = 'error'
-      scheduleRender()
-      return
-    }
-    if (!window.confirm(`Xóa template “${selected.name}”?`)) return
-    state.vmComposerTemplateBusy = true
-    state.vmComposerText = 'Đang xóa template...'
-    state.vmComposerKind = 'working'
-    scheduleRender()
-    try {
-      const response = await sendMessage({
-        type: 'toolkit:delete-message-template',
-        templateId: selected.id,
-      })
-      if (response?.error) throw new Error(response.error)
-      state.vmComposerTemplates = Array.isArray(response?.templates) ? response.templates : []
-      state.vmComposerSelectedTemplateId = ''
-      state.vmComposerText = 'Đã xóa template.'
-      state.vmComposerKind = 'success'
-    } catch (error) {
-      state.vmComposerText = error instanceof Error ? error.message : String(error)
-      state.vmComposerKind = 'error'
-    } finally {
-      state.vmComposerTemplateBusy = false
-      scheduleRender()
-    }
   }
 
   async function copyVmComposer() {
@@ -317,9 +276,9 @@
       dialog.setAttribute('aria-labelledby', 'it-toolkit-vm-composer-title')
       const header = element('div', 'it-toolkit-vm-composer-header')
       const titleWrap = element('div')
-      const title = element('strong', '', 'Copy thông tin VM nâng cao')
+      const title = element('strong', '', 'Copy VM')
       title.id = 'it-toolkit-vm-composer-title'
-      titleWrap.append(title, element('small', '', 'Chỉnh sửa, bổ sung nội dung và chèn liên hệ Tag Element.'))
+      titleWrap.append(title)
       const close = element('button', 'it-toolkit-vm-composer-close', '×')
       close.type = 'button'
       close.setAttribute('aria-label', 'Đóng')
@@ -327,22 +286,21 @@
       header.append(titleWrap, close)
 
       const vmLabel = element('label', 'it-toolkit-vm-composer-field')
-      vmLabel.append(element('span', '', 'Thông tin VM (có thể chỉnh sửa)'))
       const vmText = element('textarea', 'it-toolkit-vm-composer-vm')
       vmText.rows = 8
+      vmText.setAttribute('aria-label', 'Thông tin VM')
       vmText.addEventListener('input', () => { state.vmComposerVmText = vmText.value })
       vmLabel.append(vmText)
 
       const extraLabel = element('label', 'it-toolkit-vm-composer-field')
-      extraLabel.append(element('span', '', 'Nội dung bổ sung'))
       const extraText = element('textarea', 'it-toolkit-vm-composer-extra')
       extraText.rows = 5
-      extraText.placeholder = 'Nhập ghi chú hoặc nội dung cần gửi thêm...'
+      extraText.placeholder = 'Ghi chú, template hoặc liên hệ...'
+      extraText.setAttribute('aria-label', 'Nội dung bổ sung')
       extraText.addEventListener('input', () => { state.vmComposerExtraText = extraText.value })
       extraLabel.append(extraText)
 
       const templates = element('div', 'it-toolkit-vm-composer-templates')
-      templates.append(element('strong', '', 'Template tin nhắn'))
       const templateControls = element('div', 'it-toolkit-vm-composer-template-controls')
       const templateSelect = element('select', 'it-toolkit-vm-composer-template-select')
       templateSelect.setAttribute('aria-label', 'Chọn template tin nhắn')
@@ -353,28 +311,19 @@
       const insertTemplate = element('button', 'it-toolkit-vm-composer-template-insert', 'Chèn')
       insertTemplate.type = 'button'
       insertTemplate.addEventListener('click', insertSelectedTemplate)
-      const saveTemplate = element('button', 'it-toolkit-vm-composer-template-save', 'Lưu template')
-      saveTemplate.type = 'button'
-      saveTemplate.addEventListener('click', saveCurrentTemplate)
-      const deleteTemplate = element('button', 'it-toolkit-vm-composer-template-delete', 'Xóa')
-      deleteTemplate.type = 'button'
-      deleteTemplate.addEventListener('click', deleteSelectedTemplate)
-      templateControls.append(templateSelect, insertTemplate, saveTemplate, deleteTemplate)
+      templateControls.append(templateSelect, insertTemplate)
       templates.append(templateControls)
 
       const tags = element('div', 'it-toolkit-vm-composer-tags')
-      tags.append(element('strong', '', 'Thêm liên hệ theo lĩnh vực'), element('div', 'it-toolkit-vm-composer-tag-buttons'))
+      tags.append(element('div', 'it-toolkit-vm-composer-tag-buttons'))
       const footer = element('div', 'it-toolkit-vm-composer-footer')
       const status = element('span', 'it-toolkit-vm-composer-status')
       status.setAttribute('role', 'status')
       const actions = element('div', 'it-toolkit-vm-composer-actions')
-      const cancel = element('button', 'it-toolkit-vm-composer-cancel', 'Hủy')
-      cancel.type = 'button'
-      cancel.addEventListener('click', closeVmComposer)
-      const copy = element('button', 'it-toolkit-vm-composer-copy', 'Sao chép tất cả')
+      const copy = element('button', 'it-toolkit-vm-composer-copy', 'Sao chép')
       copy.type = 'button'
       copy.addEventListener('click', copyVmComposer)
-      actions.append(cancel, copy)
+      actions.append(copy)
       footer.append(status, actions)
       dialog.append(header, vmLabel, extraLabel, templates, tags, footer)
       overlay.append(dialog)
@@ -407,14 +356,10 @@
         templateSelect.dataset.signature = signature
       }
       templateSelect.value = state.vmComposerSelectedTemplateId
-      templateSelect.disabled = state.vmComposerLoading || state.vmComposerTemplateBusy
+      templateSelect.disabled = state.vmComposerLoading
     }
     const insertTemplate = overlay.querySelector('.it-toolkit-vm-composer-template-insert')
-    const saveTemplate = overlay.querySelector('.it-toolkit-vm-composer-template-save')
-    const deleteTemplate = overlay.querySelector('.it-toolkit-vm-composer-template-delete')
-    if (insertTemplate) insertTemplate.disabled = !state.vmComposerSelectedTemplateId || state.vmComposerTemplateBusy
-    if (saveTemplate) saveTemplate.disabled = state.vmComposerLoading || state.vmComposerTemplateBusy
-    if (deleteTemplate) deleteTemplate.disabled = !state.vmComposerSelectedTemplateId || state.vmComposerTemplateBusy
+    if (insertTemplate) insertTemplate.disabled = !state.vmComposerSelectedTemplateId
     const buttons = overlay.querySelector('.it-toolkit-vm-composer-tag-buttons')
     if (buttons) {
       const signature = state.vmComposerTagGroups.map((group) =>
@@ -425,7 +370,9 @@
           const button = element('button', '', group.name)
           button.type = 'button'
           button.disabled = !tagGroupText(group)
-          button.addEventListener('click', () => addTagGroupToComposer(group))
+          button.addEventListener('click', () => {
+            if (addTagGroupToComposer(group)) flashAddedButton(button, group.name)
+          })
           buttons.append(button)
         }
         if (!state.vmComposerTagGroups.length) buttons.append(element('small', '', 'Chưa có lĩnh vực Tag Element.'))
@@ -440,7 +387,7 @@
     const copy = overlay.querySelector('.it-toolkit-vm-composer-copy')
     if (copy) {
       copy.disabled = state.vmComposerLoading || state.vmComposerCopying
-      const label = state.vmComposerCopying ? 'Đang sao chép...' : 'Sao chép tất cả'
+      const label = state.vmComposerCopying ? 'Đang sao chép...' : 'Sao chép'
       if (copy.textContent !== label) copy.textContent = label
     }
   }
@@ -650,7 +597,10 @@
   async function pasteConfig() {
     if (state.busy) return
     state.busy = true
-    setStatus('Đang điền Template (nếu cần) → CPU → RAM → Internet → Disk. Vui lòng không thao tác trên form...', 'working')
+    const order = location.pathname === createPlusPath
+      ? 'Template → Cấu hình triển khai → CPU → RAM → Internet → Reservation → Disk'
+      : 'Template (nếu cần) → CPU → RAM → Internet → Disk'
+    setStatus(`Đang điền ${order}. Vui lòng không thao tác trên form...`, 'working')
     try {
       const response = await sendMessage({ type: 'toolkit:paste-vm-config' })
       markContextMismatches(response?.mismatches)
@@ -720,14 +670,11 @@
     state.vmNameKind = 'working'
     scheduleRender()
     try {
-      let vmName = state.vmName
-      if (!vmName) {
-        const response = await sendMessage({ type: 'toolkit:get-vm-config' })
-        if (response?.error) throw new Error(response.error)
-        state.config = response?.config ?? state.config
-        state.vmName = typeof response?.vmName === 'string' ? response.vmName.trim() : ''
-        vmName = state.vmName
-      }
+      const response = await sendMessage({ type: 'toolkit:get-vm-config' })
+      if (response?.error) throw new Error(response.error)
+      state.config = response?.config ?? null
+      state.vmName = typeof response?.vmName === 'string' ? response.vmName.trim() : ''
+      const vmName = state.vmName
       if (!vmName) throw new Error('Chưa có tên VM. Hãy bấm Sao chép thông số ở trang Dịch vụ trước.')
       const control = computingNameControl()
       if (!control) throw new Error('Không tìm thấy ô Tên của computing.')
@@ -741,6 +688,17 @@
       state.vmNameBusy = false
       scheduleRender()
     }
+  }
+
+  async function pasteAdvancedVmInfo() {
+    if (state.busy || state.vmNameBusy) return
+    setStatus('Đang điền tên VM và cấu hình đã sao chép...', 'working')
+    await pasteVmName()
+    if (state.vmNameKind === 'error') {
+      setStatus(state.vmNameText, 'error')
+      return
+    }
+    await pasteConfig()
   }
 
   function renderVmNameTool() {
@@ -1130,6 +1088,35 @@
 
   function renderCreate() {
     renderPasswordTool()
+    if (location.pathname === createPlusPath) {
+      const form = document.getElementById('frmMain')
+      const heading = [...(form?.querySelectorAll('h5') ?? [])].find((node) =>
+        (node.textContent ?? '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN') === 'thông tin cơ bản')
+      if (!heading) return
+      let header = heading.parentElement?.classList.contains('it-toolkit-plus-header')
+        ? heading.parentElement : null
+      if (!header) {
+        const host = heading.parentElement
+        if (!host) return
+        header = element('div', 'it-toolkit-plus-header')
+        heading.before(header)
+        header.append(heading)
+      }
+      heading.classList.add('it-toolkit-plus-heading')
+      let root = header.querySelector(':scope > .it-toolkit-plus-tools')
+      if (!root) {
+        root = element('div', 'it-toolkit-portal-tools it-toolkit-plus-tools')
+        const button = element('button', 'it-toolkit-portal-button', 'Dán thông tin VM')
+        button.type = 'button'
+        button.addEventListener('click', pasteAdvancedVmInfo)
+        root.append(button, element('div', 'it-toolkit-portal-status'))
+        header.append(root)
+      }
+      applyStatus(root)
+      const button = root.querySelector('.it-toolkit-portal-button')
+      if (button) button.disabled = state.busy || state.vmNameBusy
+      return
+    }
     renderVmNameTool()
     const fieldset = resourceFieldset()
     const content = fieldset?.querySelector('.ui-fieldset-content')
@@ -1301,7 +1288,7 @@
     renderQueued = false
     if (stopped) return
     if (location.pathname === servicePath) renderService()
-    if (location.pathname === createPath) renderCreate()
+    if (location.pathname === createPath || location.pathname === createPlusPath) renderCreate()
     if (location.pathname === detailPath) {
       renderDetail()
     }
@@ -1315,7 +1302,27 @@
     queueMicrotask(render)
   }
 
-  if (location.pathname === createPath) {
+  if (globalThis.chrome?.runtime?.onMessage?.addListener) {
+    runtimeMessageHandler = (message) => {
+      if (message?.type === 'toolkit:portal-tools-enabled') {
+        setPortalToolsEnabled(message.enabled !== false)
+        return
+      }
+      if (message?.type === 'toolkit:vm-config-updated' &&
+          (location.pathname === createPath || location.pathname === createPlusPath)) {
+        state.config = message.config ?? null
+        state.vmName = typeof message.vmName === 'string' ? message.vmName.trim() : ''
+        const summary = state.config ? configText(state.config) : 'chưa có cấu hình'
+        setStatus(`Đã nhận cấu hình mới: ${summary}.`, 'success')
+      }
+    }
+    globalThis.chrome.runtime.onMessage.addListener(runtimeMessageHandler)
+  }
+  sendMessage({ type: 'toolkit:get-portal-tools-enabled' }).then((response) => {
+    if (typeof response?.enabled === 'boolean') setPortalToolsEnabled(response.enabled)
+  }).catch(() => {})
+
+  if (location.pathname === createPath || location.pathname === createPlusPath) {
     sendMessage({ type: 'toolkit:get-vm-config' }).then((response) => {
       if (response?.config) state.config = response.config
       else if (response?.error) setStatus(response.error, 'error')
@@ -1347,6 +1354,9 @@
     document.removeEventListener('keydown', handlePasswordOptionsKey)
     document.removeEventListener('scroll', scheduleRender, true)
     window.removeEventListener('resize', scheduleRender)
+    if (runtimeMessageHandler && globalThis.chrome?.runtime?.onMessage?.removeListener) {
+      globalThis.chrome.runtime.onMessage.removeListener(runtimeMessageHandler)
+    }
     window.clearTimeout(vmInfoToastTimer)
     window.clearTimeout(otpRefreshTimer)
     removeOtpTool()
