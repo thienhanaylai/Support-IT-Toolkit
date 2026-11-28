@@ -878,9 +878,9 @@ function App() {
             </span>
             <div>
               <h2 id="options-history-title">
-                Lịch sử kiểm tra <span className="options-badge">{historyLoading ? "…" : history.length}/50</span>
+                Lịch sử hoạt động <span className="options-badge">{historyLoading ? "…" : history.length}/50</span>
               </h2>
-              <p>Xem lại kết quả trên thiết bị này, không đồng bộ sang trình duyệt khác.</p>
+              <p>Xem lại kết quả công cụ và cảnh báo Theo dõi trên thiết bị này.</p>
             </div>
           </div>
           {history.length > 0 && (
@@ -890,7 +890,7 @@ function App() {
                 <span className="sr-only">Tìm trong lịch sử</span>
                 <input
                   type="search"
-                  placeholder="Tìm công cụ hoặc mục tiêu..."
+                  placeholder="Tìm công cụ, cảnh báo hoặc mục tiêu..."
                   value={query}
                   onChange={event => setQuery(event.target.value)}
                 />
@@ -911,7 +911,7 @@ function App() {
           {historyLoading ? (
             <p className="options-empty">Đang tải lịch sử...</p>
           ) : !history.length ? (
-            <p className="options-empty">Chưa có lần kiểm tra nào được lưu. Chạy một công cụ từ popup để bắt đầu.</p>
+            <p className="options-empty">Chưa có hoạt động nào được lưu. Chạy công cụ hoặc bật Theo dõi để bắt đầu.</p>
           ) : (
             <>
               <p className="options-history-count">

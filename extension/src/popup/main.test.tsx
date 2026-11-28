@@ -350,8 +350,30 @@ it('opens a recent result inside the matching tool group', async () => {
 
 it('switches between the Tools and Authenticator feature tabs', async () => {
   document.body.innerHTML = '<div id="root"></div>'
+  const sendMessage = vi.fn(async (message: {
+    type: string
+    settings?: Record<string, unknown>
+    source?: string
+    enabled?: boolean
+  }) => {
+    if (message.type === 'toolkit:get-monitor') {
+      return {
+        monitorVersion: 13,
+        settings: { enabled: true, ticketEnabled: true, computingErrorEnabled: true, intervalSeconds: 300 },
+        state: {},
+      }
+    }
+    if (message.type === 'toolkit:save-monitor') {
+      return { settings: message.settings, state: {}, reloaded: 1 }
+    }
+    if (message.type === 'toolkit:monitor-set-source-notification') {
+      return { notified: false }
+    }
+    if (message.type === 'toolkit:monitor-mark-read') return { state: {} }
+    return {}
+  })
   vi.stubGlobal('chrome', {
-    runtime: { sendMessage: vi.fn(async () => ({})) },
+    runtime: { sendMessage },
     tabs: { query: vi.fn(async () => []) },
     storage: {
       session: { get: vi.fn(async () => ({})), set: vi.fn(async () => {}), remove: vi.fn(async () => {}) },
@@ -382,6 +404,84 @@ it('switches between the Tools and Authenticator feature tabs', async () => {
   expect(document.querySelector('.main-content')).toBeNull()
   expect(document.querySelector('.auth-content')).toBeNull()
   expect(document.querySelectorAll('.popup-tabs button')[1]?.textContent).toContain('Mật khẩu')
+
+  const monitorTab = [...document.querySelectorAll<HTMLButtonElement>('.popup-tabs button')]
+    .find((button) => button.textContent?.includes('Theo dõi'))!
+  monitorTab.click()
+  await vi.waitFor(() => expect(document.querySelector('.monitor-tab h1')?.textContent).toBe('Theo dõi Portal'))
+  expect(monitorTab.getAttribute('aria-selected')).toBe('true')
+  expect(document.querySelector('.monitor-master-switch.is-enabled .monitor-switch-track')).not.toBeNull()
+  expect(document.querySelector('.monitor-switch-label')?.textContent).toBe('Bật')
+  expect(document.querySelector('.monitor-source-count.is-ticket')?.textContent).toContain('NEW')
+  expect(document.querySelector('.monitor-source-count.is-computing')?.textContent).toContain('LỖI')
+  expect(document.querySelector('[aria-label="Tắt thông báo Windows cho Ticket mới"]')).not.toBeNull()
+  expect(document.querySelector('[aria-label="Tắt thông báo Windows cho VM lỗi"]')).not.toBeNull()
+
+  document.querySelector<HTMLButtonElement>('[aria-label="Tắt thông báo Windows cho Ticket mới"]')!.click()
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({
+    type: 'toolkit:monitor-set-source-notification',
+    source: 'ticket',
+    enabled: false,
+  }))
+  await vi.waitFor(() =>
+    expect(document.querySelector('.monitor-source-notify.is-disabled[aria-label="Bật thông báo Windows cho Ticket mới"]'))
+      .not.toBeNull())
+
+  const interval = document.querySelector<HTMLInputElement>('#monitor-interval')!
+  const setInput = (value: string) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(interval, value)
+    interval.dispatchEvent(new Event('input', { bubbles: true }))
+  }
+  setInput('')
+  expect(interval.value).toBe('')
+  setInput('5')
+  document.querySelector<HTMLButtonElement>('.monitor-save')!.click()
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+    type: 'toolkit:save-monitor',
+    settings: expect.objectContaining({ intervalSeconds: 10 }),
+  })))
+  expect(interval.value).toBe('10')
+
+  const increase = document.querySelector<HTMLButtonElement>('[aria-label="Tăng 5 giây"]')!
+  const decrease = document.querySelector<HTMLButtonElement>('[aria-label="Giảm 5 giây"]')!
+  await vi.waitFor(() => expect(increase.disabled).toBe(false))
+  increase.click()
+  await vi.waitFor(() => expect(interval.value).toBe('15'))
+  decrease.click()
+  await vi.waitFor(() => expect(interval.value).toBe('10'))
+  decrease.click()
+  await vi.waitFor(() => expect(interval.value).toBe('10'))
+})
+
+it('opens the Tools tab with text passed from the context menu', async () => {
+  document.body.innerHTML = '<div id="root"></div>'
+  const remove = vi.fn(async () => {})
+  vi.stubGlobal('chrome', {
+    runtime: { sendMessage: vi.fn(async () => ({})) },
+    tabs: { query: vi.fn(async () => []) },
+    storage: {
+      session: {
+        get: vi.fn(async () => ({ selectedTarget: '45.119.83.114' })),
+        set: vi.fn(async () => {}),
+        remove,
+      },
+      local: { get: vi.fn(async (key: string) => key === 'history' ? { history: [] } : {}) },
+      onChanged: { addListener: vi.fn(), removeListener: vi.fn() },
+    },
+  })
+
+  await import('./main')
+
+  const toolsTab = await vi.waitFor(() => {
+    const tab = [...document.querySelectorAll<HTMLButtonElement>('.popup-tabs button')]
+      .find((button) => button.textContent?.includes('Công cụ'))
+    expect(tab?.getAttribute('aria-selected')).toBe('true')
+    return tab!
+  })
+  expect(toolsTab.getAttribute('aria-selected')).toBe('true')
+  expect(document.querySelector('.main-content')).not.toBeNull()
+  expect(document.querySelector<HTMLInputElement>('.domain-tool-section input')?.value).toBe('45.119.83.114')
+  expect(remove).toHaveBeenCalledWith('selectedTarget')
 })
 
 it('shows HTTP Ping and DoH as independent browser tools with their own options', async () => {

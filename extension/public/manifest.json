@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "IT Support Toolkit",
-  "version": "0.2.2.4",
+  "version": "0.2.2.5",
   "description": "Công cụ kiểm tra mạng và hỗ trợ Portal trong trình duyệt.",
   "action": {
     "default_popup": "popup.html",
@@ -22,7 +22,7 @@
   "background": { "service_worker": "background.js", "type": "module" },
   "side_panel": { "default_path": "sidepanel.html" },
   "options_page": "options.html",
-  "permissions": ["storage", "activeTab", "scripting", "contextMenus", "sidePanel"],
+  "permissions": ["storage", "activeTab", "scripting", "contextMenus", "sidePanel", "alarms", "notifications"],
   "host_permissions": ["https://ifconfig.me/*", "https://cloudflare-dns.com/*", "https://dns.google/*", "https://dns.quad9.net/*"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "content_security_policy": {

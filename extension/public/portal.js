@@ -3,6 +3,8 @@
   const createPath = '/computing-manager/manager/computing/computing_create.xhtml'
   const createPlusPath = '/computing-manager/manager/computing/computing_create_plus.xhtml'
   const detailPath = '/computing-manager/manager/computing/computing_detail.xhtml'
+  const ticketListPath = '/crm/pages/ticket/index.xhtml'
+  const computingListPath = '/computing-manager/manager/computing/computing.xhtml'
   if (location.origin !== 'https://portal.longvan.vn') return
 
   const state = {
@@ -20,6 +22,7 @@
     vmComposerText: '', vmComposerKind: '', vmComposerTheme: 'light',
     otpBusy: false, otpLoaded: false, otpCodes: [], otpSelectedId: '',
     otpMenuOpen: false, otpText: '', otpKind: '',
+    monitorSignature: '',
   }
   const defaultPasswordOptions = {
     length: 16, specialCount: 3, numbers: true, lowercase: true, uppercase: true, special: true,
@@ -29,6 +32,7 @@
   let stopped = false
   let vmInfoToastTimer = 0
   let otpRefreshTimer = 0
+  let monitorReloadTimer = 0
   let runtimeMessageHandler = null
   const otpMenuId = 'it-toolkit-otp-menu-popover'
 
@@ -446,6 +450,126 @@
     return (node?.textContent ?? '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN')
   }
 
+  function monitorTotal(table, fallback) {
+    const text = table.querySelector('.ui-paginator-current')?.textContent ?? ''
+    const numbers = [...text.matchAll(/\d[\d.,]*/g)]
+      .map((match) => Number(match[0].replace(/[.,]/g, '')))
+      .filter(Number.isFinite)
+    return numbers.length ? numbers[numbers.length - 1] : fallback
+  }
+
+  function rowCellText(row, label) {
+    const cell = [...row.querySelectorAll('td')].find((candidate) =>
+      normalizedText(candidate.querySelector('.ui-column-title')) === label)
+    if (!cell) return ''
+    const copy = cell.cloneNode(true)
+    copy.querySelector('.ui-column-title')?.remove()
+    return (copy.textContent ?? '').replace(/\s+/g, ' ').trim()
+  }
+
+  function monitorSnapshot() {
+    if (location.pathname === ticketListPath) {
+      const table = document.querySelector('#frmDataTableTask\\:frmData\\:dt-task2')
+      if (!table) return null
+      const items = [...table.querySelectorAll('a[href*="/crm/pages/ticket/detail.xhtml"]')]
+        .flatMap((anchor) => {
+          const url = new URL(anchor.href, location.href)
+          const id = url.searchParams.get('id')?.trim()
+          const row = anchor.closest('tr[data-ri]')
+          const title = (anchor.textContent ?? '').replace(/\s+/g, ' ').trim()
+          if (!id || !row || !title) return []
+          const status = rowCellText(row, 'trạng thái')
+          const created = rowCellText(row, 'ngày tạo')
+          const assignee = rowCellText(row, 'trách nhiệm')
+          return [{
+            id,
+            title: title.slice(0, 500),
+            url: url.href,
+            status: status.slice(0, 100),
+            detail: [status, assignee, created].filter(Boolean).join(' · ').slice(0, 500),
+          }]
+        })
+      return { source: 'ticket', items, total: monitorTotal(table, items.length) }
+    }
+    if (location.pathname === computingListPath && new URL(location.href).searchParams.get('status') === '2') {
+      const table = document.querySelector('#j_idt71\\:modelList .ui-datatable')
+      if (!table) return null
+      const statusFilter = document.querySelector('select[aria-label="Trạng thái"]')
+      const errorFilterChip = [...document.querySelectorAll('#j_idt71\\:activeFilterChips .ui-chip-text')]
+        .some((node) => normalizedText(node) === 'trạng thái: triển khai lỗi')
+      if (statusFilter?.value !== '2' && !errorFilterChip) return null
+      const rows = [...table.querySelectorAll('tr[data-ri]')]
+      const items = rows.flatMap((row) => {
+          const anchor = row.querySelector('a[href*="/computing-manager/manager/computing/computing_detail.xhtml"]')
+          if (!anchor) return []
+          const url = new URL(anchor.href, location.href)
+          const id = url.searchParams.get('id')?.trim()
+          if (!id) return []
+          const nameNode = row.querySelector('.item-right')
+          const directName = [...(nameNode?.childNodes ?? [])]
+            .find((node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim())
+          const title = directName?.textContent?.replace(/\s+/g, ' ').trim() || id
+          const status = rowCellText(row, 'trạng thái')
+          if (normalizedText({ textContent: status }) !== 'triển khai lỗi') return []
+          const ip = rowCellText(row, 'ip')
+          return [{
+            id,
+            title: title.slice(0, 500),
+            url: url.href,
+            status: status.slice(0, 100),
+            detail: [id, status, ip].filter(Boolean).join(' · ').slice(0, 500),
+          }]
+        })
+      const total = items.length === rows.length ? monitorTotal(table, items.length) : items.length
+      return { source: 'computingError', items, total }
+    }
+    return null
+  }
+
+  function reportMonitorSnapshot() {
+    const snapshot = monitorSnapshot()
+    if (!snapshot) return
+    const signature = `${snapshot.source}|${snapshot.total}|${snapshot.items.map((item) => item.id).join(',')}`
+    if (signature === state.monitorSignature) return
+    state.monitorSignature = signature
+    sendMessage({ type: 'toolkit:monitor-snapshot', snapshot }).catch(() => {})
+  }
+
+  function monitorSourceForPage() {
+    if (location.pathname === ticketListPath) return 'ticket'
+    if (location.pathname === computingListPath &&
+        new URL(location.href).searchParams.get('status') === '2') return 'computingError'
+    return ''
+  }
+
+  function fastMonitorEnabled(settings, source, seconds) {
+    if (!settings?.enabled || !Number.isFinite(seconds) || seconds < 10 || seconds >= 30) return false
+    return source === 'ticket' ? settings.ticketEnabled !== false : settings.computingErrorEnabled !== false
+  }
+
+  async function monitorSettings() {
+    if (!globalThis.chrome?.storage?.local?.get) return null
+    const saved = await globalThis.chrome.storage.local.get('portalMonitorSettings')
+    return saved?.portalMonitorSettings ?? null
+  }
+
+  async function scheduleFastMonitorReload() {
+    const source = monitorSourceForPage()
+    if (!source) return
+    try {
+      const settings = await monitorSettings()
+      const seconds = Number(settings?.intervalSeconds)
+      if (!fastMonitorEnabled(settings, source, seconds)) return
+      window.clearTimeout(monitorReloadTimer)
+      monitorReloadTimer = window.setTimeout(() => {
+        void monitorSettings().then((current) => {
+          const currentSeconds = Number(current?.intervalSeconds)
+          if (!stopped && fastMonitorEnabled(current, source, currentSeconds)) location.reload()
+        }).catch(() => {})
+      }, seconds * 1000)
+    } catch {}
+  }
+
   function isVisible(node) {
     return !node.hidden && node.getAttribute('aria-hidden') !== 'true' &&
       node.style.display !== 'none' && node.style.visibility !== 'hidden'
@@ -531,6 +655,9 @@
     for (const anchor of document.querySelectorAll('.it-toolkit-otp-anchor')) {
       anchor.classList.remove('it-toolkit-otp-anchor')
     }
+    for (const layout of document.querySelectorAll('.it-toolkit-otp-layout')) {
+      layout.classList.remove('it-toolkit-otp-layout')
+    }
     document.getElementById(otpMenuId)?.remove()
     window.clearTimeout(otpRefreshTimer)
     state.otpBusy = false
@@ -540,6 +667,20 @@
     state.otpMenuOpen = false
     state.otpText = ''
     state.otpKind = ''
+  }
+
+  function otpToolsPlacement(control) {
+    const input = control.input
+    // Keep PrimeFaces' visual input wrappers intact and mount a dedicated row
+    // immediately before them. Mounting inside the text label can turn the
+    // Portal field into one long flex row and squeeze its existing buttons.
+    const wrapped = input.closest(
+      '.ui-inputgroup, .p-inputgroup, .ui-inputnumber, .p-inputnumber, ' +
+      '.ui-password, .p-password, .ui-inputotp, .p-inputotp',
+    )
+    const target = wrapped && control.dialog.contains(wrapped) ? wrapped : input
+    const parent = target.parentElement
+    return parent ? { parent, target } : null
   }
 
   function positionOtpMenu(menu, anchor) {
@@ -1253,17 +1394,10 @@
       }
       return
     }
-    let anchor = control.dialog?.querySelector('.it-toolkit-otp-anchor')
-    if (!anchor) {
-      const candidates = [...(control.dialog?.querySelectorAll('label, strong, span, div, p') ?? [])]
-      anchor = candidates.find((node) => {
-        const text = normalizedText(node)
-        return text.length <= 100 && /nhập mã xác thực/.test(text)
-      }) || control.label || control.dialog?.querySelector('.ui-dialog-content') || control.dialog
-      if (!anchor) return
-      anchor.classList.add('it-toolkit-otp-anchor')
-    }
-    let root = anchor.querySelector(':scope > .it-toolkit-otp-tools')
+    const placement = otpToolsPlacement(control)
+    if (!placement) return
+    placement.parent.classList.add('it-toolkit-otp-layout')
+    let root = control.dialog.querySelector('.it-toolkit-otp-tools')
     if (!root) {
       root = element('div', 'it-toolkit-otp-tools')
       const button = element('button', 'it-toolkit-otp-button', 'Đang tải mã...')
@@ -1277,7 +1411,11 @@
       picker.setAttribute('aria-controls', otpMenuId)
       picker.addEventListener('click', toggleAuthenticatorCodes)
       root.append(button, picker, element('span', 'it-toolkit-otp-status'))
-      anchor.append(root)
+    }
+    // A full-width row above the input keeps the Auth paste control on the
+    // right without taking horizontal space from Portal's input/action row.
+    if (root.parentElement !== placement.parent || root.nextSibling !== placement.target) {
+      placement.parent.insertBefore(root, placement.target)
     }
     if (!state.otpLoaded && !state.otpBusy) void loadAuthenticatorCodes(false)
     const selected = selectedOtpCode()
@@ -1339,6 +1477,7 @@
     }
     renderVmComposer()
     renderOtpTool()
+    reportMonitorSnapshot()
   }
 
   function scheduleRender() {
@@ -1404,10 +1543,12 @@
     }
     window.clearTimeout(vmInfoToastTimer)
     window.clearTimeout(otpRefreshTimer)
+    window.clearTimeout(monitorReloadTimer)
     removeOtpTool()
     document.querySelector('.it-toolkit-vm-composer-overlay')?.remove()
     document.getElementById('it-toolkit-vm-info-toast')?.remove()
     document.getElementById('it-toolkit-password-options-popover')?.remove()
   }, { once: true })
+  void scheduleFastMonitorReload()
   scheduleRender()
 })()

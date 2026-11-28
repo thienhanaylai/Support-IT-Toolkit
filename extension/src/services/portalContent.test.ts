@@ -46,6 +46,111 @@ async function execute(
   return dom
 }
 
+it('reads stable IDs and details from the real Ticket table structure for monitoring', async () => {
+  const sendMessage = vi.fn(async () => ({ accepted: true }))
+  const dom = await execute(
+    'https://portal.longvan.vn/crm/pages/ticket/index.xhtml?orgId=LONGVAN&wsId=20.1087',
+    `<div id="frmDataTableTask:frmData:dt-task2" class="ui-datatable">
+      <span class="ui-paginator-current">Hiển thị 1-50 trên tổng 14617 nhiệm vụ</span>
+      <table><tbody><tr data-ri="0">
+        <td><span class="ui-column-title">Tên</span>
+          <a href="/crm/pages/ticket/detail.xhtml?id=20.12574998.4145">Ticket mới</a></td>
+        <td><span class="ui-column-title">Trạng thái</span><span>DOING</span></td>
+        <td><span class="ui-column-title">Trách nhiệm</span>Nguyễn Minh Chiến</td>
+        <td><span class="ui-column-title">Ngày tạo</span>27/11/26 15:48</td>
+      </tr></tbody></table>
+    </div>`,
+    sendMessage,
+    undefined,
+    false,
+  )
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({
+    type: 'toolkit:monitor-snapshot',
+    snapshot: {
+      source: 'ticket',
+      total: 14617,
+      items: [{
+        id: '20.12574998.4145',
+        title: 'Ticket mới',
+        url: 'https://portal.longvan.vn/crm/pages/ticket/detail.xhtml?id=20.12574998.4145',
+        status: 'DOING',
+        detail: 'DOING · Nguyễn Minh Chiến · 27/11/26 15:48',
+      }],
+    },
+  }))
+  dom.window.dispatchEvent(new dom.window.Event('pagehide'))
+  dom.window.close()
+})
+
+it('reads Computing deployment errors only from the status=2 list', async () => {
+  const sendMessage = vi.fn(async () => ({ accepted: true }))
+  const dom = await execute(
+    'https://portal.longvan.vn/computing-manager/manager/computing/computing.xhtml?wsId=20.3&orgId=LONGVAN&status=2',
+    `<select aria-label="Trạng thái"><option value="1">Đã triển khai</option><option value="2" selected>Triển khai lỗi</option></select>
+    <span id="j_idt71:modelList"><div class="ui-datatable">
+      <span class="ui-paginator-current">Hiển thị kết quả từ 1 đến 1 trong 1 computing</span>
+      <table><tbody><tr data-ri="0">
+        <td><span class="ui-column-title">ID</span>
+          <a href="/computing-manager/manager/computing/computing_detail.xhtml?id=20.31527.9886&wsId=20.3&orgId=LONGVAN">20.31527.9886</a></td>
+        <td><span class="ui-column-title">Tên</span><div class="item-right">VM triển khai lỗi<span>Tên VM: vm-error</span></div></td>
+        <td><span class="ui-column-title">IP</span>45.119.83.114</td>
+        <td><span class="ui-column-title">Trạng thái</span><span>Triển khai lỗi</span></td>
+      </tr></tbody></table>
+    </div></span>`,
+    sendMessage,
+    undefined,
+    false,
+  )
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({
+    type: 'toolkit:monitor-snapshot',
+    snapshot: {
+      source: 'computingError',
+      total: 1,
+      items: [{
+        id: '20.31527.9886',
+        title: 'VM triển khai lỗi',
+        url: 'https://portal.longvan.vn/computing-manager/manager/computing/computing_detail.xhtml?id=20.31527.9886&wsId=20.3&orgId=LONGVAN',
+        status: 'Triển khai lỗi',
+        detail: '20.31527.9886 · Triển khai lỗi · 45.119.83.114',
+      }],
+    },
+  }))
+  dom.window.dispatchEvent(new dom.window.Event('pagehide'))
+  dom.window.close()
+})
+
+it('does not classify deployed Computing rows as deployment errors even when the URL contains status=2', async () => {
+  const sendMessage = vi.fn(async () => ({ accepted: true }))
+  const dom = await execute(
+    'https://portal.longvan.vn/computing-manager/manager/computing/computing.xhtml?wsId=20.3&orgId=LONGVAN&status=2',
+    `<select aria-label="Trạng thái"><option value="2" selected>Triển khai lỗi</option></select>
+    <span id="j_idt71:modelList"><div class="ui-datatable">
+      <span class="ui-paginator-current">Hiển thị kết quả từ 1 đến 60 trong 29155 computing</span>
+      <table><tbody><tr data-ri="0">
+        <td><span class="ui-column-title">ID</span>
+          <a href="/computing-manager/manager/computing/computing_detail.xhtml?id=20.31593.6764">20.31593.6764</a></td>
+        <td><span class="ui-column-title">Tên</span><div class="item-right">NguyenDinhDat VM</div></td>
+        <td><span class="ui-column-title">IP</span>45.119.86.177</td>
+        <td><span class="ui-column-title">Trạng thái</span><span>Đã triển khai</span></td>
+      </tr></tbody></table>
+    </div></span>`,
+    sendMessage,
+    undefined,
+    false,
+  )
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({
+    type: 'toolkit:monitor-snapshot',
+    snapshot: { source: 'computingError', total: 0, items: [] },
+  }))
+  expect(sendMessage).not.toHaveBeenCalledWith(expect.objectContaining({
+    snapshot: expect.objectContaining({
+      items: expect.arrayContaining([expect.objectContaining({ id: '20.31593.6764' })]),
+    }),
+  }))
+  dom.window.dispatchEvent(new dom.window.Event('pagehide'))
+  dom.window.close()
+})
+
 it('places Copy configuration beside the Service attribute panel actions', async () => {
   const sendMessage = vi.fn(async () => ({ config }))
   const dom = await execute(
@@ -239,6 +344,11 @@ it('fills the Portal OTP field from the matching Long Van Authenticator', async 
     sendMessage,
   )
   const input = dom.window.document.querySelector<HTMLInputElement>('#portal-otp')!
+  const tools = dom.window.document.querySelector<HTMLElement>('.it-toolkit-otp-tools')!
+  expect(tools.parentElement).toBe(input.parentElement)
+  expect(tools.nextElementSibling).toBe(input)
+  expect(tools.closest('.it-toolkit-otp-anchor')).toBeNull()
+  expect(tools.parentElement?.classList.contains('it-toolkit-otp-layout')).toBe(true)
   const onInput = vi.fn()
   const onChange = vi.fn()
   input.addEventListener('input', onInput)

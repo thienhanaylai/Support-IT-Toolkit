@@ -14,6 +14,7 @@ export type Settings = {
   theme: Theme
   portalToolsEnabled: boolean
 }
+export const maxHistoryRecords = 50
 export const defaultSettings: Settings = {
   timeoutMs: 3000,
   saveHistory: true,
@@ -58,9 +59,19 @@ export async function getHistory(): Promise<CheckRecord[]> {
 }
 
 export async function saveRecord(record: CheckRecord): Promise<void> {
+  await saveRecords([record])
+}
+
+export async function saveRecords(records: CheckRecord[]): Promise<void> {
+  if (!records.length) return
   const settings = await getSettings()
   if (!settings.saveHistory) return
   const history = await getHistory()
-  const safeRecord = { ...record, result: redactSensitive(record.result) as Record<string, unknown> }
-  await chrome.storage.local.set({ history: [safeRecord, ...history].slice(0, 50) })
+  const safeRecords = records.map((record) => ({
+    ...record,
+    result: redactSensitive(record.result) as Record<string, unknown>,
+  }))
+  await chrome.storage.local.set({
+    history: [...safeRecords, ...history].slice(0, maxHistoryRecords),
+  })
 }

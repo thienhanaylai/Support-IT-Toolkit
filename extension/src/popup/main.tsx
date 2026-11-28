@@ -1,11 +1,12 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Activity, ArrowRight, ClipboardCopy, Clock3, Cloud, Globe2, HardDrive, KeyRound, LockKeyhole, RotateCw, Search, Settings2, Tags, Wrench, Zap } from 'lucide-react'
+import { Activity, ArrowRight, BellRing, ClipboardCopy, Clock3, Cloud, Globe2, HardDrive, KeyRound, LockKeyhole, RotateCw, Search, Settings2, Tags, Wrench, Zap } from 'lucide-react'
 import { HistoryItem } from '../components/HistoryItem'
 import { Result } from '../components/Result'
 import { PasswordGenerator } from '../components/PasswordGenerator'
 import { Authenticator } from '../components/Authenticator'
 import { TagElements } from '../components/TagElements'
+import { PortalMonitor } from '../components/PortalMonitor'
 import { isTool, labels, type Tool } from '../services/checks'
 import { applyTheme, getHistory, getSettings, type CheckRecord } from '../services/storage'
 import { grantHost } from '../services/hostAccess'
@@ -36,7 +37,7 @@ function toolForRecord(record: CheckRecord): Tool | undefined {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'tools' | 'auth' | 'password' | 'tags'>('auth')
+  const [activeTab, setActiveTab] = useState<'tools' | 'auth' | 'password' | 'tags' | 'monitor'>('auth')
   const [input, setInput] = useState('')
   const [httpCount, setHttpCount] = useState(4)
   const [httpMethod, setHttpMethod] = useState<HTTPMethod>('HEAD')
@@ -112,6 +113,9 @@ function App() {
         setTool(isTool(draft.tool) ? draft.tool : null)
       }
       if (typeof stored.selectedTarget === 'string' && stored.selectedTarget) {
+        // The context-menu action is a direct entry point to the network tools.
+        // Do not leave the selected IP/domain hidden behind the default Auth tab.
+        setActiveTab('tools')
         setInput(stored.selectedTarget)
         void chrome.storage.session.remove('selectedTarget')
       } else if (!draft) {
@@ -340,6 +344,10 @@ function App() {
         className={activeTab === 'tools' ? 'active' : ''} onClick={() => setActiveTab('tools')}>
         <Wrench size={18} /> Công cụ
       </button>
+      <button type="button" role="tab" aria-selected={activeTab === 'monitor'}
+        className={activeTab === 'monitor' ? 'active' : ''} onClick={() => setActiveTab('monitor')}>
+        <BellRing size={18} /> Theo dõi
+      </button>
     </nav>
     {activeTab === 'tools' ? <div className="main-content">
       <section className="tool-section popup-tool-group domain-tool-section" aria-labelledby="input-tools-heading">
@@ -406,7 +414,7 @@ function App() {
       <div className="section-title history-title"><span>GẦN ĐÂY</span><button className="history-link" onClick={() => { void chrome.windows.getCurrent().then((w) => chrome.sidePanel.open({ windowId: w.id! })).catch(() => chrome.tabs.create({ url: chrome.runtime.getURL('sidepanel.html') })) }}>Xem tất cả <ArrowRight size={13} /></button></div>
       {recent.length ? recent.map((item) => <HistoryItem key={item.id} record={item} selected={record?.id === item.id} onClick={() => showRecord(item)} />) : <p className="empty"><Clock3 size={16} /> Chưa có lượt kiểm tra nào.</p>}
     </div> : activeTab === 'password' ? <div className="password-tab-content"><PasswordGenerator standalone /></div>
-      : activeTab === 'tags' ? <TagElements /> : <Authenticator />}
+      : activeTab === 'tags' ? <TagElements /> : activeTab === 'monitor' ? <PortalMonitor /> : <Authenticator />}
   </main>
 }
 createRoot(document.getElementById('root')!).render(<App />)

@@ -20,8 +20,10 @@ import { getSettings } from '../services/storage'
 import {
   deleteMessageTemplate, loadMessageTemplates, saveMessageTemplate,
 } from '../services/messageTemplates'
+import { registerPortalMonitor } from './portalMonitor'
 
 registerJobs()
+registerPortalMonitor()
 
 const portalScriptId = 'longvan-portal-tools'
 const portalMatches = [portalOriginPattern]
