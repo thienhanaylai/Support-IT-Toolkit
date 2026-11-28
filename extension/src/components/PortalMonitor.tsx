@@ -1,10 +1,11 @@
-import { BellOff, BellRing, ExternalLink, Minus, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
+import { BellOff, BellRing, ExternalLink, Minus, Pin, PinOff, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   defaultPortalMonitorSettings,
   defaultPortalMonitorState,
   normalizePortalMonitorSettings,
   normalizePortalMonitorState,
+  portalMonitorSourceCountdownSeconds,
   portalMonitorSettingsKey,
   portalMonitorStateKey,
   type PortalMonitorSettings,
@@ -15,6 +16,7 @@ type MonitorResponse = {
   settings?: unknown;
   state?: unknown;
   reloaded?: number;
+  opened?: number;
   monitorVersion?: number;
   error?: string;
 };
@@ -33,6 +35,8 @@ export function PortalMonitor() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  const [countdownStartedAt, setCountdownStartedAt] = useState<Partial<Record<"ticket" | "computingError", number>>>({});
 
   useEffect(() => {
     let mounted = true;
@@ -41,7 +45,7 @@ export function PortalMonitor() {
       .then((response: MonitorResponse) => {
         if (!mounted) return;
         if (response?.error) throw new Error(response.error);
-        if (response?.monitorVersion !== 13) {
+        if (response?.monitorVersion !== 14) {
           throw new Error("Background chưa được cập nhật. Hãy vào edge://extensions, bấm Reload rồi mở lại extension.");
         }
         const loadedSettings = normalizePortalMonitorSettings(response?.settings);
@@ -78,11 +82,54 @@ export function PortalMonitor() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!ready || !settings.enabled) return;
+    setClockNow(Date.now());
+    const timer = window.setInterval(() => setClockNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [ready, settings.enabled]);
+
   function settingsForSave(enabled: boolean): PortalMonitorSettings {
     const entered = Number(intervalInput);
     const intervalSeconds = Math.max(10, Number.isFinite(entered) ? Math.round(entered) : 10);
     setIntervalInput(String(intervalSeconds));
-    return { ...settings, enabled, intervalSeconds };
+    return enabled
+      ? { ...settings, enabled, intervalSeconds }
+      : {
+          ...settings,
+          enabled: false,
+          ticketEnabled: false,
+          computingErrorEnabled: false,
+          intervalSeconds,
+        };
+  }
+
+  function startCountdownForSettings(
+    next: PortalMonitorSettings,
+    sources: Array<"ticket" | "computingError"> = ["ticket", "computingError"],
+  ) {
+    const now = Date.now();
+    setCountdownStartedAt(current => {
+      const anchors = { ...current };
+      for (const source of sources) {
+        const sourceEnabled = source === "ticket" ? next.ticketEnabled : next.computingErrorEnabled;
+        const tabId = source === "ticket" ? next.ticketTabId : next.computingErrorTabId;
+        if (next.enabled && sourceEnabled && tabId !== undefined) anchors[source] = now;
+      }
+      return anchors;
+    });
+  }
+
+  function clearCountdown(source?: "ticket" | "computingError") {
+    if (!source) {
+      setCountdownStartedAt({});
+      return;
+    }
+    setCountdownStartedAt(current => {
+      const next = { ...current };
+      delete next[source];
+      return next;
+    });
   }
 
   function adjustInterval(delta: -5 | 5) {
@@ -101,17 +148,23 @@ export function PortalMonitor() {
       const response = (await chrome.runtime.sendMessage({
         type: "toolkit:save-monitor",
         settings: nextSettings,
+        openMissingTabs: true,
       })) as MonitorResponse;
       if (response?.error) throw new Error(response.error);
       const savedSettings = response?.settings ? normalizePortalMonitorSettings(response.settings) : nextSettings;
       setSettings(savedSettings);
       setIntervalInput(String(savedSettings.intervalSeconds));
       if (response?.state) setState(normalizePortalMonitorState(response.state));
+      if (savedSettings.enabled && (response.reloaded || response.opened)) {
+        startCountdownForSettings(savedSettings);
+      } else if (!savedSettings.enabled) clearCountdown();
       setMessage(
         savedSettings.enabled
-          ? response.reloaded
-            ? `Đã lưu và đang tải lại ${response.reloaded} tab Portal để tạo mốc theo dõi.`
-            : "Đã lưu nhưng không tìm thấy tab Portal phù hợp đang mở."
+          ? response.opened
+            ? `Đã mở ${response.opened} tab Portal được chọn để bắt đầu theo dõi.`
+            : response.reloaded
+              ? `Đã lưu và đang tải lại ${response.reloaded} tab Portal để tạo mốc theo dõi.`
+              : "Đã lưu nhưng không tìm thấy tab Portal phù hợp đang mở."
           : "Đã tắt theo dõi tự động.",
       );
     } catch (cause) {
@@ -123,6 +176,17 @@ export function PortalMonitor() {
 
   async function toggleEnabled(enabled: boolean) {
     if (busy) return;
+    if (
+      enabled &&
+      !(
+        (settings.ticketEnabled && settings.ticketTabId !== undefined) ||
+        (settings.computingErrorEnabled && settings.computingErrorTabId !== undefined)
+      )
+    ) {
+      setMessage("");
+      setError("Hãy chọn tab theo dõi trước khi bật.");
+      return;
+    }
     setBusy(true);
     setError("");
     setMessage("");
@@ -134,17 +198,66 @@ export function PortalMonitor() {
         settings: nextSettings,
       })) as MonitorResponse;
       if (response?.error) throw new Error(response.error);
-      if (response?.settings) {
-        const savedSettings = normalizePortalMonitorSettings(response.settings);
-        setSettings(savedSettings);
-        setIntervalInput(String(savedSettings.intervalSeconds));
-      }
+      const savedSettings = response?.settings ? normalizePortalMonitorSettings(response.settings) : nextSettings;
+      setSettings(savedSettings);
+      setIntervalInput(String(savedSettings.intervalSeconds));
+      if (savedSettings.enabled && (response.reloaded || response.opened)) {
+        startCountdownForSettings(savedSettings);
+      } else if (!savedSettings.enabled) clearCountdown();
       setMessage(
-        enabled
+        savedSettings.enabled
           ? response.reloaded
             ? `Đã bật theo dõi và tải lại ${response.reloaded} tab Portal.`
             : "Đã bật nhưng không tìm thấy tab Portal phù hợp đang mở."
-          : "Đã dừng theo dõi tự động.",
+          : enabled
+            ? "Chưa thể bật: hãy ghim ít nhất một tab theo dõi đang mở."
+            : "Đã dừng theo dõi tự động.",
+      );
+    } catch (cause) {
+      setSettings(settings);
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleSource(source: "ticket" | "computingError", checked: boolean) {
+    if (busy) return;
+    const sourceKey = source === "ticket" ? "ticketEnabled" : "computingErrorEnabled";
+    const otherEnabled = source === "ticket" ? settings.computingErrorEnabled : settings.ticketEnabled;
+    const nextSettings: PortalMonitorSettings = {
+      ...settings,
+      [sourceKey]: checked,
+      enabled: checked || otherEnabled,
+    };
+    setBusy(true);
+    setError("");
+    setMessage("");
+    setSettings(nextSettings);
+    try {
+      const response = (await chrome.runtime.sendMessage({
+        type: "toolkit:save-monitor",
+        settings: nextSettings,
+        openMissingTabs: checked,
+      })) as MonitorResponse;
+      if (response?.error) throw new Error(response.error);
+      const savedSettings = response?.settings ? normalizePortalMonitorSettings(response.settings) : nextSettings;
+      setSettings(savedSettings);
+      if (savedSettings.enabled && (response.reloaded || response.opened)) {
+        startCountdownForSettings(savedSettings, [source]);
+      } else if (!savedSettings.enabled) clearCountdown();
+      else if (!checked) clearCountdown(source);
+      const label = source === "ticket" ? "Ticket" : "Computing lỗi";
+      setMessage(
+        checked
+          ? response.opened
+            ? `Đã chọn ${label}, bật theo dõi và mở tab chuyên dụng.`
+            : response.reloaded
+              ? `Đã chọn ${label}, bật theo dõi và tải lại tab đã ghim.`
+              : `Đã chọn ${label} và bật theo dõi. Hãy ghim tab để bắt đầu tự tải lại.`
+          : savedSettings.enabled
+            ? `Đã bỏ chọn ${label}.`
+            : "Đã bỏ chọn tất cả trang và tắt theo dõi.",
       );
     } catch (cause) {
       setSettings(settings);
@@ -167,16 +280,20 @@ export function PortalMonitor() {
       const response = (await chrome.runtime.sendMessage({
         type: "toolkit:save-monitor",
         settings: nextSettings,
+        openMissingTabs: true,
       })) as MonitorResponse;
       if (response?.error) throw new Error(response.error);
       const savedSettings = response?.settings ? normalizePortalMonitorSettings(response.settings) : nextSettings;
       setSettings(savedSettings);
       setIntervalInput(String(savedSettings.intervalSeconds));
       if (response?.state) setState(normalizePortalMonitorState(response.state));
+      if (response.reloaded || response.opened) startCountdownForSettings(savedSettings);
       setMessage(
-        response.reloaded
-          ? `Đã bật theo dõi và đang tải lại ${response.reloaded} tab Portal để kiểm tra.`
-          : "Đã bật theo dõi nhưng không tìm thấy tab Ticket hoặc Computing lỗi đang mở.",
+        response.opened
+          ? `Đã mở ${response.opened} tab Portal được chọn để kiểm tra.`
+          : response.reloaded
+            ? `Đã bật theo dõi và đang tải lại ${response.reloaded} tab Portal để kiểm tra.`
+            : "Đã bật theo dõi nhưng không tìm thấy tab Ticket hoặc Computing lỗi đang mở.",
       );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -189,6 +306,51 @@ export function PortalMonitor() {
     void chrome.runtime.sendMessage({
       type: type === "ticket" ? "toolkit:monitor-open-ticket" : "toolkit:monitor-open-computing-error",
     });
+  }
+
+  async function toggleMonitorTab(source: "ticket" | "computingError") {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const selectedTabId = source === "ticket" ? settings.ticketTabId : settings.computingErrorTabId;
+      if (selectedTabId !== undefined) {
+        const response = (await chrome.runtime.sendMessage({
+          type: "toolkit:monitor-clear-tab",
+          source,
+        })) as MonitorResponse;
+        if (response?.error) throw new Error(response.error);
+        if (!response?.settings) throw new Error("Không thể gỡ tab theo dõi.");
+        const next = normalizePortalMonitorSettings(response.settings);
+        setSettings(next);
+        if (!next.enabled) clearCountdown();
+        else clearCountdown(source);
+        setMessage(source === "ticket" ? "Đã gỡ tab theo dõi Ticket." : "Đã gỡ tab theo dõi Computing lỗi.");
+        return;
+      }
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id === undefined) throw new Error("Không tìm thấy tab hiện tại.");
+      const response = (await chrome.runtime.sendMessage({
+        type: "toolkit:monitor-select-tab",
+        source,
+        tabId: tab.id,
+      })) as MonitorResponse;
+      if (response?.error) throw new Error(response.error);
+      if (!response?.settings) throw new Error("Không thể lưu tab theo dõi.");
+      const next = normalizePortalMonitorSettings(response.settings);
+      setSettings(next);
+      if (next.enabled) startCountdownForSettings(next, [source]);
+      setMessage(
+        source === "ticket"
+          ? `Đã chọn tab hiện tại (#${tab.id}) để theo dõi Ticket.`
+          : `Đã chọn tab hiện tại (#${tab.id}) để theo dõi Computing lỗi.`,
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function toggleSourceNotification(source: "ticket" | "computingError") {
@@ -265,6 +427,21 @@ export function PortalMonitor() {
       </div>
     );
 
+  const ticketCountdownSeconds = portalMonitorSourceCountdownSeconds(
+    settings,
+    state,
+    "ticket",
+    clockNow,
+    countdownStartedAt.ticket,
+  );
+  const computingCountdownSeconds = portalMonitorSourceCountdownSeconds(
+    settings,
+    state,
+    "computingError",
+    clockNow,
+    countdownStartedAt.computingError,
+  );
+
   return (
     <div className="main-content monitor-tab">
       <section className="monitor-heading">
@@ -275,7 +452,7 @@ export function PortalMonitor() {
           <input
             type="checkbox"
             checked={settings.enabled}
-            disabled={busy || (!settings.ticketEnabled && !settings.computingErrorEnabled)}
+            disabled={busy}
             onChange={event => void toggleEnabled(event.target.checked)}
           />
           <span className="monitor-switch-track" aria-hidden="true" />
@@ -291,18 +468,48 @@ export function PortalMonitor() {
           <input
             type="checkbox"
             checked={settings.ticketEnabled}
-            onChange={event => setSettings({ ...settings, ticketEnabled: event.target.checked })}
+            disabled={busy}
+            onChange={event => void toggleSource("ticket", event.target.checked)}
           />
           <span>
             <strong>Danh sách Ticket</strong>
             <small>
               Tổng {state.totals.ticket} · {checkedAt(state.lastCheckedAt.ticket)}
+              {" · "}
+              {settings.ticketTabId ? `Tab #${settings.ticketTabId}` : "Chưa ghim tab"}
+            </small>
+            <small className="monitor-source-countdown" role="timer">
+              {!settings.enabled || !settings.ticketEnabled ? (
+                "Đếm ngược đang tắt"
+              ) : settings.ticketTabId === undefined ? (
+                "Đang chờ tab Ticket"
+              ) : ticketCountdownSeconds === null ? (
+                "Đang khởi tạo bộ đếm"
+              ) : (
+                <>
+                  Tải lại sau: <b>{ticketCountdownSeconds}</b> giây
+                </>
+              )}
             </small>
           </span>
           <div className="monitor-source-count is-ticket" aria-label={`${state.activeCounts.ticket} Ticket NEW`}>
             <strong>{state.activeCounts.ticket}</strong>
             <small>NEW</small>
           </div>
+          <button
+            type="button"
+            className={`monitor-source-tab${settings.ticketTabId ? " is-selected" : ""}`}
+            disabled={busy}
+            title={settings.ticketTabId ? "Gỡ tab theo dõi Ticket" : "Dùng tab hiện tại để theo dõi Ticket"}
+            aria-label={settings.ticketTabId ? "Gỡ tab theo dõi Ticket" : "Dùng tab hiện tại để theo dõi Ticket"}
+            aria-pressed={settings.ticketTabId !== undefined}
+            onClick={event => {
+              event.preventDefault();
+              void toggleMonitorTab("ticket");
+            }}
+          >
+            {settings.ticketTabId ? <PinOff size={15} /> : <Pin size={15} />}
+          </button>
           <button
             type="button"
             className={`monitor-source-notify ${settings.ticketNotificationsEnabled ? "is-enabled" : "is-disabled"}`}
@@ -332,11 +539,29 @@ export function PortalMonitor() {
           <input
             type="checkbox"
             checked={settings.computingErrorEnabled}
-            onChange={event => setSettings({ ...settings, computingErrorEnabled: event.target.checked })}
+            disabled={busy}
+            onChange={event => void toggleSource("computingError", event.target.checked)}
           />
           <span>
             <strong>Computing triển khai lỗi</strong>
-            <small>{checkedAt(state.lastCheckedAt.computingError)}</small>
+            <small>
+              {checkedAt(state.lastCheckedAt.computingError)}
+              {" · "}
+              {settings.computingErrorTabId ? `Tab #${settings.computingErrorTabId}` : "Chưa ghim tab"}
+            </small>
+            <small className="monitor-source-countdown" role="timer">
+              {!settings.enabled || !settings.computingErrorEnabled ? (
+                "Đếm ngược đang tắt"
+              ) : settings.computingErrorTabId === undefined ? (
+                "Đang chờ tab Computing"
+              ) : computingCountdownSeconds === null ? (
+                "Đang khởi tạo bộ đếm"
+              ) : (
+                <>
+                  Tải lại sau: <b>{computingCountdownSeconds}</b> giây
+                </>
+              )}
+            </small>
           </span>
           <div
             className="monitor-source-count is-computing"
@@ -345,6 +570,22 @@ export function PortalMonitor() {
             <strong>{state.activeCounts.computingError}</strong>
             <small>VM LỖI</small>
           </div>
+          <button
+            type="button"
+            className={`monitor-source-tab${settings.computingErrorTabId ? " is-selected" : ""}`}
+            disabled={busy}
+            title={settings.computingErrorTabId ? "Gỡ tab theo dõi Computing lỗi" : "Dùng tab hiện tại để theo dõi Computing lỗi"}
+            aria-label={
+              settings.computingErrorTabId ? "Gỡ tab theo dõi Computing lỗi" : "Dùng tab hiện tại để theo dõi Computing lỗi"
+            }
+            aria-pressed={settings.computingErrorTabId !== undefined}
+            onClick={event => {
+              event.preventDefault();
+              void toggleMonitorTab("computingError");
+            }}
+          >
+            {settings.computingErrorTabId ? <PinOff size={15} /> : <Pin size={15} />}
+          </button>
           <button
             type="button"
             className={`monitor-source-notify ${settings.computingErrorNotificationsEnabled ? "is-enabled" : "is-disabled"}`}
@@ -373,7 +614,6 @@ export function PortalMonitor() {
         <label className="monitor-interval" htmlFor="monitor-interval">
           <span>
             <strong>Thời gian tự tải lại</strong>
-            <small>Áp dụng cho các tab được chọn đang mở</small>
           </span>
           <span className="monitor-interval-control">
             <button
@@ -478,9 +718,7 @@ export function PortalMonitor() {
             </div>
           ))
         ) : (
-          <p className="empty">
-            <BellRing size={16} /> Chưa có mục mới.
-          </p>
+          <p className="empty">Không có thông báo mới</p>
         )}
       </section>
     </div>

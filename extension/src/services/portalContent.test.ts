@@ -25,7 +25,10 @@ async function execute(
   const listeners: RuntimeListener[] = []
   runtimeListeners.set(dom, listeners)
   Object.defineProperty(dom.window, 'chrome', { value: { runtime: {
-    sendMessage,
+    sendMessage: (message: Record<string, unknown>) =>
+      message.type === 'toolkit:monitor-get-tab-selection'
+        ? Promise.resolve({ selected: true })
+        : (sendMessage as unknown as (value: Record<string, unknown>) => Promise<unknown>)(message),
     onMessage: {
       addListener: (listener: RuntimeListener) => listeners.push(listener),
       removeListener: (listener: RuntimeListener) => {
@@ -35,6 +38,12 @@ async function execute(
     },
   } } })
   Object.defineProperty(dom.window.navigator, 'clipboard', { value: { writeText }, configurable: true })
+  const monitorSource = new URL(url).pathname === '/crm/pages/ticket/index.xhtml'
+    ? 'ticket'
+    : new URL(url).pathname === '/computing-manager/manager/computing/computing.xhtml'
+      ? 'computingError'
+      : ''
+  if (monitorSource) dom.window.sessionStorage.setItem(`it-toolkit-monitor-selected:${monitorSource}`, '1')
   dom.window.eval(script)
   if (waitForTool) {
     await vi.waitFor(() => expect(dom.window.document.querySelector(
@@ -74,7 +83,47 @@ it('reads stable IDs and details from the real Ticket table structure for monito
         title: 'Ticket mới',
         url: 'https://portal.longvan.vn/crm/pages/ticket/detail.xhtml?id=20.12574998.4145',
         status: 'DOING',
+        assignee: 'Nguyễn Minh Chiến',
         detail: 'DOING · Nguyễn Minh Chiến · 27/11/26 15:48',
+      }],
+    },
+  }))
+  dom.window.dispatchEvent(new dom.window.Event('pagehide'))
+  dom.window.close()
+})
+
+it('treats the Ticket responsibility action “cập nhật” as unassigned', async () => {
+  const sendMessage = vi.fn(async () => ({ accepted: true }))
+  const dom = await execute(
+    'https://portal.longvan.vn/crm/pages/ticket/index.xhtml?orgId=LONGVAN&wsId=20.1087',
+    `<div id="frmDataTableTask:frmData:dt-task2" class="ui-datatable">
+      <span class="ui-paginator-current">Hiển thị 1-50 trên tổng 14627 nhiệm vụ</span>
+      <table><tbody><tr data-ri="0">
+        <td><span class="ui-column-title">Tên</span>
+          <a href="/crm/pages/ticket/detail.xhtml?id=20.12580000.100">Đổi Hệ Điều Hành</a></td>
+        <td><span class="ui-column-title">Nhóm</span>Ticket</td>
+        <td><span class="ui-column-title">Hạng mục(WorkItem)</span>Không</td>
+        <td><span class="ui-column-title">Trạng thái</span><span>NEW</span></td>
+        <td><span class="ui-column-title">Trách nhiệm</span><a href="#">cập nhật</a></td>
+        <td><span class="ui-column-title">Ngày tạo</span>28/11/26 16:51</td>
+      </tr></tbody></table>
+    </div>`,
+    sendMessage,
+    undefined,
+    false,
+  )
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({
+    type: 'toolkit:monitor-snapshot',
+    snapshot: {
+      source: 'ticket',
+      total: 14627,
+      items: [{
+        id: '20.12580000.100',
+        title: 'Đổi Hệ Điều Hành',
+        url: 'https://portal.longvan.vn/crm/pages/ticket/detail.xhtml?id=20.12580000.100',
+        status: 'NEW',
+        assignee: '',
+        detail: 'NEW · 28/11/26 16:51',
       }],
     },
   }))

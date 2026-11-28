@@ -355,10 +355,11 @@ it('switches between the Tools and Authenticator feature tabs', async () => {
     settings?: Record<string, unknown>
     source?: string
     enabled?: boolean
+    tabId?: number
   }) => {
     if (message.type === 'toolkit:get-monitor') {
       return {
-        monitorVersion: 13,
+        monitorVersion: 14,
         settings: { enabled: true, ticketEnabled: true, computingErrorEnabled: true, intervalSeconds: 300 },
         state: {},
       }
@@ -369,12 +370,36 @@ it('switches between the Tools and Authenticator feature tabs', async () => {
     if (message.type === 'toolkit:monitor-set-source-notification') {
       return { notified: false }
     }
+    if (message.type === 'toolkit:monitor-select-tab') {
+      return {
+        settings: {
+          enabled: true,
+          ticketEnabled: true,
+          computingErrorEnabled: true,
+          ticketTabId: message.tabId,
+          intervalSeconds: 300,
+        },
+      }
+    }
+    if (message.type === 'toolkit:monitor-clear-tab') {
+      return {
+        settings: {
+          enabled: false,
+          ticketEnabled: false,
+          computingErrorEnabled: false,
+          intervalSeconds: 300,
+        },
+      }
+    }
     if (message.type === 'toolkit:monitor-mark-read') return { state: {} }
     return {}
   })
   vi.stubGlobal('chrome', {
     runtime: { sendMessage },
-    tabs: { query: vi.fn(async () => []) },
+    tabs: { query: vi.fn(async () => [{
+      id: 7,
+      url: 'https://portal.longvan.vn/crm/pages/ticket/index.xhtml?orgId=LONGVAN&wsId=20.1087',
+    }]) },
     storage: {
       session: { get: vi.fn(async () => ({})), set: vi.fn(async () => {}), remove: vi.fn(async () => {}) },
       local: { get: vi.fn(async (key: string) => key === 'history' ? { history: [] } : {}) },
@@ -417,6 +442,57 @@ it('switches between the Tools and Authenticator feature tabs', async () => {
   expect(document.querySelector('[aria-label="Tắt thông báo Windows cho Ticket mới"]')).not.toBeNull()
   expect(document.querySelector('[aria-label="Tắt thông báo Windows cho VM lỗi"]')).not.toBeNull()
 
+  document.querySelector<HTMLButtonElement>('[aria-label="Dùng tab hiện tại để theo dõi Ticket"]')!.click()
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({
+    type: 'toolkit:monitor-select-tab',
+    source: 'ticket',
+    tabId: 7,
+  }))
+  await vi.waitFor(() =>
+    expect(document.querySelector('.monitor-source-tab.is-selected[aria-label="Gỡ tab theo dõi Ticket"]'))
+      .not.toBeNull())
+  document.querySelector<HTMLButtonElement>('[aria-label="Gỡ tab theo dõi Ticket"]')!.click()
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({
+    type: 'toolkit:monitor-clear-tab',
+    source: 'ticket',
+  }))
+  await vi.waitFor(() =>
+    expect(document.querySelector('.monitor-source-tab.is-selected[aria-label="Gỡ tab theo dõi Ticket"]'))
+      .toBeNull())
+  document.querySelector<HTMLInputElement>('.monitor-master-switch input')!.click()
+  await vi.waitFor(() =>
+    expect(document.querySelector('[role="alert"]')?.textContent)
+      .toContain('Hãy chọn tab theo dõi trước khi bật.'))
+  document.querySelector<HTMLElement>('.monitor-source strong')!.click()
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({
+    type: 'toolkit:save-monitor',
+    settings: expect.objectContaining({
+      enabled: true,
+      ticketEnabled: true,
+      computingErrorEnabled: false,
+    }),
+    openMissingTabs: true,
+  }))
+  await vi.waitFor(() =>
+    expect(document.querySelector('.monitor-master-switch.is-enabled')).not.toBeNull())
+  await vi.waitFor(() =>
+    expect(document.querySelector<HTMLInputElement>('.monitor-master-switch input')?.disabled).toBe(false))
+  document.querySelector<HTMLInputElement>('.monitor-master-switch input')!.click()
+  await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({
+    type: 'toolkit:save-monitor',
+    settings: expect.objectContaining({
+      enabled: false,
+      ticketEnabled: false,
+      computingErrorEnabled: false,
+    }),
+  }))
+  await vi.waitFor(() =>
+    expect([...document.querySelectorAll<HTMLInputElement>('.monitor-source input')]
+      .every(input => !input.checked)).toBe(true))
+
+  await vi.waitFor(() =>
+    expect(document.querySelector<HTMLButtonElement>('[aria-label="Tắt thông báo Windows cho Ticket mới"]')?.disabled)
+      .toBe(false))
   document.querySelector<HTMLButtonElement>('[aria-label="Tắt thông báo Windows cho Ticket mới"]')!.click()
   await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledWith({
     type: 'toolkit:monitor-set-source-notification',

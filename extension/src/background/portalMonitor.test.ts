@@ -25,13 +25,67 @@ it('reloads selected Portal tabs, baselines once, then notifies and updates the 
     },
   }
   const listeners: Array<(
-    message: { type?: string; snapshot?: unknown; settings?: unknown; source?: unknown; enabled?: unknown },
+    message: {
+      type?: string
+      snapshot?: unknown
+      settings?: unknown
+      source?: unknown
+      enabled?: unknown
+      tabId?: unknown
+      openMissingTabs?: unknown
+    },
     sender: chrome.runtime.MessageSender,
     respond: (value: unknown) => void,
   ) => boolean | undefined> = []
-  const alarmCreate = vi.fn()
-  const alarmClear = vi.fn(async () => true)
+  const startupListeners: Array<() => void> = []
+  const removedTabListeners: Array<(tabId: number) => void> = []
+  const updatedTabListeners: Array<(
+    tabId: number,
+    changeInfo: { url?: string },
+    tab: chrome.tabs.Tab,
+  ) => void> = []
+  const alarms = new Map<string, {
+    name: string
+    scheduledTime: number
+    periodInMinutes?: number
+  }>()
+  const alarmCreate = vi.fn((name: string, info: {
+    delayInMinutes?: number
+    periodInMinutes?: number
+  }) => {
+    alarms.set(name, {
+      name,
+      scheduledTime: Date.now() + Number(info.delayInMinutes ?? 0) * 60_000,
+      periodInMinutes: info.periodInMinutes,
+    })
+  })
+  const alarmClear = vi.fn(async (name: string) => alarms.delete(name))
+  const alarmGet = vi.fn(async (name: string) => alarms.get(name))
   const reload = vi.fn(async () => {})
+  const sendTabMessage = vi.fn(async () => ({}))
+  const createTab = vi.fn(async ({ url }: { url: string; active?: boolean }) => {
+    if (url.includes('/crm/pages/ticket/index.xhtml')) return { id: 21, url }
+    if (url.includes('/computing-manager/manager/computing/computing.xhtml')) return { id: 22, url }
+    return {}
+  })
+  const getTab = vi.fn(async (id: number) => {
+    if (id === 21) {
+      return {
+        id,
+        pendingUrl: 'https://portal.longvan.vn/crm/pages/ticket/index.xhtml?orgId=LONGVAN&wsId=20.1087',
+      }
+    }
+    if (id === 22) {
+      return {
+        id,
+        pendingUrl: 'https://portal.longvan.vn/computing-manager/manager/computing/computing.xhtml?status=2',
+      }
+    }
+    return {
+      id,
+      url: 'https://portal.longvan.vn/crm/pages/ticket/index.xhtml?orgId=LONGVAN&wsId=20.1087',
+    }
+  })
   const createNotification = vi.fn(async (id: string) => id)
   const setBadgeText = vi.fn(async () => {})
   const setBadgeBackgroundColor = vi.fn(async () => {})
@@ -47,20 +101,33 @@ it('reloads selected Portal tabs, baselines once, then notifies and updates the 
     runtime: {
       getURL: (path: string) => `chrome-extension://test/${path}`,
       onMessage: { addListener: (listener: typeof listeners[number]) => listeners.push(listener) },
-      onStartup: { addListener: vi.fn() },
+      onStartup: { addListener: (listener: () => void) => startupListeners.push(listener) },
     },
     alarms: {
       create: alarmCreate,
       clear: alarmClear,
+      get: alarmGet,
       onAlarm: { addListener: vi.fn() },
     },
     tabs: {
-      query: vi.fn(async () => [{
-        id: 7,
-        url: 'https://portal.longvan.vn/crm/pages/ticket/index.xhtml?orgId=LONGVAN&wsId=20.1087',
-      }]),
+      query: vi.fn(async () => [
+        {
+          id: 7,
+          url: 'https://portal.longvan.vn/crm/pages/ticket/index.xhtml?orgId=LONGVAN&wsId=20.1087',
+        },
+        {
+          id: 8,
+          url: 'https://portal.longvan.vn/crm/pages/ticket/index.xhtml?orgId=LONGVAN&wsId=20.1087',
+        },
+      ]),
+      get: getTab,
       reload,
-      create: vi.fn(async () => ({})),
+      sendMessage: sendTabMessage,
+      create: createTab,
+      onRemoved: { addListener: (listener: (tabId: number) => void) => removedTabListeners.push(listener) },
+      onUpdated: {
+        addListener: (listener: typeof updatedTabListeners[number]) => updatedTabListeners.push(listener),
+      },
     },
     notifications: {
       create: createNotification,
@@ -88,6 +155,8 @@ it('reloads selected Portal tabs, baselines once, then notifies and updates the 
     id?: unknown
     open?: unknown
     enabled?: unknown
+    tabId?: unknown
+    openMissingTabs?: unknown
   }) {
     const listener = listeners[0]
     return new Promise<Record<string, unknown>>((resolve) => {
@@ -101,6 +170,7 @@ it('reloads selected Portal tabs, baselines once, then notifies and updates the 
   }
 
   const migrated = await send({ type: 'toolkit:get-monitor' })
+  expect(migrated.monitorVersion).toBe(14)
   const migratedState = migrated.state as {
     activeCounts: { computingError: number }
     totals: { computingError: number }
@@ -111,14 +181,37 @@ it('reloads selected Portal tabs, baselines once, then notifies and updates the 
   expect(migratedState.recent).toEqual([])
   expect(chrome.notifications.clear).toHaveBeenCalledWith('portal-monitor-computingError-wrong')
 
+  const selected = await send({
+    type: 'toolkit:monitor-select-tab',
+    source: 'ticket',
+    tabId: 7,
+  })
+  expect(selected.settings).toEqual(expect.objectContaining({ ticketTabId: 7 }))
+  expect(sendTabMessage).toHaveBeenCalledWith(7, {
+    type: 'toolkit:monitor-tab-selection',
+    source: 'ticket',
+    selected: true,
+  })
+  const unpinned = await send({ type: 'toolkit:monitor-clear-tab', source: 'ticket' })
+  expect(unpinned.settings).toEqual(expect.objectContaining({ enabled: false }))
+  expect(unpinned.settings).not.toHaveProperty('ticketTabId')
+  await send({ type: 'toolkit:monitor-select-tab', source: 'ticket', tabId: 7 })
+
   await send({
     type: 'toolkit:save-monitor',
-    settings: { enabled: true, ticketEnabled: true, computingErrorEnabled: false, intervalSeconds: 180 },
+    settings: {
+      enabled: true,
+      ticketEnabled: true,
+      computingErrorEnabled: false,
+      ticketTabId: 7,
+      intervalSeconds: 180,
+    },
   })
-  expect(alarmCreate).toHaveBeenCalledWith('portal-monitor-refresh', {
+  expect(alarmCreate).toHaveBeenCalledWith('portal-monitor-refresh-ticket', {
     delayInMinutes: 3, periodInMinutes: 3,
   })
   expect(reload).toHaveBeenCalledWith(7)
+  expect(reload).not.toHaveBeenCalledWith(8)
 
   await send({
     type: 'toolkit:monitor-snapshot',
@@ -233,7 +326,111 @@ it('reloads selected Portal tabs, baselines once, then notifies and updates the 
 
   await send({
     type: 'toolkit:save-monitor',
-    settings: { enabled: true, ticketEnabled: true, computingErrorEnabled: false, intervalSeconds: 10 },
+    settings: {
+      enabled: true,
+      ticketEnabled: true,
+      computingErrorEnabled: false,
+      ticketTabId: 7,
+      intervalSeconds: 10,
+    },
   })
   expect(alarmCreate).toHaveBeenCalledTimes(1)
+
+  removedTabListeners[0](7)
+  await vi.waitFor(() => {
+    expect(storage.portalMonitorSettings).toEqual(expect.objectContaining({ enabled: false }))
+    expect(storage.portalMonitorSettings).not.toHaveProperty('ticketTabId')
+  })
+
+  await send({ type: 'toolkit:monitor-select-tab', source: 'ticket', tabId: 7 })
+  await send({
+    type: 'toolkit:save-monitor',
+    settings: {
+      enabled: true,
+      ticketEnabled: true,
+      computingErrorEnabled: false,
+      ticketTabId: 7,
+      intervalSeconds: 10,
+    },
+  })
+  updatedTabListeners[0](7, { url: 'https://portal.longvan.vn/dashboard.xhtml' }, {
+    id: 7,
+    url: 'https://portal.longvan.vn/dashboard.xhtml',
+  } as chrome.tabs.Tab)
+  await vi.waitFor(() => {
+    expect(storage.portalMonitorSettings).toEqual(expect.objectContaining({ enabled: false }))
+    expect(storage.portalMonitorSettings).not.toHaveProperty('ticketTabId')
+  })
+
+  await send({ type: 'toolkit:monitor-select-tab', source: 'ticket', tabId: 7 })
+  await send({
+    type: 'toolkit:save-monitor',
+    settings: {
+      enabled: true,
+      ticketEnabled: true,
+      computingErrorEnabled: false,
+      ticketTabId: 7,
+      intervalSeconds: 10,
+    },
+  })
+  startupListeners[0]()
+  await vi.waitFor(() => {
+    expect(storage.portalMonitorSettings).toEqual(expect.objectContaining({ enabled: false }))
+    expect(storage.portalMonitorSettings).not.toHaveProperty('ticketTabId')
+    expect(storage.portalMonitorSettings).not.toHaveProperty('computingErrorTabId')
+  })
+
+  createTab.mockClear()
+  const openedTicket = await send({
+    type: 'toolkit:save-monitor',
+    settings: {
+      enabled: true,
+      ticketEnabled: true,
+      computingErrorEnabled: false,
+      intervalSeconds: 100,
+    },
+    openMissingTabs: true,
+  })
+  expect(openedTicket).toEqual(expect.objectContaining({
+    opened: 1,
+    reloaded: 0,
+    settings: expect.objectContaining({
+      ticketTabId: 21,
+    }),
+  }))
+  const ticketAlarmCreates = alarmCreate.mock.calls.filter(([name]) =>
+    name === 'portal-monitor-refresh-ticket').length
+  const openedComputing = await send({
+    type: 'toolkit:save-monitor',
+    settings: {
+      ...(openedTicket.settings as Record<string, unknown>),
+      enabled: true,
+      ticketEnabled: true,
+      computingErrorEnabled: true,
+    },
+    openMissingTabs: true,
+  })
+  expect(openedComputing).toEqual(expect.objectContaining({
+    opened: 1,
+    settings: expect.objectContaining({
+      ticketTabId: 21,
+      computingErrorTabId: 22,
+    }),
+  }))
+  expect(alarmCreate.mock.calls.filter(([name]) =>
+    name === 'portal-monitor-refresh-ticket')).toHaveLength(ticketAlarmCreates)
+  expect(alarmCreate).toHaveBeenCalledWith('portal-monitor-refresh-computingError', {
+    delayInMinutes: 100 / 60,
+    periodInMinutes: 100 / 60,
+  })
+  expect(createTab).toHaveBeenCalledWith({
+    url: expect.stringContaining('/crm/pages/ticket/index.xhtml'),
+    active: false,
+  })
+  expect(createTab).toHaveBeenCalledWith({
+    url: expect.stringContaining('/computing-manager/manager/computing/computing.xhtml'),
+    active: false,
+  })
+  expect(createTab.mock.calls.filter(([options]) =>
+    String(options.url).includes('/crm/pages/ticket/index.xhtml'))).toHaveLength(1)
 })

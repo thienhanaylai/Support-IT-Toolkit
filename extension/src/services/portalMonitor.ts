@@ -1,6 +1,8 @@
 export const portalMonitorSettingsKey = 'portalMonitorSettings'
 export const portalMonitorStateKey = 'portalMonitorState'
 export const portalMonitorAlarm = 'portal-monitor-refresh'
+export const portalMonitorSourceAlarm = (source: PortalMonitorSource) =>
+  `${portalMonitorAlarm}-${source}`
 
 export type PortalMonitorSource = 'ticket' | 'computingError'
 
@@ -10,6 +12,8 @@ export type PortalMonitorSettings = {
   computingErrorEnabled: boolean
   ticketNotificationsEnabled: boolean
   computingErrorNotificationsEnabled: boolean
+  ticketTabId?: number
+  computingErrorTabId?: number
   intervalSeconds: number
 }
 
@@ -19,6 +23,7 @@ export type PortalMonitorItem = {
   url: string
   detail?: string
   status?: string
+  assignee?: string
 }
 
 export type PortalMonitorSnapshot = {
@@ -47,8 +52,8 @@ export type PortalMonitorState = {
 
 export const defaultPortalMonitorSettings: PortalMonitorSettings = {
   enabled: false,
-  ticketEnabled: true,
-  computingErrorEnabled: true,
+  ticketEnabled: false,
+  computingErrorEnabled: false,
   ticketNotificationsEnabled: true,
   computingErrorNotificationsEnabled: true,
   intervalSeconds: 300,
@@ -86,6 +91,14 @@ export function isComputingDeploymentErrorStatus(value: unknown): boolean {
     value.replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN') === 'triển khai lỗi'
 }
 
+export function isActionableTicket(item: Pick<PortalMonitorItem, 'status' | 'assignee'>): boolean {
+  const status = (item.status ?? '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN')
+  const assignee = (item.assignee ?? '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN')
+  const unassigned = !assignee ||
+    ['cập nhật', 'update', 'chưa có', 'chưa phân công', 'chưa giao', '-', '--'].includes(assignee)
+  return ['new', 'mới'].includes(status) && unassigned
+}
+
 export function normalizePortalMonitorSettings(value: unknown): PortalMonitorSettings {
   const saved = value && typeof value === 'object'
     ? value as Partial<PortalMonitorSettings> & { intervalMinutes?: unknown }
@@ -96,12 +109,16 @@ export function normalizePortalMonitorSettings(value: unknown): PortalMonitorSet
   const interval = Number.isFinite(seconds)
     ? seconds
     : Number.isFinite(legacyMinutes) ? legacyMinutes * 60 : 300
+  const ticketTabId = Number(saved.ticketTabId)
+  const computingErrorTabId = Number(saved.computingErrorTabId)
   return {
     enabled: saved.enabled === true,
-    ticketEnabled: saved.ticketEnabled !== false,
-    computingErrorEnabled: saved.computingErrorEnabled !== false,
+    ticketEnabled: saved.ticketEnabled === true,
+    computingErrorEnabled: saved.computingErrorEnabled === true,
     ticketNotificationsEnabled: saved.ticketNotificationsEnabled !== false,
     computingErrorNotificationsEnabled: saved.computingErrorNotificationsEnabled !== false,
+    ...(Number.isInteger(ticketTabId) && ticketTabId > 0 ? { ticketTabId } : {}),
+    ...(Number.isInteger(computingErrorTabId) && computingErrorTabId > 0 ? { computingErrorTabId } : {}),
     intervalSeconds: Math.max(10, Math.round(interval)),
   }
 }
@@ -113,6 +130,57 @@ export function isPortalMonitorNotificationEnabled(
   return source === 'ticket'
     ? settings.ticketNotificationsEnabled
     : settings.computingErrorNotificationsEnabled
+}
+
+export function portalMonitorCountdownSeconds(
+  settings: PortalMonitorSettings,
+  state: PortalMonitorState,
+  now = Date.now(),
+  fallbackStartedAt?: number,
+): number | null {
+  const ticketSelected = settings.ticketEnabled && settings.ticketTabId !== undefined
+  const computingSelected = settings.computingErrorEnabled && settings.computingErrorTabId !== undefined
+  if (!settings.enabled || (!ticketSelected && !computingSelected)) return null
+  const checkedTimes = [
+    ticketSelected ? state.lastCheckedAt.ticket : undefined,
+    computingSelected ? state.lastCheckedAt.computingError : undefined,
+  ].flatMap((value) => {
+    if (!value) return []
+    const time = new Date(value).getTime()
+    return Number.isFinite(time) ? [time] : []
+  })
+  const anchors = fallbackStartedAt && Number.isFinite(fallbackStartedAt)
+    ? [...checkedTimes, fallbackStartedAt]
+    : checkedTimes
+  if (!anchors.length) return null
+  const anchor = Math.max(...anchors)
+  const intervalMs = Math.max(10, Math.round(settings.intervalSeconds)) * 1000
+  const elapsed = Math.max(0, now - anchor)
+  const remainingMs = intervalMs - (elapsed % intervalMs)
+  return Math.max(1, Math.ceil(remainingMs / 1000))
+}
+
+export function portalMonitorSourceCountdownSeconds(
+  settings: PortalMonitorSettings,
+  state: PortalMonitorState,
+  source: PortalMonitorSource,
+  now = Date.now(),
+  fallbackStartedAt?: number,
+): number | null {
+  const sourceEnabled = source === 'ticket' ? settings.ticketEnabled : settings.computingErrorEnabled
+  const sourceTabId = source === 'ticket' ? settings.ticketTabId : settings.computingErrorTabId
+  if (!settings.enabled || !sourceEnabled || sourceTabId === undefined) return null
+  const checkedAt = state.lastCheckedAt[source]
+  const checkedTime = checkedAt ? new Date(checkedAt).getTime() : Number.NaN
+  const anchors = [
+    ...(Number.isFinite(checkedTime) ? [checkedTime] : []),
+    ...(fallbackStartedAt && Number.isFinite(fallbackStartedAt) ? [fallbackStartedAt] : []),
+  ]
+  if (!anchors.length) return null
+  const intervalMs = Math.max(10, Math.round(settings.intervalSeconds)) * 1000
+  const elapsed = Math.max(0, now - Math.max(...anchors))
+  const remainingMs = intervalMs - (elapsed % intervalMs)
+  return Math.max(1, Math.ceil(remainingMs / 1000))
 }
 
 export function normalizePortalMonitorState(value: unknown): PortalMonitorState {
@@ -189,7 +257,8 @@ export function validPortalMonitorSnapshot(value: unknown): value is PortalMonit
       if (!item || typeof item.id !== 'string' || item.id.length > 100 ||
           typeof item.title !== 'string' || item.title.length > 500 ||
           typeof item.url !== 'string' || item.url.length > 2048 ||
-          (item.status !== undefined && (typeof item.status !== 'string' || item.status.length > 100))) return false
+          (item.status !== undefined && (typeof item.status !== 'string' || item.status.length > 100)) ||
+          (item.assignee !== undefined && (typeof item.assignee !== 'string' || item.assignee.length > 200))) return false
       if (snapshot.source === 'computingError' && !isComputingDeploymentErrorStatus(item.status)) return false
       try {
         const url = new URL(item.url)
@@ -210,19 +279,32 @@ export function applyPortalMonitorSnapshot(
   snapshot: PortalMonitorSnapshot,
   now = new Date(),
 ): { state: PortalMonitorState; added: PortalMonitorItem[] } {
-  const state = normalizePortalMonitorState(current)
+  let state = normalizePortalMonitorState(current)
   const source = snapshot.source
   const uniqueItems = snapshot.items.filter((item, index, items) =>
     items.findIndex((candidate) => candidate.id === item.id) === index)
   const currentIds = uniqueItems.map((item) => item.id)
   const checkedAt = now.toISOString()
-  const isNewTicket = (item: PortalMonitorItem) =>
-    source === 'ticket' &&
-    ['new', 'mới'].includes((item.status ?? '').trim().toLocaleLowerCase('vi-VN'))
   const shouldNotifyCurrent = (item: PortalMonitorItem) =>
-    isNewTicket(item) || source === 'computingError'
+    (source === 'ticket' && isActionableTicket(item)) || source === 'computingError'
+  if (source === 'ticket') {
+    const inactiveIds = new Set(uniqueItems.filter((item) => !isActionableTicket(item)).map((item) => item.id))
+    const removedRecent = state.recent.filter((item) => item.source === 'ticket' && inactiveIds.has(item.id))
+    if (removedRecent.length) {
+      const removedUnread = Math.min(state.unreadBySource.ticket, removedRecent.length)
+      state = {
+        ...state,
+        unread: Math.max(0, state.unread - removedUnread),
+        unreadBySource: {
+          ...state.unreadBySource,
+          ticket: Math.max(0, state.unreadBySource.ticket - removedUnread),
+        },
+        recent: state.recent.filter((item) => item.source !== 'ticket' || !inactiveIds.has(item.id)),
+      }
+    }
+  }
   const activeCount = source === 'ticket'
-    ? uniqueItems.filter(isNewTicket).length
+    ? uniqueItems.filter(isActionableTicket).length
     : snapshot.total
   const notified = new Set(state.notified[source])
 
@@ -256,9 +338,7 @@ export function applyPortalMonitorSnapshot(
     }
   }
 
-  const seen = new Set(state.seen[source])
-  const added = uniqueItems.filter((item) =>
-    !seen.has(item.id) || (shouldNotifyCurrent(item) && !notified.has(item.id)))
+  const added = uniqueItems.filter((item) => shouldNotifyCurrent(item) && !notified.has(item.id))
   const notificationId = `portal-monitor-${source}-${now.getTime()}`
   const events = added.map<PortalMonitorEvent>((item) => ({
     ...item, source, at: checkedAt, notificationId,

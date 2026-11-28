@@ -85,9 +85,13 @@ a {
   padding: 4px 8px;
   background: transparent;
   color: #fff;
-  font: 750 10px/1 "Segoe UI", sans-serif;
+  font:
+    750 10px/1 "Segoe UI",
+    sans-serif;
   cursor: pointer;
-  transition: background .15s, opacity .15s;
+  transition:
+    background 0.15s,
+    opacity 0.15s;
 }
 .portal-tools-toggle:hover:not(:disabled) {
   background: #ffffff20;
@@ -111,7 +115,9 @@ a {
   border-radius: 999px;
   background: #64748b;
   box-shadow: inset 0 1px 2px #10242d66;
-  transition: background .18s, border-color .18s;
+  transition:
+    background 0.18s,
+    border-color 0.18s;
 }
 .portal-tools-toggle-thumb {
   position: absolute;
@@ -122,7 +128,7 @@ a {
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 1px 3px #10242d80;
-  transition: transform .18s ease;
+  transition: transform 0.18s ease;
 }
 .portal-tools-toggle.is-enabled .portal-tools-toggle-track {
   border-color: #4ade80;
@@ -132,7 +138,7 @@ a {
   transform: translateX(18px);
 }
 .portal-tools-toggle:disabled {
-  opacity: .6;
+  opacity: 0.6;
   cursor: wait;
 }
 .portal-tools-toggle:focus-visible {
@@ -911,7 +917,7 @@ h1 span {
   border-top: 0;
 }
 .popup .section-title:not(.history-title) {
-  margin: 18px 0 10px;
+  margin: 5px 0 10px;
 }
 .tool-grid {
   gap: 6px;
@@ -1670,7 +1676,7 @@ h1 span {
 .monitor-heading h1 {
   margin: 0;
   font-size: 19px;
-  letter-spacing: -.45px;
+  letter-spacing: -0.45px;
 }
 .monitor-heading p {
   margin: 3px 0 0;
@@ -1682,11 +1688,11 @@ h1 span {
   display: flex;
   flex: none;
   align-items: center;
-  gap: 7px;
+  gap: 9px;
   margin-left: auto;
   color: #718590;
   cursor: pointer;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 800;
 }
 .monitor-master-switch input {
@@ -1700,25 +1706,27 @@ h1 span {
   position: relative;
   display: inline-block;
   flex: none;
-  width: 36px;
-  height: 20px;
-  border: 1px solid #9aaab2;
+  width: 52px;
+  height: 30px;
+  border: 2px solid #9aaab2;
   border-radius: 99px;
   background: #a9b5bb;
   box-shadow: inset 0 1px 2px #0000001f;
-  transition: border-color .18s ease, background-color .18s ease;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease;
 }
 .monitor-switch-track::after {
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 14px;
-  height: 14px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 1px 3px #00000045;
   content: "";
-  transition: transform .18s ease;
+  transition: transform 0.18s ease;
 }
 .monitor-master-switch.is-enabled {
   color: #11864d;
@@ -1728,18 +1736,18 @@ h1 span {
   background: #19a85b;
 }
 .monitor-master-switch.is-enabled .monitor-switch-track::after {
-  transform: translateX(16px);
+  transform: translateX(22px);
 }
 .monitor-master-switch input:focus-visible + .monitor-switch-track {
   outline: 2px solid #42a5f5;
   outline-offset: 2px;
 }
 .monitor-master-switch input:disabled + .monitor-switch-track {
-  opacity: .5;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 .monitor-switch-label {
-  min-width: 19px;
+  min-width: 24px;
 }
 .monitor-source input {
   accent-color: #1976d2;
@@ -1761,6 +1769,9 @@ h1 span {
   border-radius: 8px;
   padding: 9px 10px;
   background: #fff;
+}
+.monitor-source {
+  cursor: pointer;
 }
 .monitor-source.is-selected {
   border-color: #90caf9;
@@ -1813,7 +1824,7 @@ h1 span {
   color: inherit;
   font-size: 8px;
   font-weight: 900;
-  letter-spacing: .5px;
+  letter-spacing: 0.5px;
   line-height: 1;
 }
 .monitor-source-count.is-ticket {
@@ -1836,6 +1847,15 @@ h1 span {
   place-items: center;
   background: #eaf4fd;
   color: #1565c0;
+}
+.monitor-source > button.monitor-source-tab.is-selected {
+  border-color: #42a5f5;
+  background: #d9efff;
+  color: #0d66a5;
+  box-shadow: inset 0 0 0 1px #42a5f533;
+}
+.monitor-source > button.monitor-source-tab.is-selected svg {
+  fill: currentColor;
 }
 .monitor-source > button.monitor-source-notify.is-enabled {
   border-color: #7bc99c;
@@ -1901,6 +1921,19 @@ h1 span {
   margin: 0;
   font-weight: 700;
 }
+.monitor-interval .monitor-countdown,
+.monitor-source .monitor-source-countdown {
+  margin-top: 5px;
+  color: #087457;
+  font-size: 9px;
+  font-weight: 700;
+}
+.monitor-countdown b,
+.monitor-source-countdown b {
+  color: #1565c0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
 .monitor-actions {
   display: flex;
   justify-content: flex-end;
@@ -1950,6 +1983,12 @@ h1 span {
 .monitor-recent {
   min-width: 0;
 }
+.monitor-recent > .empty {
+  width: 100%;
+  justify-content: center;
+  margin: 18px 0 0;
+  text-align: center;
+}
 .monitor-recent-heading {
   display: flex;
   align-items: center;
@@ -1981,7 +2020,7 @@ h1 span {
   color: #c62828;
 }
 .monitor-clear-all:disabled {
-  opacity: .45;
+  opacity: 0.45;
 }
 .monitor-recent-item {
   display: flex;
@@ -3888,7 +3927,7 @@ h1 span {
   color: #536b76;
   font-size: 9px;
   font-weight: 800;
-  letter-spacing: .25px;
+  letter-spacing: 0.25px;
 }
 .auth-edit-form input {
   width: 100%;
@@ -3940,7 +3979,7 @@ h1 span {
 .auth-edit:disabled,
 .auth-delete:disabled,
 .auth-drag-handle:disabled {
-  opacity: .5;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 .auth-code-value {
@@ -4389,6 +4428,14 @@ html.auth-is-reordering * {
   .monitor-interval strong {
     color: #e7f0f6;
   }
+  .monitor-interval .monitor-countdown,
+  .monitor-source .monitor-source-countdown {
+    color: #66d99a;
+  }
+  .monitor-countdown b,
+  .monitor-source-countdown b {
+    color: #90caf9;
+  }
   .monitor-source-count.is-ticket {
     border-color: #9c781e;
     background: #3a3017;
@@ -4413,6 +4460,11 @@ html.auth-is-reordering * {
     border-color: #317b54;
     background: #173528;
     color: #66d99a;
+  }
+  .monitor-source > button.monitor-source-tab.is-selected {
+    border-color: #42a5f5;
+    background: #183d59;
+    color: #90caf9;
   }
   .monitor-source > button.monitor-source-notify.is-enabled:hover:not(:disabled) {
     background: #1d4634;

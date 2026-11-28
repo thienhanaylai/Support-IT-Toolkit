@@ -2,8 +2,9 @@ import { isPortalPageUrl } from '../services/portalAccess'
 import { saveRecords, type CheckRecord } from '../services/storage'
 import {
   applyPortalMonitorSnapshot, computingErrorMonitorUrl, defaultPortalMonitorState,
-  isPortalMonitorNotificationEnabled, isPortalMonitorSourceEnabled, isPortalMonitorUrl, normalizePortalMonitorSettings,
-  normalizePortalMonitorState, portalMonitorAlarm, portalMonitorSettingsKey,
+  isActionableTicket, isPortalMonitorNotificationEnabled, isPortalMonitorSourceEnabled, isPortalMonitorUrl,
+  normalizePortalMonitorSettings,
+  normalizePortalMonitorState, portalMonitorAlarm, portalMonitorSettingsKey, portalMonitorSourceAlarm,
   portalMonitorStateKey, ticketMonitorUrl, validPortalMonitorSnapshot,
   type PortalMonitorSettings, type PortalMonitorSource, type PortalMonitorState,
 } from '../services/portalMonitor'
@@ -11,7 +12,7 @@ import {
 let snapshotQueue: Promise<void> = Promise.resolve()
 let migrationPromise: Promise<void> = Promise.resolve()
 const portalMonitorDataVersionKey = 'portalMonitorDataVersion'
-const portalMonitorDataVersion = 3
+const portalMonitorDataVersion = 5
 
 async function loadMonitorData(): Promise<{ settings: PortalMonitorSettings; state: PortalMonitorState }> {
   await migrationPromise
@@ -34,7 +35,11 @@ async function saveMonitorState(state: PortalMonitorState): Promise<void> {
 }
 
 async function migratePortalMonitorData(): Promise<void> {
-  const saved = await chrome.storage.local.get([portalMonitorDataVersionKey, portalMonitorStateKey])
+  const saved = await chrome.storage.local.get([
+    portalMonitorDataVersionKey,
+    portalMonitorSettingsKey,
+    portalMonitorStateKey,
+  ])
   const previousVersion = Number(saved[portalMonitorDataVersionKey]) || 0
   if (previousVersion >= portalMonitorDataVersion) return
   const state = normalizePortalMonitorState(saved[portalMonitorStateKey] ?? defaultPortalMonitorState)
@@ -67,8 +72,34 @@ async function migratePortalMonitorData(): Promise<void> {
     await saveMonitorHistory('ticket', ticketItems).catch(() => {})
     await saveMonitorHistory('computingError', computingItems).catch(() => {})
   }
+  if (previousVersion < 4) {
+    const invalidTicketEvents = next.recent.filter((item) =>
+      item.source === 'ticket' && !isActionableTicket(item))
+    next = {
+      ...next,
+      initialized: { ...next.initialized, ticket: false },
+      seen: { ...next.seen, ticket: [] },
+      notified: { ...next.notified, ticket: [] },
+      unread: Math.max(0, next.unread - invalidTicketEvents.length),
+      unreadBySource: {
+        ...next.unreadBySource,
+        ticket: Math.max(0, next.unreadBySource.ticket - invalidTicketEvents.length),
+      },
+      activeCounts: { ...next.activeCounts, ticket: 0 },
+      recent: next.recent.filter((item) => item.source !== 'ticket' || isActionableTicket(item)),
+    }
+  }
+  const nextSettings = normalizePortalMonitorSettings(saved[portalMonitorSettingsKey])
+  if (previousVersion < 5) {
+    nextSettings.enabled = false
+    nextSettings.ticketEnabled = false
+    nextSettings.computingErrorEnabled = false
+    delete nextSettings.ticketTabId
+    delete nextSettings.computingErrorTabId
+  }
   await chrome.storage.local.set({
     [portalMonitorDataVersionKey]: portalMonitorDataVersion,
+    [portalMonitorSettingsKey]: nextSettings,
     [portalMonitorStateKey]: next,
   })
   await updateBadge(next.unread)
@@ -78,26 +109,107 @@ async function syncMonitorAlarm(settings?: PortalMonitorSettings): Promise<void>
   if (!chrome.alarms?.create || !chrome.alarms?.clear) return
   const next = settings ?? (await loadMonitorData()).settings
   await chrome.alarms.clear(portalMonitorAlarm)
-  if (next.enabled && (next.ticketEnabled || next.computingErrorEnabled) && next.intervalSeconds >= 30) {
-    const intervalMinutes = next.intervalSeconds / 60
-    chrome.alarms.create(portalMonitorAlarm, {
+  const intervalMinutes = next.intervalSeconds / 60
+  for (const source of ['ticket', 'computingError'] as const) {
+    const alarmName = portalMonitorSourceAlarm(source)
+    const selected = source === 'ticket'
+      ? next.ticketEnabled && next.ticketTabId !== undefined
+      : next.computingErrorEnabled && next.computingErrorTabId !== undefined
+    if (!next.enabled || !selected || next.intervalSeconds < 30) {
+      await chrome.alarms.clear(alarmName)
+      continue
+    }
+    const existing = chrome.alarms.get ? await chrome.alarms.get(alarmName) : undefined
+    if (existing?.periodInMinutes === intervalMinutes) continue
+    await chrome.alarms.clear(alarmName)
+    chrome.alarms.create(alarmName, {
       delayInMinutes: intervalMinutes,
       periodInMinutes: intervalMinutes,
     })
   }
 }
 
-async function reloadMonitoredTabs(settings?: PortalMonitorSettings): Promise<number> {
+function selectedTabId(settings: PortalMonitorSettings, source: PortalMonitorSource): number | undefined {
+  return source === 'ticket' ? settings.ticketTabId : settings.computingErrorTabId
+}
+
+function portalTabUrl(tab: chrome.tabs.Tab): string {
+  return tab.url || tab.pendingUrl || ''
+}
+
+async function selectedMonitorTabIsValid(tabId: number, source: PortalMonitorSource): Promise<boolean> {
+  try {
+    const tab = await chrome.tabs.get(tabId)
+    const url = portalTabUrl(tab)
+    // A newly created background tab can briefly have neither url nor
+    // pendingUrl. Its tab ID is still valid and onUpdated/onRemoved will
+    // clear it later if loading fails or it navigates elsewhere.
+    return !url || isPortalMonitorUrl(url, source)
+  } catch {
+    return false
+  }
+}
+
+async function syncMonitorTabSelection(settings?: PortalMonitorSettings): Promise<void> {
+  if (!chrome.tabs?.query || !chrome.tabs?.sendMessage) return
+  const next = settings ?? (await loadMonitorData()).settings
+  const tabs = await chrome.tabs.query({ url: ['https://portal.longvan.vn/*'] })
+  await Promise.allSettled(tabs.flatMap((tab) => {
+    const tabUrl = portalTabUrl(tab)
+    if (tab.id === undefined || !tabUrl) return []
+    const source = isPortalMonitorUrl(tabUrl, 'ticket')
+      ? 'ticket'
+      : isPortalMonitorUrl(tabUrl, 'computingError') ? 'computingError' : undefined
+    if (!source) return []
+    return [chrome.tabs.sendMessage(tab.id, {
+      type: 'toolkit:monitor-tab-selection',
+      source,
+      selected: tab.id === selectedTabId(next, source),
+    })]
+  }))
+}
+
+async function reloadMonitoredTabs(
+  settings?: PortalMonitorSettings,
+  excludedTabIds = new Set<number>(),
+  onlySource?: PortalMonitorSource,
+): Promise<number> {
   const next = settings ?? (await loadMonitorData()).settings
   if (!next.enabled || !chrome.tabs?.query || !chrome.tabs?.reload) return 0
   const tabs = await chrome.tabs.query({ url: ['https://portal.longvan.vn/*'] })
   const monitored = tabs.filter((tab) => {
-    if (!tab.url) return false
-    return (next.ticketEnabled && isPortalMonitorUrl(tab.url, 'ticket')) ||
-      (next.computingErrorEnabled && isPortalMonitorUrl(tab.url, 'computingError'))
+    const tabUrl = portalTabUrl(tab)
+    if (!tabUrl || tab.id === undefined || excludedTabIds.has(tab.id)) return false
+    return (onlySource !== 'computingError' &&
+      next.ticketEnabled && tab.id === next.ticketTabId && isPortalMonitorUrl(tabUrl, 'ticket')) ||
+      (onlySource !== 'ticket' && next.computingErrorEnabled && tab.id === next.computingErrorTabId &&
+        isPortalMonitorUrl(tabUrl, 'computingError'))
   })
   await Promise.allSettled(monitored.flatMap((tab) => tab.id === undefined ? [] : [chrome.tabs.reload(tab.id)]))
   return monitored.length
+}
+
+async function openMissingMonitorTabs(settings: PortalMonitorSettings): Promise<{
+  settings: PortalMonitorSettings
+  openedTabIds: number[]
+}> {
+  const next = { ...settings }
+  const openedTabIds: number[] = []
+  if (!next.enabled || !chrome.tabs?.create) return { settings: next, openedTabIds }
+  const sources: PortalMonitorSource[] = ['ticket', 'computingError']
+  for (const source of sources) {
+    const sourceEnabled = source === 'ticket' ? next.ticketEnabled : next.computingErrorEnabled
+    if (!sourceEnabled || selectedTabId(next, source) !== undefined) continue
+    const tab = await chrome.tabs.create({
+      url: source === 'ticket' ? ticketMonitorUrl : computingErrorMonitorUrl,
+      active: false,
+    })
+    if (tab.id === undefined) continue
+    openedTabIds.push(tab.id)
+    if (source === 'ticket') next.ticketTabId = tab.id
+    else next.computingErrorTabId = tab.id
+  }
+  return { settings: next, openedTabIds }
 }
 
 export function portalMonitorNotificationTitle(source: PortalMonitorSource, count: number): string {
@@ -188,6 +300,7 @@ async function saveMonitorHistory(
       portalId: item.id,
       title: item.title,
       status: item.status ?? '',
+      assignee: item.assignee ?? '',
       detail: item.detail ?? '',
       url: item.url,
     },
@@ -201,8 +314,18 @@ async function receiveSnapshot(snapshot: unknown, sender: chrome.runtime.Message
       !isPortalMonitorUrl(senderUrl, snapshot.source)) return
   const { settings, state } = await loadMonitorData()
   if (!isPortalMonitorSourceEnabled(snapshot.source, settings)) return
+  if (sender.tab?.id !== selectedTabId(settings, snapshot.source)) return
   const result = applyPortalMonitorSnapshot(state, snapshot)
   await saveMonitorState(result.state)
+  if (chrome.notifications?.clear) {
+    const remainingNotificationIds = new Set(result.state.recent.map((item) => item.notificationId))
+    const removedNotificationIds = [...new Set(state.recent
+      .filter((item) => !result.state.recent.some((current) =>
+        current.source === item.source && current.id === item.id))
+      .map((item) => item.notificationId))]
+      .filter((id) => !remainingNotificationIds.has(id))
+    await Promise.allSettled(removedNotificationIds.map((id) => chrome.notifications.clear(id)))
+  }
   if (result.added.length) {
     const notificationId = result.state.recent[0]?.notificationId ?? `portal-monitor-${Date.now()}`
     const addedIds = new Set(result.added.map((item) => item.id))
@@ -215,13 +338,33 @@ async function receiveSnapshot(snapshot: unknown, sender: chrome.runtime.Message
   }
 }
 
-async function saveSettings(value: unknown): Promise<{
+async function saveSettings(value: unknown, openMissingTabs = false): Promise<{
   settings: PortalMonitorSettings
   state: PortalMonitorState
   reloaded: number
+  opened: number
 }> {
   const previous = await loadMonitorData()
-  const settings = normalizePortalMonitorSettings(value)
+  const requested = normalizePortalMonitorSettings(value)
+  let settings = { ...requested }
+  if (settings.ticketTabId !== undefined &&
+      !await selectedMonitorTabIsValid(settings.ticketTabId, 'ticket')) {
+    delete settings.ticketTabId
+  }
+  if (settings.computingErrorTabId !== undefined &&
+      !await selectedMonitorTabIsValid(settings.computingErrorTabId, 'computingError')) {
+    delete settings.computingErrorTabId
+  }
+  if (!settings.enabled) {
+    settings.ticketEnabled = false
+    settings.computingErrorEnabled = false
+  }
+  let openedTabIds: number[] = []
+  if (openMissingTabs) {
+    const opened = await openMissingMonitorTabs(settings)
+    settings = opened.settings
+    openedTabIds = opened.openedTabIds
+  }
   const state = normalizePortalMonitorState(previous.state)
   const resumed = settings.enabled && !previous.settings.enabled
   if (resumed || !settings.ticketEnabled || !previous.settings.ticketEnabled) {
@@ -237,8 +380,99 @@ async function saveSettings(value: unknown): Promise<{
     [portalMonitorStateKey]: state,
   })
   await syncMonitorAlarm(settings)
-  const reloaded = settings.enabled ? await reloadMonitoredTabs(settings) : 0
-  return { settings, state, reloaded }
+  await syncMonitorTabSelection(settings)
+  const reloaded = settings.enabled
+    ? await reloadMonitoredTabs(settings, new Set(openedTabIds))
+    : 0
+  return { settings, state, reloaded, opened: openedTabIds.length }
+}
+
+async function selectMonitorTab(
+  source: unknown,
+  tabId: unknown,
+): Promise<{ settings: PortalMonitorSettings }> {
+  if ((source !== 'ticket' && source !== 'computingError') ||
+      !Number.isInteger(Number(tabId)) || Number(tabId) <= 0) {
+    throw new Error('Tab theo dõi không hợp lệ.')
+  }
+  const id = Number(tabId)
+  const tab = await chrome.tabs.get(id)
+  if (!tab.url || !isPortalMonitorUrl(tab.url, source)) {
+    throw new Error(source === 'ticket'
+      ? 'Hãy mở đúng trang Danh sách Ticket rồi chọn lại.'
+      : 'Hãy mở đúng trang Computing đang lọc Triển khai lỗi rồi chọn lại.')
+  }
+  const { settings } = await loadMonitorData()
+  const next = normalizePortalMonitorSettings({
+    ...settings,
+    [source === 'ticket' ? 'ticketTabId' : 'computingErrorTabId']: id,
+  })
+  await chrome.storage.local.set({ [portalMonitorSettingsKey]: next })
+  await syncMonitorTabSelection(next)
+  return { settings: next }
+}
+
+async function clearMonitorTab(source: unknown): Promise<{ settings: PortalMonitorSettings }> {
+  if (source !== 'ticket' && source !== 'computingError') {
+    throw new Error('Nguồn theo dõi không hợp lệ.')
+  }
+  const { settings } = await loadMonitorData()
+  const next = { ...settings }
+  if (source === 'ticket') delete next.ticketTabId
+  else delete next.computingErrorTabId
+  const hasActiveTab =
+    (next.ticketEnabled && next.ticketTabId !== undefined) ||
+    (next.computingErrorEnabled && next.computingErrorTabId !== undefined)
+  if (!hasActiveTab) {
+    next.enabled = false
+    next.ticketEnabled = false
+    next.computingErrorEnabled = false
+  }
+  await chrome.storage.local.set({ [portalMonitorSettingsKey]: next })
+  await syncMonitorAlarm(next)
+  await syncMonitorTabSelection(next)
+  return { settings: next }
+}
+
+async function clearUnavailableMonitorTab(tabId: number, url?: string): Promise<void> {
+  const { settings } = await loadMonitorData()
+  const ticketUnavailable = settings.ticketTabId === tabId &&
+    (!url || !isPortalMonitorUrl(url, 'ticket'))
+  const computingUnavailable = settings.computingErrorTabId === tabId &&
+    (!url || !isPortalMonitorUrl(url, 'computingError'))
+  if (!ticketUnavailable && !computingUnavailable) return
+  const next = { ...settings }
+  if (ticketUnavailable) delete next.ticketTabId
+  if (computingUnavailable) delete next.computingErrorTabId
+  const hasActiveTab =
+    (next.ticketEnabled && next.ticketTabId !== undefined) ||
+    (next.computingErrorEnabled && next.computingErrorTabId !== undefined)
+  if (!hasActiveTab) {
+    next.enabled = false
+    next.ticketEnabled = false
+    next.computingErrorEnabled = false
+  }
+  await chrome.storage.local.set({ [portalMonitorSettingsKey]: next })
+  await syncMonitorAlarm(next)
+  await syncMonitorTabSelection(next)
+}
+
+async function disableMonitorForBrowserStartup(): Promise<void> {
+  const { settings, state } = await loadMonitorData()
+  const next = {
+    ...settings,
+    enabled: false,
+    ticketEnabled: false,
+    computingErrorEnabled: false,
+  }
+  delete next.ticketTabId
+  delete next.computingErrorTabId
+  await chrome.storage.local.set({ [portalMonitorSettingsKey]: next })
+  await Promise.all([
+    syncMonitorAlarm(next),
+    syncMonitorTabSelection(next),
+    updateBadge(state.unread),
+  ])
 }
 
 async function markRead(): Promise<PortalMonitorState> {
@@ -327,18 +561,33 @@ async function openNotification(notificationId: string): Promise<void> {
 }
 
 export function registerPortalMonitor(): void {
+  let browserStartupReset = false
   migrationPromise = migratePortalMonitorData().catch(() => {})
-  void loadMonitorData().then(({ settings, state }) =>
-    Promise.all([syncMonitorAlarm(settings), updateBadge(state.unread)]),
-  ).catch(() => {})
+  const initialMonitorSync = loadMonitorData().then(({ settings, state }) => {
+    if (browserStartupReset) return
+    return Promise.all([syncMonitorAlarm(settings), syncMonitorTabSelection(settings), updateBadge(state.unread)])
+  }).catch(() => {})
 
   chrome.alarms?.onAlarm?.addListener((alarm) => {
     if (alarm.name === portalMonitorAlarm) void reloadMonitoredTabs().catch(() => {})
+    if (alarm.name === portalMonitorSourceAlarm('ticket')) {
+      void reloadMonitoredTabs(undefined, new Set(), 'ticket').catch(() => {})
+    }
+    if (alarm.name === portalMonitorSourceAlarm('computingError')) {
+      void reloadMonitoredTabs(undefined, new Set(), 'computingError').catch(() => {})
+    }
   })
   chrome.runtime.onStartup?.addListener(() => {
-    void loadMonitorData().then(({ settings, state }) =>
-      Promise.all([syncMonitorAlarm(settings), updateBadge(state.unread)]),
-    ).catch(() => {})
+    browserStartupReset = true
+    void initialMonitorSync.then(() => disableMonitorForBrowserStartup()).catch(() => {})
+  })
+  chrome.tabs?.onRemoved?.addListener((tabId) => {
+    void clearUnavailableMonitorTab(tabId).catch(() => {})
+  })
+  chrome.tabs?.onUpdated?.addListener((tabId, changeInfo, tab) => {
+    if (changeInfo.url !== undefined) {
+      void clearUnavailableMonitorTab(tabId, tab.url ?? changeInfo.url).catch(() => {})
+    }
   })
   chrome.notifications?.onClicked?.addListener((notificationId) => {
     if (notificationId.startsWith('portal-monitor-')) void openNotification(notificationId).catch(() => {})
@@ -351,6 +600,8 @@ export function registerPortalMonitor(): void {
     id?: unknown
     open?: unknown
     enabled?: unknown
+    tabId?: unknown
+    openMissingTabs?: unknown
   }, sender, respond) => {
     if (message?.type === 'toolkit:monitor-snapshot') {
       const receive = () => receiveSnapshot(message.snapshot, sender)
@@ -361,19 +612,31 @@ export function registerPortalMonitor(): void {
       )
       return true
     }
+    if (message?.type === 'toolkit:monitor-get-tab-selection') {
+      void loadMonitorData().then(({ settings }) => {
+        const source = message.source
+        const senderTab = sender.tab
+        const selected = (source === 'ticket' || source === 'computingError') &&
+          senderTab?.id === selectedTabId(settings, source) &&
+          Boolean(senderTab?.url && isPortalMonitorUrl(senderTab.url, source))
+        respond({ selected })
+      }, (error) => respond({ error: error instanceof Error ? error.message : String(error) }))
+      return true
+    }
     if (message?.type === 'toolkit:get-monitor') {
-      void loadMonitorData().then((data) => respond({ ...data, monitorVersion: 13 }), (error) =>
+      void loadMonitorData().then((data) => respond({ ...data, monitorVersion: 14 }), (error) =>
         respond({ error: error instanceof Error ? error.message : String(error) }))
       return true
     }
     if (message?.type === 'toolkit:save-monitor') {
-      void saveSettings(message.settings).then(respond, (error) =>
+      void saveSettings(message.settings, message.openMissingTabs === true).then(respond, (error) =>
         respond({ error: error instanceof Error ? error.message : String(error) }))
       return true
     }
     if (message?.type === 'toolkit:monitor-refresh-now') {
-      void reloadMonitoredTabs().then((reloaded) => respond({ reloaded }), (error) =>
-        respond({ error: error instanceof Error ? error.message : String(error) }))
+      void loadMonitorData()
+        .then(({ settings }) => saveSettings(settings, true))
+        .then(respond, (error) => respond({ error: error instanceof Error ? error.message : String(error) }))
       return true
     }
     if (message?.type === 'toolkit:monitor-mark-read') {
@@ -394,6 +657,16 @@ export function registerPortalMonitor(): void {
     }
     if (message?.type === 'toolkit:monitor-set-source-notification') {
       void setSourceNotification(message.source, message.enabled).then(respond, (error) =>
+        respond({ error: error instanceof Error ? error.message : String(error) }))
+      return true
+    }
+    if (message?.type === 'toolkit:monitor-select-tab') {
+      void selectMonitorTab(message.source, message.tabId).then(respond, (error) =>
+        respond({ error: error instanceof Error ? error.message : String(error) }))
+      return true
+    }
+    if (message?.type === 'toolkit:monitor-clear-tab') {
+      void clearMonitorTab(message.source).then(respond, (error) =>
         respond({ error: error instanceof Error ? error.message : String(error) }))
       return true
     }

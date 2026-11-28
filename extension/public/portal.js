@@ -35,6 +35,7 @@
   let monitorReloadTimer = 0
   let runtimeMessageHandler = null
   const otpMenuId = 'it-toolkit-otp-menu-popover'
+  const monitorSelectionPrefix = 'it-toolkit-monitor-selected:'
 
   function element(tag, className, text) {
     const node = document.createElement(tag)
@@ -467,6 +468,14 @@
     return (copy.textContent ?? '').replace(/\s+/g, ' ').trim()
   }
 
+  function ticketAssigneeText(row) {
+    const value = rowCellText(row, 'trách nhiệm')
+    const normalized = value.replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi-VN')
+    return ['cập nhật', 'update', 'chưa có', 'chưa phân công', 'chưa giao', '-', '--'].includes(normalized)
+      ? ''
+      : value
+  }
+
   function monitorSnapshot() {
     if (location.pathname === ticketListPath) {
       const table = document.querySelector('#frmDataTableTask\\:frmData\\:dt-task2')
@@ -480,12 +489,13 @@
           if (!id || !row || !title) return []
           const status = rowCellText(row, 'trạng thái')
           const created = rowCellText(row, 'ngày tạo')
-          const assignee = rowCellText(row, 'trách nhiệm')
+          const assignee = ticketAssigneeText(row)
           return [{
             id,
             title: title.slice(0, 500),
             url: url.href,
             status: status.slice(0, 100),
+            assignee: assignee.slice(0, 200),
             detail: [status, assignee, created].filter(Boolean).join(' · ').slice(0, 500),
           }]
         })
@@ -528,8 +538,9 @@
 
   function reportMonitorSnapshot() {
     const snapshot = monitorSnapshot()
-    if (!snapshot) return
-    const signature = `${snapshot.source}|${snapshot.total}|${snapshot.items.map((item) => item.id).join(',')}`
+    if (!snapshot || !monitorTabSelected(snapshot.source)) return
+    const signature = `${snapshot.source}|${snapshot.total}|${snapshot.items
+      .map((item) => `${item.id}:${item.status ?? ''}:${item.assignee ?? ''}`).join(',')}`
     if (signature === state.monitorSignature) return
     state.monitorSignature = signature
     sendMessage({ type: 'toolkit:monitor-snapshot', snapshot }).catch(() => {})
@@ -542,9 +553,26 @@
     return ''
   }
 
+  function monitorTabSelected(source) {
+    try {
+      return sessionStorage.getItem(`${monitorSelectionPrefix}${source}`) === '1'
+    } catch {
+      return false
+    }
+  }
+
+  function setMonitorTabSelected(source, selected) {
+    try {
+      const key = `${monitorSelectionPrefix}${source}`
+      if (selected) sessionStorage.setItem(key, '1')
+      else sessionStorage.removeItem(key)
+    } catch {}
+  }
+
   function fastMonitorEnabled(settings, source, seconds) {
     if (!settings?.enabled || !Number.isFinite(seconds) || seconds < 10 || seconds >= 30) return false
-    return source === 'ticket' ? settings.ticketEnabled !== false : settings.computingErrorEnabled !== false
+    const sourceEnabled = source === 'ticket' ? settings.ticketEnabled !== false : settings.computingErrorEnabled !== false
+    return sourceEnabled && monitorTabSelected(source)
   }
 
   async function monitorSettings() {
@@ -568,6 +596,19 @@
         }).catch(() => {})
       }, seconds * 1000)
     } catch {}
+  }
+
+  async function initializeMonitorSelection() {
+    const source = monitorSourceForPage()
+    if (!source) return
+    try {
+      const response = await sendMessage({ type: 'toolkit:monitor-get-tab-selection', source })
+      setMonitorTabSelected(source, response?.selected === true)
+    } catch {}
+    if (!monitorTabSelected(source)) return
+    state.monitorSignature = ''
+    reportMonitorSnapshot()
+    await scheduleFastMonitorReload()
   }
 
   function isVisible(node) {
@@ -1492,6 +1533,19 @@
         setPortalToolsEnabled(message.enabled !== false)
         return
       }
+      if (message?.type === 'toolkit:monitor-tab-selection') {
+        const source = monitorSourceForPage()
+        if (source && message.source === source) {
+          setMonitorTabSelected(source, message.selected === true)
+          window.clearTimeout(monitorReloadTimer)
+          state.monitorSignature = ''
+          if (message.selected === true) {
+            reportMonitorSnapshot()
+            void scheduleFastMonitorReload()
+          }
+        }
+        return
+      }
       if (message?.type === 'toolkit:vm-config-updated' &&
           (location.pathname === createPath || location.pathname === createPlusPath)) {
         state.config = message.config ?? null
@@ -1549,6 +1603,6 @@
     document.getElementById('it-toolkit-vm-info-toast')?.remove()
     document.getElementById('it-toolkit-password-options-popover')?.remove()
   }, { once: true })
-  void scheduleFastMonitorReload()
+  void initializeMonitorSelection()
   scheduleRender()
 })()

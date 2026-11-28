@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyPortalMonitorSnapshot, defaultPortalMonitorState, isPortalMonitorUrl,
-  normalizePortalMonitorSettings, normalizePortalMonitorState, validPortalMonitorSnapshot,
+  normalizePortalMonitorSettings, normalizePortalMonitorState, portalMonitorCountdownSeconds,
+  portalMonitorSourceCountdownSeconds,
+  validPortalMonitorSnapshot,
 } from './portalMonitor'
 
 describe('Portal monitor', () => {
@@ -43,6 +45,11 @@ describe('Portal monitor', () => {
     expect(normalizePortalMonitorSettings({ enabled: true, intervalSeconds: 17 }).intervalSeconds).toBe(17)
     expect(normalizePortalMonitorSettings({ enabled: true, intervalSeconds: 7200 }).intervalSeconds).toBe(7200)
     expect(normalizePortalMonitorSettings({ enabled: true, intervalMinutes: 5 }).intervalSeconds).toBe(300)
+    expect(normalizePortalMonitorSettings({})).toEqual(expect.objectContaining({
+      enabled: false,
+      ticketEnabled: false,
+      computingErrorEnabled: false,
+    }))
     expect(normalizePortalMonitorSettings({}).ticketNotificationsEnabled).toBe(true)
     expect(normalizePortalMonitorSettings({
       ticketNotificationsEnabled: false,
@@ -53,11 +60,61 @@ describe('Portal monitor', () => {
     }))
   })
 
+  it('counts down from the latest check and rolls into the next reload cycle', () => {
+    const settings = normalizePortalMonitorSettings({
+      enabled: true,
+      ticketEnabled: true,
+      computingErrorEnabled: false,
+      ticketTabId: 7,
+      intervalSeconds: 30,
+    })
+    const state = normalizePortalMonitorState({
+      lastCheckedAt: { ticket: '2026-11-28T09:00:00.000Z' },
+    })
+    expect(portalMonitorCountdownSeconds(
+      settings,
+      state,
+      new Date('2026-11-28T09:00:07.000Z').getTime(),
+    )).toBe(23)
+    expect(portalMonitorCountdownSeconds(
+      settings,
+      state,
+      new Date('2026-11-28T09:00:31.000Z').getTime(),
+    )).toBe(29)
+    expect(portalMonitorCountdownSeconds(
+      { ...settings, enabled: false },
+      state,
+      new Date('2026-11-28T09:00:07.000Z').getTime(),
+    )).toBeNull()
+  })
+
+  it('counts down Ticket and Computing independently', () => {
+    const settings = normalizePortalMonitorSettings({
+      enabled: true,
+      ticketEnabled: true,
+      computingErrorEnabled: true,
+      ticketTabId: 7,
+      computingErrorTabId: 8,
+      intervalSeconds: 100,
+    })
+    const state = normalizePortalMonitorState({
+      lastCheckedAt: {
+        ticket: '2026-11-28T09:00:00.000Z',
+        computingError: '2026-11-28T09:00:30.000Z',
+      },
+    })
+    const now = new Date('2026-11-28T09:00:40.000Z').getTime()
+    expect(portalMonitorSourceCountdownSeconds(settings, state, 'ticket', now)).toBe(60)
+    expect(portalMonitorSourceCountdownSeconds(settings, state, 'computingError', now)).toBe(90)
+  })
+
   it('creates a baseline first, then reports only unseen IDs without duplicates', () => {
     const baseline = applyPortalMonitorSnapshot(defaultPortalMonitorState, {
       source: 'ticket',
       total: 1,
-      items: [{ id: 'old', title: 'Ticket cũ', url: 'https://portal.longvan.vn/ticket/old' }],
+      items: [{
+        id: 'old', title: 'Ticket cũ', url: 'https://portal.longvan.vn/ticket/old', status: 'DOING',
+      }],
     }, new Date('2026-11-27T10:00:00Z'))
     expect(baseline.added).toEqual([])
     expect(baseline.state.unread).toBe(0)
@@ -66,8 +123,8 @@ describe('Portal monitor', () => {
       source: 'ticket',
       total: 2,
       items: [
-        { id: 'new', title: 'Ticket mới', url: 'https://portal.longvan.vn/ticket/new' },
-        { id: 'old', title: 'Ticket cũ', url: 'https://portal.longvan.vn/ticket/old' },
+        { id: 'new', title: 'Ticket mới', url: 'https://portal.longvan.vn/ticket/new', status: 'NEW' },
+        { id: 'old', title: 'Ticket cũ', url: 'https://portal.longvan.vn/ticket/old', status: 'DOING' },
       ],
     }, new Date('2026-11-27T10:05:00Z'))
     expect(next.added.map((item) => item.id)).toEqual(['new'])
@@ -180,6 +237,79 @@ describe('Portal monitor', () => {
     const second = applyPortalMonitorSnapshot(first.state, snapshot, new Date('2026-11-28T08:56:00Z'))
     expect(second.added).toEqual([])
     expect(second.state.unreadBySource.computingError).toBe(2)
+  })
+
+  it('never counts an assigned DOING ticket as a new ticket even when its ID was unseen', () => {
+    const previous = {
+      ...defaultPortalMonitorState,
+      initialized: { ticket: true, computingError: false },
+      seen: { ticket: ['old-ticket'], computingError: [] },
+    }
+    const result = applyPortalMonitorSnapshot(previous, {
+      source: 'ticket',
+      total: 14626,
+      items: [{
+        id: 'doing-assigned',
+        title: 'server 103.2.226.3 nghẽn disk',
+        url: 'https://portal.longvan.vn/crm/pages/ticket/detail.xhtml?id=doing-assigned',
+        status: 'DOING',
+        assignee: 'Nguyễn Đức Huy',
+      }],
+    }, new Date('2026-11-28T16:19:23Z'))
+
+    expect(result.added).toEqual([])
+    expect(result.state.activeCounts.ticket).toBe(0)
+    expect(result.state.recent).toEqual([])
+  })
+
+  it('counts a NEW ticket whose responsibility cell only contains the update action', () => {
+    const result = applyPortalMonitorSnapshot(defaultPortalMonitorState, {
+      source: 'ticket',
+      total: 14627,
+      items: [{
+        id: 'new-unassigned',
+        title: 'Đổi Hệ Điều Hành',
+        url: 'https://portal.longvan.vn/crm/pages/ticket/detail.xhtml?id=new-unassigned',
+        status: 'NEW',
+        assignee: 'cập nhật',
+      }],
+    }, new Date('2026-11-28T17:22:04Z'))
+
+    expect(result.added).toHaveLength(1)
+    expect(result.state.activeCounts.ticket).toBe(1)
+    expect(result.state.recent[0]).toEqual(expect.objectContaining({
+      id: 'new-unassigned',
+      status: 'NEW',
+    }))
+  })
+
+  it('removes a previous NEW notification after the ticket becomes assigned and DOING', () => {
+    const previouslyNew = applyPortalMonitorSnapshot(defaultPortalMonitorState, {
+      source: 'ticket',
+      total: 1,
+      items: [{
+        id: 'ticket-1',
+        title: 'Ticket cần nhận',
+        url: 'https://portal.longvan.vn/crm/pages/ticket/detail.xhtml?id=ticket-1',
+        status: 'NEW',
+      }],
+    }, new Date('2026-11-28T16:00:00Z'))
+    const doing = applyPortalMonitorSnapshot(previouslyNew.state, {
+      source: 'ticket',
+      total: 1,
+      items: [{
+        id: 'ticket-1',
+        title: 'Ticket đã nhận',
+        url: 'https://portal.longvan.vn/crm/pages/ticket/detail.xhtml?id=ticket-1',
+        status: 'DOING',
+        assignee: 'Nguyễn Đức Huy',
+      }],
+    }, new Date('2026-11-28T16:01:00Z'))
+
+    expect(doing.added).toEqual([])
+    expect(doing.state.activeCounts.ticket).toBe(0)
+    expect(doing.state.recent).toEqual([])
+    expect(doing.state.unreadBySource.ticket).toBe(0)
   })
 
   it('removes duplicate recent notifications by source and item ID', () => {

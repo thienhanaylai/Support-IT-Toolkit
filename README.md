@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/thienhanaylai/Support-IT-Toolkit/releases/tag/v0.2.2.5"><img src="https://img.shields.io/badge/version-0.2.2.5-1565c0" alt="Version 0.2.2.5"></a>
+  <a href="https://github.com/thienhanaylai/Support-IT-Toolkit/releases/tag/v0.2.2.6"><img src="https://img.shields.io/badge/version-0.2.2.6-1565c0" alt="Version 0.2.2.6"></a>
   <img src="https://img.shields.io/badge/Manifest-V3-00a86b" alt="Manifest V3">
   <img src="https://img.shields.io/badge/runtime-Browser--only-0b3a67" alt="Browser-only">
-  <img src="https://img.shields.io/badge/tests-169%20passed-f2b705" alt="169 tests passed">
+  <img src="https://img.shields.io/badge/tests-175%20passed-f2b705" alt="175 tests passed">
 </p>
 
 ---
@@ -34,16 +34,16 @@ Extension chạy hoàn toàn trong trình duyệt, không cần Native Agent, ba
 
 Tải bản mới nhất tại:
 
-**[GitHub Releases — IT Support Toolkit v0.2.2.5](https://github.com/thienhanaylai/Support-IT-Toolkit/releases/tag/v0.2.2.5)**
+**[GitHub Releases — IT Support Toolkit v0.2.2.6](https://github.com/thienhanaylai/Support-IT-Toolkit/releases/tag/v0.2.2.6)**
 
 | Gói | Mục đích |
 |---|---|
-| `ITSupportToolkit-Windows.exe` | Cài/cập nhật bằng một file trên Windows (bản 0.2.2.5). |
-| `ITSupportToolkit-Windows.zip` | Bộ cài có mã script đọc được (bản 0.2.2.5). |
-| `ITSupportToolkit-Edge-Store.zip` | Gói riêng để nộp/cập nhật Microsoft Edge Add-ons (bản 0.2.2.5). |
+| `ITSupportToolkit-Windows.exe` | Cài/cập nhật bằng một file trên Windows (bản 0.2.2.6). |
+| `ITSupportToolkit-Windows.zip` | Bộ cài có mã script đọc được (bản 0.2.2.6). |
+| `ITSupportToolkit-Edge-Store.zip` | Gói riêng để nộp/cập nhật Microsoft Edge Add-ons (bản 0.2.2.6). |
 
 > [!NOTE]
-> Bản **0.2.2.5** phát hành đồng thời bộ cài Windows và gói Edge Add-ons. Gói Edge Add-ons đã sẵn sàng để nộp lên Partner Center.
+> Bản **0.2.2.6** phát hành đồng thời bộ cài Windows và gói Edge Add-ons. Gói Edge Add-ons đã sẵn sàng để nộp lên Partner Center.
 
 > [!NOTE]
 > EXE chỉ chép extension production vào `%LOCALAPPDATA%\ITSupportToolkit\extension`. Nó không gọi PowerShell/CMD, không chạy script tạm, không dùng UI Automation và không tải mã thực thi từ Internet.
